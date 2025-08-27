@@ -37,6 +37,9 @@ right-sizer/
 │   ├── metrics_server.go   # Kubernetes metrics-server integration
 │   ├── prometheus.go       # Prometheus integration
 │   └── types.go           # Common types and interfaces
+├── scripts/             # Build and deployment scripts
+│   ├── make.sh          # Main build script (replaces Makefile)
+│   └── test-helm-deployment.sh  # Helm deployment test script
 ├── test/                # Test resources
 │   ├── manifests/       # Test Kubernetes manifests
 │   ├── minikube/        # Minikube-specific test scripts
@@ -48,6 +51,8 @@ right-sizer/
 ├── CONTRIBUTING.md      # Contribution guidelines
 ├── COPYRIGHT           # Copyright notice
 ├── Dockerfile          # Container image definition
+├── make                # Build script wrapper (./make <command>)
+├── Makefile.old        # Original Makefile (preserved for reference)
 ├── go.mod              # Go module definition
 ├── go.sum              # Go module checksums
 ├── LICENSE             # AGPL-3.0 license text

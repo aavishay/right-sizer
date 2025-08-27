@@ -202,8 +202,7 @@ kubectl config use-context minikube
 From the project root:
 
 ```sh
-go mod tidy
-go build -o right-sizer main.go
+./make build
 ```
 
 ---
@@ -213,8 +212,7 @@ go build -o right-sizer main.go
 Use Minikube’s Docker daemon so the image is available inside the cluster:
 
 ```sh
-eval $(minikube docker-env)
-docker build -t right-sizer:latest .
+./make minikube-build
 ```
 
 ---
