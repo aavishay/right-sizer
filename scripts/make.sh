@@ -282,6 +282,9 @@ ${CYAN}Development Commands:${NC}
   install          Install binary to GOPATH/bin
   vendor           Download dependencies to vendor/
   verify           Verify dependencies
+  test-coverage    Run tests with coverage report
+  test-integration Run integration tests (requires cluster)
+  test-all         Run comprehensive test suite
 
 ${CYAN}Utility Commands:${NC}
   quick-test       Run format, test, and build
@@ -307,6 +310,24 @@ ${CYAN}Examples:${NC}
   IMAGE_TAG=v1.0.0 $0 docker # Build with custom tag
 
 EOF
+}
+
+# Test with coverage report
+cmd_test_coverage() {
+  print_info "Running tests with coverage..."
+  "${SCRIPT_DIR}/test.sh" -v -c
+}
+
+# Integration tests
+cmd_test_integration() {
+  print_info "Running integration tests..."
+  "${SCRIPT_DIR}/test.sh" -v -i
+}
+
+# Run all tests
+cmd_test_all() {
+  print_info "Running comprehensive test suite..."
+  "${SCRIPT_DIR}/test.sh" -v -c -i -b
 }
 
 # Main execution
@@ -343,6 +364,9 @@ main() {
   verify) cmd_verify "$@" ;;
   quick-test) cmd_quick_test "$@" ;;
   full-test) cmd_full_test "$@" ;;
+  test-coverage) cmd_test_coverage "$@" ;;
+  test-integration) cmd_test_integration "$@" ;;
+  test-all) cmd_test_all "$@" ;;
   version) cmd_version "$@" ;;
   help | --help | -h) cmd_help "$@" ;;
   *)

@@ -28,7 +28,10 @@
 | Command | Description |
 |---------|-------------|
 | `./make build` | Build the binary |
-| `./make test` | Run tests |
+| `./make test` | Run unit tests |
+| `./make test-coverage` | Run tests with coverage report |
+| `./make test-integration` | Run integration tests (requires cluster) |
+| `./make test-all` | Run comprehensive test suite |
 | `./make clean` | Clean build artifacts |
 | `./make docker` | Build Docker image |
 | `./make minikube-build` | Build Docker image in Minikube |
@@ -51,6 +54,41 @@
 ./scripts/dev.sh start-cluster
 ```
 
+## Testing
+
+### Test Commands
+
+| Command | Description |
+|---------|-------------|
+| `./make test` | Run unit tests |
+| `./make test-coverage` | Run tests with coverage report |
+| `./make test-integration` | Run integration tests |
+| `./make test-all` | Run all tests with coverage and benchmarks |
+| `./scripts/test.sh -h` | Show detailed test options |
+
+### Test Types
+
+- **Unit Tests**: Fast tests for individual components
+- **Integration Tests**: End-to-end tests requiring a running cluster  
+- **Coverage Tests**: Generate HTML coverage reports
+- **Benchmark Tests**: Performance testing
+
+### Running Tests
+
+```bash
+# Basic unit tests
+./make test
+
+# Tests with coverage
+./make test-coverage
+
+# Integration tests (requires kubectl access)
+INTEGRATION_TESTS=true ./make test-integration
+
+# Watch mode for development
+./scripts/test.sh -w
+```
+
 ## Environment Variables
 
 - `IMAGE_TAG` - Docker image tag (default: `latest`)
@@ -66,8 +104,28 @@ IMAGE_TAG=v1.0.0 ./make docker
 # Deploy to specific namespace
 NAMESPACE=production ./make helm-deploy
 
-# Run full test suite
-./make full-test
+# Run comprehensive test suite
+./make test-all
+
+# Verify deployment works
+kubectl get pods -l app=right-sizer
+kubectl logs -l app=right-sizer --tail=20
+```
+
+### Testing the Operator
+
+```bash
+# Deploy test workload
+kubectl apply -f examples/in-place-resize-demo.yaml
+
+# Watch for resize operations
+kubectl get events --sort-by='.lastTimestamp' | grep resize
+
+# Check pod resources before and after
+kubectl get pod demo-app-xxx -o jsonpath='{.spec.containers[0].resources}'
+
+# Verify no restarts during resize (in-place feature)
+kubectl get pod demo-app-xxx -o jsonpath='{.status.containerStatuses[0].restartCount}'
 ```
 
 ## Minikube Development
@@ -91,3 +149,5 @@ helm test right-sizer
 - `scripts/dev.sh` - Development helper script
 - `Dockerfile` - Container image definition
 - `helm/` - Helm chart
+- `test/` - Integration tests
+- `*_test.go` - Unit tests
