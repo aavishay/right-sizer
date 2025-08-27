@@ -25,9 +25,12 @@ import (
 	"right-sizer/metrics"
 	"runtime"
 
+	"github.com/go-logr/zapr"
+	"go.uber.org/zap"
 	"k8s.io/apimachinery/pkg/version"
 	"k8s.io/client-go/kubernetes"
 	ctrl "sigs.k8s.io/controller-runtime"
+	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
@@ -64,6 +67,14 @@ func main() {
 
 	// Initialize logger with configured level
 	logger.Init(cfg.LogLevel)
+
+	// Initialize controller-runtime logger to prevent warnings
+	zapLog, err := zap.NewProduction()
+	if err != nil {
+		// Fall back to development logger if production logger fails
+		zapLog, _ = zap.NewDevelopment()
+	}
+	ctrllog.SetLogger(zapr.NewLogger(zapLog))
 
 	fmt.Println("----------------------------------------")
 	logger.Info("📋 Configuration Loaded:")
