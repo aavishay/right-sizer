@@ -105,22 +105,54 @@ For detailed configuration options, see [CONFIGURATION.md](CONFIGURATION.md).
 
 ### Local Development
 
+#### 1. Setup Environment
+
 ```bash
-# Start Minikube with Kubernetes 1.33+
+# Start Minikube with Kubernetes 1.33+ for in-place resize support
 minikube start --kubernetes-version=v1.33.1
 
-# Build the operator
+# Optional: Use development helper script
+./scripts/dev.sh setup
+```
+
+#### 2. Build and Deploy
+
+```bash
+# Build the operator binary
 ./make build
 
-# Build Docker image in Minikube
+# Build Docker image in Minikube's registry
 ./make minikube-build
 
-# Deploy with Helm
+# Deploy using Helm
 ./make helm-deploy
+```
 
-# Check status
-kubectl get pods
-kubectl logs -l app=right-sizer
+#### 3. Verify Deployment
+
+```bash
+# Check operator status
+kubectl get pods -l app=right-sizer
+kubectl logs -l app=right-sizer -f
+
+# Test with sample workload
+kubectl apply -f examples/sample-deployment.yaml
+
+# Watch resize operations
+kubectl get events --sort-by='.lastTimestamp' | grep resize
+```
+
+#### 4. Development Workflow
+
+```bash
+# Auto-rebuild on changes
+./scripts/dev.sh watch
+
+# Run tests
+./make test
+
+# Clean rebuild
+./make clean && ./make build
 ```
 
 For detailed build instructions, see [BUILD.md](BUILD.md).
