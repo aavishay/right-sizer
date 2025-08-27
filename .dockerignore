@@ -1,0 +1,53 @@
+# Git files
+.git/
+.gitignore
+.gitattributes
+
+# Documentation
+*.md
+docs/
+LICENSE*
+COPYRIGHT
+NOTICE
+CONTRIBUTING.md
+
+# Test files
+test/
+*_test.go
+*.test
+coverage.*
+
+# Build artifacts
+right-sizer
+*.exe
+bin/
+dist/
+build/
+
+# Development files
+.idea/
+.vscode/
+*.iml
+go.work
+go.work.sum
+
+# Scripts
+*.sh
+Makefile
+
+# Helm charts source (we'll copy built charts separately if needed)
+charts/
+
+# Examples and configs
+examples/
+*.example.*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.log
+*.swp
+*~

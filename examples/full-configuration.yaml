@@ -1,0 +1,318 @@
+# Full Configuration Example for Right-Sizer Operator
+# This file demonstrates all available configuration options
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: rightsizer-full-demo
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: right-sizer
+  namespace: rightsizer-full-demo
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: right-sizer-full-demo
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "pods/status"]
+    verbs: ["get", "list", "watch", "update", "patch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "statefulsets", "daemonsets", "replicasets"]
+    verbs: ["get", "list", "watch", "update", "patch"]
+  - apiGroups: ["metrics.k8s.io"]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: right-sizer-full-demo
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: right-sizer-full-demo
+subjects:
+  - kind: ServiceAccount
+    name: right-sizer
+    namespace: rightsizer-full-demo
+---
+# Full Configuration Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: right-sizer-full-config
+  namespace: rightsizer-full-demo
+  labels:
+    app: right-sizer
+    configuration: full
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: right-sizer
+  template:
+    metadata:
+      labels:
+        app: right-sizer
+      annotations:
+        config.rightsizer/description: "Full configuration example with all options"
+    spec:
+      serviceAccountName: right-sizer
+      containers:
+        - name: right-sizer
+          image: right-sizer:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            # ========================================
+            # OPERATIONAL CONFIGURATION
+            # ========================================
+
+            # How often to check and resize resources
+            # Formats: 10s, 30s, 1m, 5m, 1h
+            - name: RESIZE_INTERVAL
+              value: "30s"
+
+            # Log verbosity level
+            # Options: debug, info, warn, error
+            - name: LOG_LEVEL
+              value: "info"
+
+            # Dry run mode - only log recommendations without applying
+            # Options: true, false
+            - name: DRY_RUN
+              value: "false"
+
+            # Enable in-place resize for Kubernetes 1.33+
+            # Options: true, false
+            - name: ENABLE_INPLACE_RESIZE
+              value: "true"
+
+            # ========================================
+            # METRICS CONFIGURATION
+            # ========================================
+
+            # Metrics provider to use
+            # Options: kubernetes (metrics-server), prometheus
+            - name: METRICS_PROVIDER
+              value: "kubernetes"
+
+            # Prometheus URL (only used when METRICS_PROVIDER=prometheus)
+            - name: PROMETHEUS_URL
+              value: "http://prometheus:9090"
+
+            # ========================================
+            # REQUEST MULTIPLIERS
+            # ========================================
+
+            # Multiplier for CPU requests based on usage
+            # Example: 1.2 = 20% buffer above usage
+            - name: CPU_REQUEST_MULTIPLIER
+              value: "1.2"
+
+            # Multiplier for memory requests based on usage
+            # Example: 1.2 = 20% buffer above usage
+            - name: MEMORY_REQUEST_MULTIPLIER
+              value: "1.2"
+
+            # ========================================
+            # LIMIT MULTIPLIERS
+            # ========================================
+
+            # Multiplier for CPU limits based on requests
+            # Example: 2.0 = 2x burst capacity
+            - name: CPU_LIMIT_MULTIPLIER
+              value: "2.0"
+
+            # Multiplier for memory limits based on requests
+            # Example: 2.0 = 2x burst capacity
+            - name: MEMORY_LIMIT_MULTIPLIER
+              value: "2.0"
+
+            # ========================================
+            # RESOURCE BOUNDARIES
+            # ========================================
+
+            # Maximum CPU limit in millicores
+            # Example: 4000 = 4 CPU cores maximum
+            - name: MAX_CPU_LIMIT
+              value: "4000"
+
+            # Maximum memory limit in MB
+            # Example: 8192 = 8GB maximum
+            - name: MAX_MEMORY_LIMIT
+              value: "8192"
+
+            # Minimum CPU request in millicores
+            # Example: 10 = 10m minimum
+            - name: MIN_CPU_REQUEST
+              value: "10"
+
+            # Minimum memory request in MB
+            # Example: 64 = 64Mi minimum
+            - name: MIN_MEMORY_REQUEST
+              value: "64"
+
+            # ========================================
+            # KUBERNETES METADATA
+            # ========================================
+
+            # Operator namespace (auto-populated)
+            - name: OPERATOR_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+
+          # Operator resource limits
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+
+          # Health check endpoints
+          ports:
+            - containerPort: 8080
+              name: metrics
+              protocol: TCP
+            - containerPort: 8081
+              name: health
+              protocol: TCP
+
+          # Liveness probe
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8081
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+
+          # Readiness probe
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8081
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 2
+
+---
+# Example workload to be monitored and resized
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: example-workload
+  namespace: rightsizer-full-demo
+  labels:
+    app: example-app
+    rightsizer: enabled
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: example-app
+  template:
+    metadata:
+      labels:
+        app: example-app
+        rightsizer: enabled
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:alpine
+          resources:
+            # Initial resources (will be adjusted by right-sizer)
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi
+          ports:
+            - containerPort: 80
+              name: http
+
+---
+# ConfigMap with configuration presets for different environments
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rightsizer-presets
+  namespace: rightsizer-full-demo
+data:
+  development.yaml: |
+    # Development environment - aggressive optimization
+    RESIZE_INTERVAL: "30s"
+    LOG_LEVEL: "debug"
+    CPU_REQUEST_MULTIPLIER: "1.1"
+    MEMORY_REQUEST_MULTIPLIER: "1.1"
+    CPU_LIMIT_MULTIPLIER: "1.5"
+    MEMORY_LIMIT_MULTIPLIER: "1.5"
+    MAX_CPU_LIMIT: "2000"
+    MAX_MEMORY_LIMIT: "4096"
+    MIN_CPU_REQUEST: "5"
+    MIN_MEMORY_REQUEST: "32"
+
+  staging.yaml: |
+    # Staging environment - balanced
+    RESIZE_INTERVAL: "1m"
+    LOG_LEVEL: "info"
+    CPU_REQUEST_MULTIPLIER: "1.2"
+    MEMORY_REQUEST_MULTIPLIER: "1.2"
+    CPU_LIMIT_MULTIPLIER: "2.0"
+    MEMORY_LIMIT_MULTIPLIER: "2.0"
+    MAX_CPU_LIMIT: "4000"
+    MAX_MEMORY_LIMIT: "8192"
+    MIN_CPU_REQUEST: "10"
+    MIN_MEMORY_REQUEST: "64"
+
+  production.yaml: |
+    # Production environment - conservative
+    RESIZE_INTERVAL: "5m"
+    LOG_LEVEL: "warn"
+    CPU_REQUEST_MULTIPLIER: "1.5"
+    MEMORY_REQUEST_MULTIPLIER: "1.4"
+    CPU_LIMIT_MULTIPLIER: "2.5"
+    MEMORY_LIMIT_MULTIPLIER: "2.0"
+    MAX_CPU_LIMIT: "8000"
+    MAX_MEMORY_LIMIT: "16384"
+    MIN_CPU_REQUEST: "50"
+    MIN_MEMORY_REQUEST: "256"
+
+  high-performance.yaml: |
+    # High-performance workloads
+    RESIZE_INTERVAL: "2m"
+    LOG_LEVEL: "info"
+    CPU_REQUEST_MULTIPLIER: "1.8"
+    MEMORY_REQUEST_MULTIPLIER: "1.5"
+    CPU_LIMIT_MULTIPLIER: "3.0"
+    MEMORY_LIMIT_MULTIPLIER: "2.5"
+    MAX_CPU_LIMIT: "16000"
+    MAX_MEMORY_LIMIT: "32768"
+    MIN_CPU_REQUEST: "100"
+    MIN_MEMORY_REQUEST: "512"
+
+  batch-processing.yaml: |
+    # Batch processing workloads
+    RESIZE_INTERVAL: "10m"
+    LOG_LEVEL: "info"
+    CPU_REQUEST_MULTIPLIER: "1.2"
+    MEMORY_REQUEST_MULTIPLIER: "1.3"
+    CPU_LIMIT_MULTIPLIER: "4.0"
+    MEMORY_LIMIT_MULTIPLIER: "3.0"
+    MAX_CPU_LIMIT: "12000"
+    MAX_MEMORY_LIMIT: "24576"
+    MIN_CPU_REQUEST: "50"
+    MIN_MEMORY_REQUEST: "256"

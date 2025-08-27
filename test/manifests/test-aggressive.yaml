@@ -1,0 +1,79 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: right-sizer-aggressive
+  namespace: rightsizer-config-test
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: right-sizer-aggressive
+  template:
+    metadata:
+      labels:
+        app: right-sizer-aggressive
+    spec:
+      serviceAccountName: right-sizer
+      containers:
+        - name: right-sizer
+          image: right-sizer:config-test
+          imagePullPolicy: Never
+          env:
+            - name: OPERATOR_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: METRICS_PROVIDER
+              value: "kubernetes"
+            - name: CPU_REQUEST_MULTIPLIER
+              value: "1.1"
+            - name: MEMORY_REQUEST_MULTIPLIER
+              value: "1.1"
+            - name: CPU_LIMIT_MULTIPLIER
+              value: "1.5"
+            - name: MEMORY_LIMIT_MULTIPLIER
+              value: "1.5"
+            - name: MAX_CPU_LIMIT
+              value: "2000"
+            - name: MAX_MEMORY_LIMIT
+              value: "4096"
+            - name: MIN_CPU_REQUEST
+              value: "5"
+            - name: MIN_MEMORY_REQUEST
+              value: "32"
+            - name: DRY_RUN
+              value: "true"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: test-app-aggressive
+  namespace: rightsizer-config-test
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: test-app-aggressive
+  template:
+    metadata:
+      labels:
+        app: test-app-aggressive
+        rightsizer: enabled
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:alpine
+          resources:
+            requests:
+              cpu: 40m
+              memory: 60Mi
+            limits:
+              cpu: 80m
+              memory: 120Mi

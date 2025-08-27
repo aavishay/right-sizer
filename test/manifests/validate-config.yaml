@@ -1,0 +1,338 @@
+# Validation test for right-sizer configuration multipliers
+# This file tests different configuration scenarios to ensure multipliers work correctly
+
+---
+# Test 1: Default Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: test-default-config
+  namespace: default
+data:
+  description: "Default configuration test - should use 1.2x for requests, 2x for limits"
+  expected_behavior: |
+    For a pod using 100m CPU and 100Mi memory:
+    - CPU Request should be: 120m (100 * 1.2)
+    - Memory Request should be: 120Mi (100 * 1.2)
+    - CPU Limit should be: 240m (120 * 2)
+    - Memory Limit should be: 240Mi (120 * 2)
+
+---
+# Test 2: Conservative Configuration
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: right-sizer-conservative-test
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: right-sizer-conservative
+  template:
+    metadata:
+      labels:
+        app: right-sizer-conservative
+    spec:
+      serviceAccountName: right-sizer
+      containers:
+        - name: right-sizer
+          image: right-sizer:config-test
+          imagePullPolicy: Never
+          env:
+            # Conservative settings
+            - name: CPU_REQUEST_MULTIPLIER
+              value: "1.5"
+            - name: MEMORY_REQUEST_MULTIPLIER
+              value: "1.4"
+            - name: CPU_LIMIT_MULTIPLIER
+              value: "2.5"
+            - name: MEMORY_LIMIT_MULTIPLIER
+              value: "2.0"
+            - name: MAX_CPU_LIMIT
+              value: "8000"
+            - name: MAX_MEMORY_LIMIT
+              value: "16384"
+            - name: MIN_CPU_REQUEST
+              value: "50"
+            - name: MIN_MEMORY_REQUEST
+              value: "256"
+            - name: DRY_RUN
+              value: "true"  # Enable dry run for testing
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: test-conservative-config
+  namespace: default
+data:
+  description: "Conservative configuration test"
+  expected_behavior: |
+    For a pod using 100m CPU and 100Mi memory:
+    - CPU Request should be: 150m (100 * 1.5)
+    - Memory Request should be: 140Mi (100 * 1.4)
+    - CPU Limit should be: 375m (150 * 2.5)
+    - Memory Limit should be: 280Mi (140 * 2)
+
+    For a pod using 10m CPU and 50Mi memory (testing minimums):
+    - CPU Request should be: 50m (minimum enforced)
+    - Memory Request should be: 256Mi (minimum enforced)
+    - CPU Limit should be: 125m (50 * 2.5)
+    - Memory Limit should be: 512Mi (256 * 2)
+
+---
+# Test 3: Aggressive Cost Optimization
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: right-sizer-aggressive-test
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: right-sizer-aggressive
+  template:
+    metadata:
+      labels:
+        app: right-sizer-aggressive
+    spec:
+      serviceAccountName: right-sizer
+      containers:
+        - name: right-sizer
+          image: right-sizer:config-test
+          imagePullPolicy: Never
+          env:
+            # Aggressive settings
+            - name: CPU_REQUEST_MULTIPLIER
+              value: "1.1"
+            - name: MEMORY_REQUEST_MULTIPLIER
+              value: "1.1"
+            - name: CPU_LIMIT_MULTIPLIER
+              value: "1.5"
+            - name: MEMORY_LIMIT_MULTIPLIER
+              value: "1.5"
+            - name: MAX_CPU_LIMIT
+              value: "2000"
+            - name: MAX_MEMORY_LIMIT
+              value: "4096"
+            - name: MIN_CPU_REQUEST
+              value: "5"
+            - name: MIN_MEMORY_REQUEST
+              value: "32"
+            - name: DRY_RUN
+              value: "true"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: test-aggressive-config
+  namespace: default
+data:
+  description: "Aggressive cost optimization configuration test"
+  expected_behavior: |
+    For a pod using 100m CPU and 100Mi memory:
+    - CPU Request should be: 110m (100 * 1.1)
+    - Memory Request should be: 110Mi (100 * 1.1)
+    - CPU Limit should be: 165m (110 * 1.5)
+    - Memory Limit should be: 165Mi (110 * 1.5)
+
+    For a pod using 2000m CPU and 4000Mi memory (testing maximums):
+    - CPU Request should be: 2000m (2000 * 1.1 = 2200, capped at MAX_CPU_LIMIT)
+    - Memory Request should be: 4096Mi (4000 * 1.1 = 4400, capped at MAX_MEMORY_LIMIT)
+    - CPU Limit should be: 2000m (capped at MAX_CPU_LIMIT)
+    - Memory Limit should be: 4096Mi (capped at MAX_MEMORY_LIMIT)
+
+---
+# Test 4: High Performance Configuration
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: right-sizer-performance-test
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: right-sizer-performance
+  template:
+    metadata:
+      labels:
+        app: right-sizer-performance
+    spec:
+      serviceAccountName: right-sizer
+      containers:
+        - name: right-sizer
+          image: right-sizer:config-test
+          imagePullPolicy: Never
+          env:
+            # High performance settings
+            - name: CPU_REQUEST_MULTIPLIER
+              value: "1.8"
+            - name: MEMORY_REQUEST_MULTIPLIER
+              value: "1.5"
+            - name: CPU_LIMIT_MULTIPLIER
+              value: "3.0"
+            - name: MEMORY_LIMIT_MULTIPLIER
+              value: "2.5"
+            - name: MAX_CPU_LIMIT
+              value: "16000"
+            - name: MAX_MEMORY_LIMIT
+              value: "32768"
+            - name: MIN_CPU_REQUEST
+              value: "100"
+            - name: MIN_MEMORY_REQUEST
+              value: "512"
+            - name: DRY_RUN
+              value: "true"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: test-performance-config
+  namespace: default
+data:
+  description: "High performance configuration test"
+  expected_behavior: |
+    For a pod using 1000m CPU and 1000Mi memory:
+    - CPU Request should be: 1800m (1000 * 1.8)
+    - Memory Request should be: 1500Mi (1000 * 1.5)
+    - CPU Limit should be: 5400m (1800 * 3.0)
+    - Memory Limit should be: 3750Mi (1500 * 2.5)
+
+    For a pod using 50m CPU and 200Mi memory (testing minimums):
+    - CPU Request should be: 100m (minimum enforced)
+    - Memory Request should be: 512Mi (minimum enforced)
+    - CPU Limit should be: 300m (100 * 3.0)
+    - Memory Limit should be: 1280Mi (512 * 2.5)
+
+---
+# Test Application for Validation
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: test-workload
+  namespace: default
+  labels:
+    app: test-workload
+    test: config-validation
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: test-workload
+  template:
+    metadata:
+      labels:
+        app: test-workload
+        rightsizer: enabled
+    spec:
+      containers:
+        - name: test-container-1
+          image: nginx:alpine
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi
+        - name: test-container-2
+          image: busybox
+          command: ["sleep", "3600"]
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+            limits:
+              cpu: 50m
+              memory: 64Mi
+
+---
+# Script to validate configuration (as ConfigMap)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: validation-script
+  namespace: default
+data:
+  validate.sh: |
+    #!/bin/bash
+
+    # Colors for output
+    RED='\033[0;31m'
+    GREEN='\033[0;32m'
+    YELLOW='\033[1;33m'
+    NC='\033[0m'
+
+    echo "================================"
+    echo "Configuration Validation Test"
+    echo "================================"
+    echo ""
+
+    # Test each configuration
+    for config in conservative aggressive performance; do
+      echo "Testing $config configuration..."
+
+      # Get the operator pod
+      POD=$(kubectl get pod -l app=right-sizer-$config -o jsonpath='{.items[0].metadata.name}')
+
+      if [ -z "$POD" ]; then
+        echo -e "${RED}[FAIL]${NC} No pod found for $config configuration"
+        continue
+      fi
+
+      # Check logs for configuration loading
+      echo "Checking configuration loaded..."
+      kubectl logs $POD | grep -E "Configuration Loaded|Multiplier|Limit" | head -10
+
+      echo ""
+    done
+
+    # Check if test workload resources were adjusted
+    echo "Checking test workload adjustments..."
+    kubectl get pods -l app=test-workload -o custom-columns=\
+    NAME:.metadata.name,\
+    CONTAINER:.spec.containers[0].name,\
+    CPU_REQ:.spec.containers[0].resources.requests.cpu,\
+    MEM_REQ:.spec.containers[0].resources.requests.memory,\
+    CPU_LIM:.spec.containers[0].resources.limits.cpu,\
+    MEM_LIM:.spec.containers[0].resources.limits.memory
+
+    echo ""
+    echo "Validation complete!"
+
+---
+# Job to run validation
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: config-validation-job
+  namespace: default
+spec:
+  template:
+    spec:
+      serviceAccountName: right-sizer
+      containers:
+        - name: validator
+          image: bitnami/kubectl:latest
+          command:
+            - /bin/bash
+            - -c
+            - |
+              echo "Starting configuration validation..."
+
+              # Wait for operators to be ready
+              sleep 30
+
+              # Check each operator's configuration
+              for deploy in right-sizer-conservative-test right-sizer-aggressive-test right-sizer-performance-test; do
+                echo ""
+                echo "Checking $deploy..."
+                kubectl logs deployment/$deploy --tail=20 | grep -E "Configuration|Multiplier|Limit|Request" || echo "No config found"
+              done
+
+              echo ""
+              echo "Validation completed!"
+      restartPolicy: Never
+  backoffLimit: 1

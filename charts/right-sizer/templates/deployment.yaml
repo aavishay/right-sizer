@@ -1,0 +1,94 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "right-sizer.fullname" . }}
+  labels:
+    {{- include "right-sizer.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "right-sizer.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "right-sizer.selectorLabels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ .Values.serviceAccount.name }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: {{ .Chart.Name }}
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: OPERATOR_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: PROMETHEUS_URL
+              value: "{{ .Values.prometheusUrl }}"
+            - name: METRICS_PROVIDER
+              value: "{{ .Values.metricsProvider }}"
+            - name: ENABLE_INPLACE_RESIZE
+              value: "{{ .Values.enableInPlaceResize }}"
+            - name: RESIZE_INTERVAL
+              value: "{{ .Values.resizeInterval }}"
+            - name: LOG_LEVEL
+              value: "{{ .Values.logLevel }}"
+            # Resource sizing configuration
+            - name: CPU_REQUEST_MULTIPLIER
+              value: "{{ .Values.config.cpuRequestMultiplier }}"
+            - name: MEMORY_REQUEST_MULTIPLIER
+              value: "{{ .Values.config.memoryRequestMultiplier }}"
+            - name: CPU_LIMIT_MULTIPLIER
+              value: "{{ .Values.config.cpuLimitMultiplier }}"
+            - name: MEMORY_LIMIT_MULTIPLIER
+              value: "{{ .Values.config.memoryLimitMultiplier }}"
+            - name: MAX_CPU_LIMIT
+              value: "{{ .Values.config.maxCpuLimit }}"
+            - name: MAX_MEMORY_LIMIT
+              value: "{{ .Values.config.maxMemoryLimit }}"
+            - name: MIN_CPU_REQUEST
+              value: "{{ .Values.config.minCpuRequest }}"
+            - name: MIN_MEMORY_REQUEST
+              value: "{{ .Values.config.minMemoryRequest }}"
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          ports:
+            - containerPort: 8080
+              name: metrics
+              protocol: TCP
+            - containerPort: 8081
+              name: health
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8081
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8081
+            initialDelaySeconds: 5
+            periodSeconds: 10
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

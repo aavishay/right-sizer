@@ -1,0 +1,282 @@
+---
+# Standalone test pod 1 - Web server with initial oversized resources
+apiVersion: v1
+kind: Pod
+metadata:
+  name: test-web-server
+  namespace: default
+  labels:
+    app: test-web
+    test: resize
+spec:
+  containers:
+  - name: nginx
+    image: nginx:alpine
+    resources:
+      requests:
+        cpu: "500m"
+        memory: "512Mi"
+      limits:
+        cpu: "1000m"
+        memory: "1Gi"
+    # Define resize policy for in-place updates (Kubernetes 1.33+)
+    resizePolicy:
+    - resourceName: cpu
+      restartPolicy: NotRequired
+    - resourceName: memory
+      restartPolicy: NotRequired
+    ports:
+    - containerPort: 80
+      name: http
+    volumeMounts:
+    - name: html
+      mountPath: /usr/share/nginx/html
+  volumes:
+  - name: html
+    emptyDir: {}
+
+---
+# Standalone test pod 2 - API server with moderate resources
+apiVersion: v1
+kind: Pod
+metadata:
+  name: test-api-server
+  namespace: default
+  labels:
+    app: test-api
+    test: resize
+spec:
+  containers:
+  - name: api
+    image: kennethreitz/httpbin
+    resources:
+      requests:
+        cpu: "200m"
+        memory: "256Mi"
+      limits:
+        cpu: "400m"
+        memory: "512Mi"
+    resizePolicy:
+    - resourceName: cpu
+      restartPolicy: NotRequired
+    - resourceName: memory
+      restartPolicy: NotRequired
+    ports:
+    - containerPort: 80
+      name: http
+    env:
+    - name: PORT
+      value: "80"
+
+---
+# Standalone test pod 3 - Worker with minimal initial resources
+apiVersion: v1
+kind: Pod
+metadata:
+  name: test-worker
+  namespace: default
+  labels:
+    app: test-worker
+    test: resize
+spec:
+  containers:
+  - name: worker
+    image: busybox
+    command: ["/bin/sh"]
+    args:
+    - "-c"
+    - |
+      echo "Worker started"
+      while true; do
+        # Simulate some CPU work
+        for i in $(seq 1 1000); do
+          echo $i > /dev/null
+        done
+        sleep 5
+      done
+    resources:
+      requests:
+        cpu: "50m"
+        memory: "64Mi"
+      limits:
+        cpu: "100m"
+        memory: "128Mi"
+    resizePolicy:
+    - resourceName: cpu
+      restartPolicy: NotRequired
+    - resourceName: memory
+      restartPolicy: NotRequired
+
+---
+# Standalone test pod 4 - Database simulator with higher resources
+apiVersion: v1
+kind: Pod
+metadata:
+  name: test-database
+  namespace: default
+  labels:
+    app: test-db
+    test: resize
+spec:
+  containers:
+  - name: postgres
+    image: postgres:alpine
+    env:
+    - name: POSTGRES_PASSWORD
+      value: "testpass"
+    - name: POSTGRES_DB
+      value: "testdb"
+    resources:
+      requests:
+        cpu: "300m"
+        memory: "512Mi"
+      limits:
+        cpu: "600m"
+        memory: "1Gi"
+    resizePolicy:
+    - resourceName: cpu
+      restartPolicy: NotRequired
+    - resourceName: memory
+      restartPolicy: NotRequired
+    ports:
+    - containerPort: 5432
+      name: postgres
+    volumeMounts:
+    - name: data
+      mountPath: /var/lib/postgresql/data
+  volumes:
+  - name: data
+    emptyDir: {}
+
+---
+# Standalone test pod 5 - Cache server
+apiVersion: v1
+kind: Pod
+metadata:
+  name: test-cache
+  namespace: default
+  labels:
+    app: test-cache
+    test: resize
+spec:
+  containers:
+  - name: redis
+    image: redis:alpine
+    resources:
+      requests:
+        cpu: "100m"
+        memory: "128Mi"
+      limits:
+        cpu: "200m"
+        memory: "256Mi"
+    resizePolicy:
+    - resourceName: cpu
+      restartPolicy: NotRequired
+    - resourceName: memory
+      restartPolicy: NotRequired
+    ports:
+    - containerPort: 6379
+      name: redis
+    command: ["redis-server"]
+    args: ["--maxmemory", "200mb", "--maxmemory-policy", "allkeys-lru"]
+
+---
+# Pod with multiple containers to test container-specific resizing
+apiVersion: v1
+kind: Pod
+metadata:
+  name: test-multi-container
+  namespace: default
+  labels:
+    app: test-multi
+    test: resize
+spec:
+  containers:
+  - name: app
+    image: nginx:alpine
+    resources:
+      requests:
+        cpu: "150m"
+        memory: "200Mi"
+      limits:
+        cpu: "300m"
+        memory: "400Mi"
+    resizePolicy:
+    - resourceName: cpu
+      restartPolicy: NotRequired
+    - resourceName: memory
+      restartPolicy: NotRequired
+    ports:
+    - containerPort: 80
+      name: http
+  - name: sidecar
+    image: busybox
+    command: ["/bin/sh"]
+    args:
+    - "-c"
+    - |
+      while true; do
+        echo "Sidecar logging: $(date)"
+        sleep 10
+      done
+    resources:
+      requests:
+        cpu: "50m"
+        memory: "64Mi"
+      limits:
+        cpu: "100m"
+        memory: "128Mi"
+    resizePolicy:
+    - resourceName: cpu
+      restartPolicy: NotRequired
+    - resourceName: memory
+      restartPolicy: NotRequired
+
+---
+# Service to expose test pods for load generation
+apiVersion: v1
+kind: Service
+metadata:
+  name: test-web-service
+  namespace: default
+spec:
+  selector:
+    app: test-web
+  ports:
+  - port: 80
+    targetPort: 80
+    name: http
+  type: ClusterIP
+
+---
+# ConfigMap with test instructions
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: resize-test-instructions
+  namespace: default
+data:
+  README: |
+    Test Pods for In-Place Resize Demonstration
+    ============================================
+
+    This manifest creates 6 standalone pods with different resource profiles:
+
+    1. test-web-server: Nginx web server (oversized resources)
+    2. test-api-server: HTTP API server (moderate resources)
+    3. test-worker: Background worker (minimal resources)
+    4. test-database: PostgreSQL database (higher resources)
+    5. test-cache: Redis cache (moderate resources)
+    6. test-multi-container: Multi-container pod (mixed resources)
+
+    All pods have resizePolicy set to NotRequired for both CPU and memory,
+    allowing in-place resizing without restarts.
+
+    To monitor resizing:
+    kubectl get pods -l test=resize -w
+
+    To check resource changes:
+    kubectl get pods -l test=resize -o custom-columns=NAME:.metadata.name,CPU-REQ:.spec.containers[0].resources.requests.cpu,MEM-REQ:.spec.containers[0].resources.requests.memory,CPU-LIM:.spec.containers[0].resources.limits.cpu,MEM-LIM:.spec.containers[0].resources.limits.memory
+
+    To manually test resize:
+    kubectl patch pod test-web-server --subresource resize --patch '{"spec": {"containers": [{"name": "nginx", "resources": {"requests": {"cpu": "100m", "memory": "128Mi"}, "limits": {"cpu": "200m", "memory": "256Mi"}}}]}}'

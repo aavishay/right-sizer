@@ -1,0 +1,95 @@
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+right-sizer
+/right-sizer
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+*.coverprofile
+coverage.txt
+coverage.html
+
+# Go workspace files
+go.work
+go.work.sum
+
+# Dependency directories
+vendor/
+
+# Build directories
+bin/
+dist/
+build/
+_output/
+
+# IDE specific files
+.idea/
+*.iml
+.vscode/
+*.code-workspace
+.project
+.classpath
+.settings/
+
+# OS specific files
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*.swo
+*~
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+*.bak
+*.orig
+*.pid
+
+# Environment files
+.env
+.env.local
+*.env
+
+# Kubernetes generated files
+*.generated.yaml
+
+# Helm generated files
+charts/*/charts/
+charts/*/requirements.lock
+
+# Local testing
+local-test/
+.local/
+*.local.yaml
+*-local.yaml
+
+# Docker files
+.dockerignore.local
+
+# Certificates and keys
+*.pem
+*.key
+*.crt
+*.csr
+*.p12
+*.jks
+
+# Debug files
+debug
+debug.test
+*.pprof
+
+# Archives
+*.tar
+*.tar.gz
+*.zip
+*.tgz

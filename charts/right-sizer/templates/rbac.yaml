@@ -1,0 +1,90 @@
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "right-sizer.serviceAccountName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "right-sizer.labels" . | nindent 4 }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "right-sizer.fullname" . }}
+  labels:
+    {{- include "right-sizer.labels" . | nindent 4 }}
+rules:
+  # Core pod operations
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch", "patch", "update"]
+
+  # In-place resize subresource (Kubernetes 1.33+)
+  - apiGroups: [""]
+    resources: ["pods/resize"]
+    verbs: ["patch"]
+
+  # Pod status and metrics
+  - apiGroups: [""]
+    resources: ["pods/status"]
+    verbs: ["get", "patch", "update"]
+
+  # Metrics API
+  - apiGroups: ["metrics.k8s.io"]
+    resources: ["pods", "nodes"]
+    verbs: ["get", "list"]
+
+  # Deployment and StatefulSet management
+  - apiGroups: ["apps"]
+    resources: ["deployments", "statefulsets", "daemonsets", "replicasets"]
+    verbs: ["get", "list", "watch", "patch", "update"]
+
+  # Events for logging resize operations
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "patch"]
+
+  # ConfigMaps and Secrets for configuration
+  - apiGroups: [""]
+    resources: ["configmaps", "secrets"]
+    verbs: ["get", "list", "watch"]
+
+  # Namespaces for multi-namespace support
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list", "watch"]
+
+  # HorizontalPodAutoscalers to avoid conflicts
+  - apiGroups: ["autoscaling"]
+    resources: ["horizontalpodautoscalers"]
+    verbs: ["get", "list", "watch"]
+
+  # VerticalPodAutoscalers to avoid conflicts (if VPA is installed)
+  - apiGroups: ["autoscaling.k8s.io"]
+    resources: ["verticalpodautoscalers"]
+    verbs: ["get", "list", "watch"]
+
+  # PodDisruptionBudgets for safe operations
+  - apiGroups: ["policy"]
+    resources: ["poddisruptionbudgets"]
+    verbs: ["get", "list", "watch"]
+
+  # ResourceQuotas and LimitRanges to respect namespace limits
+  - apiGroups: [""]
+    resources: ["resourcequotas", "limitranges"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "right-sizer.fullname" . }}
+  labels:
+    {{- include "right-sizer.labels" . | nindent 4 }}
+roleRef:
+  kind: ClusterRole
+  name: {{ include "right-sizer.fullname" . }}
+  apiGroup: rbac.authorization.k8s.io
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "right-sizer.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}

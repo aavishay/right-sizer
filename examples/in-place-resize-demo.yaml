@@ -1,0 +1,278 @@
+# Kubernetes 1.33+ In-Place Pod Resize Demo
+# This example demonstrates how the right-sizer operator performs in-place pod resizing
+# without causing pod restarts using the new resize subresource feature.
+
+---
+# Example workload that will be automatically right-sized
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo-app
+  namespace: default
+  labels:
+    app: demo-app
+    rightsizer: enabled
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: demo-app
+  template:
+    metadata:
+      labels:
+        app: demo-app
+      annotations:
+        # Optional: Explicitly enable in-place resize
+        resize.kubernetes.io/restart-policy: "NotRequired"
+    spec:
+      containers:
+      - name: app
+        image: nginx:alpine
+        # Initial resources - these will be adjusted based on actual usage
+        resources:
+          requests:
+            cpu: "200m"
+            memory: "256Mi"
+          limits:
+            cpu: "500m"
+            memory: "512Mi"
+        # Optional: Define resize policy (Kubernetes 1.33+)
+        resizePolicy:
+        - resourceName: cpu
+          restartPolicy: NotRequired
+        - resourceName: memory
+          restartPolicy: NotRequired
+        ports:
+        - containerPort: 80
+          name: http
+        # Add some load to demonstrate resource usage
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 5
+          periodSeconds: 5
+
+---
+# Service to expose the demo app
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo-app
+  namespace: default
+spec:
+  selector:
+    app: demo-app
+  ports:
+  - port: 80
+    targetPort: 80
+    name: http
+  type: ClusterIP
+
+---
+# ConfigMap to configure right-sizer behavior for this deployment
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rightsizer-config
+  namespace: default
+data:
+  # Configuration for the right-sizer operator
+  config.yaml: |
+    # In-place resize configuration
+    inPlaceResize:
+      enabled: true
+      interval: 60s  # Check every 60 seconds
+
+    # Thresholds for resizing
+    thresholds:
+      # Only resize if the difference is more than this percentage
+      minDifferencePercent: 10
+
+      # Buffer to add to actual usage
+      requestBuffer: 20  # Add 20% buffer to actual usage
+
+      # Limit multiplier
+      limitMultiplier: 2  # Set limits to 2x requests
+
+    # Resource constraints
+    constraints:
+      minCPU: "10m"      # Minimum CPU request
+      maxCPU: "4000m"    # Maximum CPU limit
+      minMemory: "64Mi"  # Minimum memory request
+      maxMemory: "8Gi"   # Maximum memory limit
+
+    # Namespace filters
+    namespaces:
+      # Include only these namespaces (empty means all)
+      include: []
+      # Exclude these namespaces
+      exclude:
+        - kube-system
+        - kube-public
+        - kube-node-lease
+        - cert-manager
+        - ingress-nginx
+
+    # Pod filters
+    pods:
+      # Skip pods with these labels
+      skipLabels:
+        rightsizer: disabled
+      # Only process pods with these labels (empty means all)
+      includeLabels: {}
+
+---
+# Example of a pod that should NOT be resized
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fixed-resources-app
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: fixed-resources-app
+  template:
+    metadata:
+      labels:
+        app: fixed-resources-app
+        rightsizer: disabled  # This label prevents the right-sizer from modifying this pod
+    spec:
+      containers:
+      - name: app
+        image: busybox
+        command: ["sleep", "3600"]
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "128Mi"
+          limits:
+            cpu: "100m"
+            memory: "128Mi"
+
+---
+# HorizontalPodAutoscaler example - right-sizer will detect and respect HPA
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: demo-app-hpa
+  namespace: default
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: demo-app
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+
+---
+# Example monitoring query to verify in-place resize
+# Run this with kubectl to check if pods were resized without restart
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: resize-verification-scripts
+  namespace: default
+data:
+  check-resize.sh: |
+    #!/bin/bash
+    # Script to verify in-place pod resize
+
+    echo "Checking pods that have been resized..."
+
+    # Get all pods in the namespace
+    PODS=$(kubectl get pods -o name)
+
+    for POD in $PODS; do
+      POD_NAME=$(echo $POD | cut -d'/' -f2)
+
+      # Get restart count
+      RESTART_COUNT=$(kubectl get $POD -o jsonpath='{.status.containerStatuses[0].restartCount}')
+
+      # Get current resources
+      CPU_REQ=$(kubectl get $POD -o jsonpath='{.spec.containers[0].resources.requests.cpu}')
+      MEM_REQ=$(kubectl get $POD -o jsonpath='{.spec.containers[0].resources.requests.memory}')
+
+      # Get allocated resources (actual after resize)
+      ALLOC_CPU=$(kubectl get $POD -o jsonpath='{.status.containerStatuses[0].allocatedResources.cpu}' 2>/dev/null)
+      ALLOC_MEM=$(kubectl get $POD -o jsonpath='{.status.containerStatuses[0].allocatedResources.memory}' 2>/dev/null)
+
+      # Get resize status
+      RESIZE_STATUS=$(kubectl get $POD -o jsonpath='{.status.resize}' 2>/dev/null)
+
+      echo "Pod: $POD_NAME"
+      echo "  Restart Count: $RESTART_COUNT"
+      echo "  Requested: CPU=$CPU_REQ, Memory=$MEM_REQ"
+      if [ ! -z "$ALLOC_CPU" ]; then
+        echo "  Allocated: CPU=$ALLOC_CPU, Memory=$ALLOC_MEM"
+      fi
+      if [ ! -z "$RESIZE_STATUS" ]; then
+        echo "  Resize Status: $RESIZE_STATUS"
+      fi
+      echo ""
+    done
+
+  test-resize.sh: |
+    #!/bin/bash
+    # Script to manually test in-place resize on a specific pod
+
+    POD_NAME=$1
+    if [ -z "$POD_NAME" ]; then
+      echo "Usage: $0 <pod-name>"
+      exit 1
+    fi
+
+    echo "Testing in-place resize on pod: $POD_NAME"
+
+    # Get initial state
+    INITIAL_RESTART=$(kubectl get pod $POD_NAME -o jsonpath='{.status.containerStatuses[0].restartCount}')
+    INITIAL_START=$(kubectl get pod $POD_NAME -o jsonpath='{.status.containerStatuses[0].state.running.startedAt}')
+
+    echo "Initial state:"
+    echo "  Restart count: $INITIAL_RESTART"
+    echo "  Started at: $INITIAL_START"
+
+    # Get container name
+    CONTAINER=$(kubectl get pod $POD_NAME -o jsonpath='{.spec.containers[0].name}')
+
+    # Perform resize
+    echo "Performing resize..."
+    kubectl patch pod $POD_NAME --subresource resize --patch \
+      "{\"spec\": {\"containers\": [{\"name\": \"$CONTAINER\", \"resources\": {\"requests\": {\"cpu\": \"150m\", \"memory\": \"192Mi\"}, \"limits\": {\"cpu\": \"300m\", \"memory\": \"384Mi\"}}}]}}"
+
+    sleep 3
+
+    # Check final state
+    FINAL_RESTART=$(kubectl get pod $POD_NAME -o jsonpath='{.status.containerStatuses[0].restartCount}')
+    FINAL_START=$(kubectl get pod $POD_NAME -o jsonpath='{.status.containerStatuses[0].state.running.startedAt}')
+
+    echo "Final state:"
+    echo "  Restart count: $FINAL_RESTART"
+    echo "  Started at: $FINAL_START"
+
+    if [ "$INITIAL_RESTART" = "$FINAL_RESTART" ] && [ "$INITIAL_START" = "$FINAL_START" ]; then
+      echo "SUCCESS: Pod was resized in-place without restart!"
+    else
+      echo "WARNING: Pod appears to have restarted during resize"
+    fi

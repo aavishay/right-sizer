@@ -1,0 +1,77 @@
+# Default values for right-sizer.
+replicaCount: 1
+
+image:
+  repository: your-dockerhub-username/right-sizer
+  tag: latest
+  pullPolicy: Always
+
+nameOverride: ""
+fullnameOverride: ""
+
+# Service account
+serviceAccount:
+  create: true
+  name: right-sizer
+
+# Prometheus configuration
+prometheusUrl: "http://prometheus:9090"
+
+# Metrics provider (kubernetes or prometheus)
+metricsProvider: "kubernetes"
+
+# Enable in-place resize for Kubernetes 1.33+
+enableInPlaceResize: "true"
+
+# How often to check and resize resources (e.g., 30s, 1m, 5m, 1h)
+resizeInterval: "30s"
+
+# Log level (debug, info, warn, error)
+logLevel: "info"
+
+# Resource sizing configuration
+config:
+  # Multipliers for calculating requests from usage
+  cpuRequestMultiplier: 1.2 # Multiply CPU usage by this to get request
+  memoryRequestMultiplier: 1.2 # Multiply memory usage by this to get request
+
+  # Multipliers for calculating limits from requests
+  cpuLimitMultiplier: 2.0 # Multiply CPU request by this to get limit
+  memoryLimitMultiplier: 2.0 # Multiply memory request by this to get limit
+
+  # Maximum caps for resources
+  maxCpuLimit: 4000 # Maximum CPU limit in millicores (4 cores)
+  maxMemoryLimit: 8192 # Maximum memory limit in MB (8GB)
+
+  # Minimum values for resources
+  minCpuRequest: 10 # Minimum CPU request in millicores
+  minMemoryRequest: 64 # Minimum memory request in MB
+
+# Operator resource limits
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+# Node selector
+nodeSelector: {}
+
+# Tolerations
+tolerations: []
+
+# Affinity
+affinity: {}
+
+# Security context
+securityContext: {}
+
+# Pod security context
+podSecurityContext: {}
+
+# Service
+service:
+  type: ClusterIP
+  port: 8080
