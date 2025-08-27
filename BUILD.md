@@ -16,12 +16,33 @@
 ./make minikube-build
 ```
 
+**Note**: All Go source code is located in the `go/` directory.
+
 ## Prerequisites
 
 - Go 1.22+
 - Docker (for container builds)
 - Kubernetes 1.33+ (for in-place resize feature)
 - Helm 3.x (for Helm deployments)
+
+## Project Structure
+
+```
+right-sizer/
+├── go/                     # Go source code
+│   ├── main.go            # Main entry point
+│   ├── go.mod             # Go module definition
+│   ├── go.sum             # Go module checksums
+│   ├── controllers/       # Kubernetes controllers
+│   ├── metrics/          # Metrics providers
+│   ├── config/           # Configuration
+│   ├── logger/           # Logging utilities
+│   └── test/             # Integration tests
+├── helm/                 # Helm chart
+├── scripts/             # Build and development scripts
+├── examples/            # Example configurations
+└── docs/               # Documentation
+```
 
 ## Build Commands
 
@@ -54,6 +75,8 @@
 ./scripts/dev.sh start-cluster
 ```
 
+**Note**: The development workflow operates on the `go/` directory for all Go-related operations.
+
 ## Testing
 
 ### Test Commands
@@ -79,13 +102,13 @@
 # Basic unit tests
 ./make test
 
-# Tests with coverage
+# Tests with coverage (generates go/coverage.html)
 ./make test-coverage
 
 # Integration tests (requires kubectl access)
 INTEGRATION_TESTS=true ./make test-integration
 
-# Watch mode for development
+# Watch mode for development (watches go/ directory)
 ./scripts/test.sh -w
 ```
 
@@ -94,6 +117,8 @@ INTEGRATION_TESTS=true ./make test-integration
 - `IMAGE_TAG` - Docker image tag (default: `latest`)
 - `IMAGE_NAME` - Docker image name (default: `right-sizer`)
 - `NAMESPACE` - Kubernetes namespace (default: `default`)
+
+**Build Context**: All build operations use the `go/` directory as the Go workspace.
 
 ## Examples
 
@@ -145,9 +170,11 @@ helm test right-sizer
 ## Files
 
 - `./make` - Build script wrapper
-- `scripts/make.sh` - Main build script
+- `scripts/make.sh` - Main build script (operates on go/ directory)
 - `scripts/dev.sh` - Development helper script
-- `Dockerfile` - Container image definition
+- `scripts/test.sh` - Comprehensive test script
+- `Dockerfile` - Container image definition (builds from go/)
 - `helm/` - Helm chart
-- `test/` - Integration tests
-- `*_test.go` - Unit tests
+- `go/` - Go source code and modules
+- `go/test/` - Integration tests
+- `go/*_test.go` - Unit tests

@@ -105,6 +105,8 @@ For detailed configuration options, see [CONFIGURATION.md](CONFIGURATION.md).
 
 ### Local Development
 
+**Note**: All Go source code is located in the `go/` directory.
+
 #### 1. Setup Environment
 
 ```bash
@@ -118,7 +120,7 @@ minikube start --kubernetes-version=v1.33.1
 #### 2. Build and Deploy
 
 ```bash
-# Build the operator binary
+# Build the operator binary (builds from go/ directory)
 ./make build
 
 # Build Docker image in Minikube's registry
@@ -156,6 +158,8 @@ kubectl get events --sort-by='.lastTimestamp' | grep resize
 ```
 
 For detailed build instructions, see [BUILD.md](BUILD.md).
+
+**Project Structure**: Go source code is organized in the `go/` directory, with build scripts operating from the project root.
 
 ## Documentation
 

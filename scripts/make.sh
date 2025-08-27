@@ -5,6 +5,10 @@
 
 set -e
 
+# Script directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -65,36 +69,46 @@ cmd_all() {
 
 cmd_build() {
   print_header "Building ${BINARY_NAME}..."
-  eval "${GO} build ${LDFLAGS} -o ${BINARY_NAME} main.go"
+  cd "${ROOT_DIR}/go"
+  eval "${GO} build ${LDFLAGS} -o ../${BINARY_NAME} main.go"
+  cd "${ROOT_DIR}"
   print_success "Binary built successfully: ${BINARY_NAME}"
 }
 
 cmd_clean() {
   print_header "Cleaning build artifacts..."
+  cd "${ROOT_DIR}/go"
   ${GO} clean 2>/dev/null || true
+  cd "${ROOT_DIR}"
   rm -f "${BINARY_NAME}"
-  rm -rf bin/ dist/ vendor/ coverage.out coverage.html
+  rm -rf bin/ dist/ go/vendor/ go/coverage.out go/coverage.html
   print_success "Clean completed"
 }
 
 cmd_test() {
   print_header "Running tests..."
+  cd "${ROOT_DIR}/go"
   ${GO} test -v ./...
+  cd "${ROOT_DIR}"
   print_success "Tests completed"
 }
 
 cmd_test_coverage() {
   print_header "Running tests with coverage..."
+  cd "${ROOT_DIR}/go"
   ${GO} test -v -coverprofile=coverage.out ./...
   ${GO} tool cover -html=coverage.out -o coverage.html
-  print_success "Coverage report generated: coverage.html"
-  print_info "Open coverage.html in your browser to view the report"
+  cd "${ROOT_DIR}"
+  print_success "Coverage report generated: go/coverage.html"
+  print_info "Open go/coverage.html in your browser to view the report"
 }
 
 cmd_fmt() {
   print_header "Formatting code..."
+  cd "${ROOT_DIR}/go"
   ${GO} fmt ./...
   ${GO} mod tidy
+  cd "${ROOT_DIR}"
   print_success "Code formatted"
 }
 
@@ -154,19 +168,25 @@ cmd_run() {
 cmd_install() {
   print_header "Installing ${BINARY_NAME}..."
   cmd_build
+  cd "${ROOT_DIR}/go"
   ${GO} install
+  cd "${ROOT_DIR}"
   print_success "${BINARY_NAME} installed to GOPATH/bin"
 }
 
 cmd_vendor() {
   print_header "Vendoring dependencies..."
+  cd "${ROOT_DIR}/go"
   ${GO} mod vendor
+  cd "${ROOT_DIR}"
   print_success "Dependencies vendored"
 }
 
 cmd_verify() {
   print_header "Verifying dependencies..."
+  cd "${ROOT_DIR}/go"
   ${GO} mod verify
+  cd "${ROOT_DIR}"
   print_success "Dependencies verified"
 }
 

@@ -79,6 +79,7 @@ done
 # Script directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+GO_DIR="${ROOT_DIR}/go"
 
 # Log functions
 log_info() {
@@ -129,7 +130,7 @@ check_kubectl() {
 clean_artifacts() {
   log_info "Cleaning test artifacts..."
 
-  cd "$ROOT_DIR"
+  cd "$GO_DIR"
 
   # Remove test binaries
   find . -name "*.test" -delete 2>/dev/null || true
@@ -145,6 +146,7 @@ clean_artifacts() {
     go clean -modcache
   fi
 
+  cd "$ROOT_DIR"
   log_success "Test artifacts cleaned"
 }
 
@@ -152,7 +154,7 @@ clean_artifacts() {
 install_dependencies() {
   log_info "Installing test dependencies..."
 
-  cd "$ROOT_DIR"
+  cd "$GO_DIR"
 
   # Install testify if not present
   if ! go list -m github.com/stretchr/testify &>/dev/null; then
@@ -165,6 +167,7 @@ install_dependencies() {
     go get sigs.k8s.io/controller-runtime/pkg/client/fake
   fi
 
+  cd "$ROOT_DIR"
   log_success "Dependencies installed"
 }
 
@@ -172,7 +175,7 @@ install_dependencies() {
 run_unit_tests() {
   log_info "Running unit tests..."
 
-  cd "$ROOT_DIR"
+  cd "$GO_DIR"
 
   local test_args=()
 
@@ -189,8 +192,10 @@ run_unit_tests() {
   packages=$(go list ./... | grep -v /test)
 
   if go test "${test_args[@]}" $packages; then
+    cd "$ROOT_DIR"
     log_success "Unit tests passed"
   else
+    cd "$ROOT_DIR"
     log_error "Unit tests failed"
     return 1
   fi
@@ -198,10 +203,10 @@ run_unit_tests() {
 
 # Generate coverage report
 generate_coverage() {
-  if [[ "$COVERAGE" == "true" ]] && [[ -f "coverage.out" ]]; then
+  if [[ "$COVERAGE" == "true" ]] && [[ -f "$GO_DIR/coverage.out" ]]; then
     log_info "Generating coverage report..."
 
-    cd "$ROOT_DIR"
+    cd "$GO_DIR"
 
     # Generate HTML coverage report
     go tool cover -html=coverage.out -o coverage.html
@@ -210,12 +215,13 @@ generate_coverage() {
     local coverage_percent
     coverage_percent=$(go tool cover -func=coverage.out | tail -1 | awk '{print $3}')
 
+    cd "$ROOT_DIR"
     log_info "Total coverage: $coverage_percent"
-    log_success "Coverage report generated: coverage.html"
+    log_success "Coverage report generated: go/coverage.html"
 
     # Open coverage report if on macOS and not in CI
     if [[ "$OSTYPE" == "darwin"* ]] && [[ -z "$CI" ]]; then
-      open coverage.html
+      open go/coverage.html
     fi
   fi
 }
@@ -233,7 +239,7 @@ run_integration_tests() {
     return 0
   fi
 
-  cd "$ROOT_DIR"
+  cd "$GO_DIR"
 
   local test_args=("-v")
 
@@ -242,8 +248,10 @@ run_integration_tests() {
 
   # Run integration tests
   if go test ./test/... "${test_args[@]}"; then
+    cd "$ROOT_DIR"
     log_success "Integration tests passed"
   else
+    cd "$ROOT_DIR"
     log_error "Integration tests failed"
     return 1
   fi
@@ -259,7 +267,7 @@ run_benchmarks() {
 
   log_info "Running benchmark tests..."
 
-  cd "$ROOT_DIR"
+  cd "$GO_DIR"
 
   # Set environment variable for benchmarks
   export INTEGRATION_TESTS=true
@@ -268,8 +276,10 @@ run_benchmarks() {
   packages=$(go list ./... | grep -E "(test|benchmark)")
 
   if go test -bench=. -benchmem $packages; then
+    cd "$ROOT_DIR"
     log_success "Benchmarks completed"
   else
+    cd "$ROOT_DIR"
     log_error "Benchmarks failed"
     return 1
   fi
@@ -289,7 +299,7 @@ watch_tests() {
   # Check if fswatch is available
   if command -v fswatch &>/dev/null; then
     # Use fswatch for file watching
-    fswatch -o . --exclude=".*\\.git.*" --exclude=".*\\.test" --exclude="coverage\\.*" | while read f; do
+    fswatch -o go --exclude=".*\\.git.*" --exclude=".*\\.test" --exclude="coverage\\.*" | while read f; do
       log_info "Files changed, re-running tests..."
       run_unit_tests || true
       log_info "Waiting for changes..."
@@ -297,7 +307,7 @@ watch_tests() {
   elif command -v inotifywait &>/dev/null; then
     # Use inotifywait on Linux
     while true; do
-      inotifywait -r -e modify,create,delete --exclude='.*\.(git|test).*|coverage\..*' . 2>/dev/null
+      inotifywait -r -e modify,create,delete --exclude='.*\.(git|test).*|coverage\..*' go 2>/dev/null
       log_info "Files changed, re-running tests..."
       run_unit_tests || true
       log_info "Waiting for changes..."
@@ -307,7 +317,7 @@ watch_tests() {
     local last_mod=0
     while true; do
       local current_mod
-      current_mod=$(find . -name "*.go" -not -path "./.git/*" -not -name "*.test" -exec stat -f "%m" {} \; 2>/dev/null | sort -n | tail -1)
+      current_mod=$(find go -name "*.go" -not -path "./go/.git/*" -not -name "*.test" -exec stat -f "%m" {} \; 2>/dev/null | sort -n | tail -1)
 
       if [[ "$current_mod" != "$last_mod" ]]; then
         last_mod=$current_mod
@@ -384,8 +394,6 @@ run_all_tests() {
 
 # Main execution
 main() {
-  cd "$ROOT_DIR"
-
   # Check prerequisites
   check_go
 
