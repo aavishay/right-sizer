@@ -116,7 +116,7 @@ spec:
 The Helm chart has been updated to support these configurations:
 
 ```bash
-helm install right-sizer ./charts/right-sizer \
+helm install right-sizer ./helm \
   --set resizeInterval=1m \
   --set logLevel=info \
   --set config.cpuRequestMultiplier=1.5 \
@@ -145,7 +145,7 @@ config:
 ```
 
 ```bash
-helm install right-sizer ./charts/right-sizer -f values-custom.yaml
+helm install right-sizer ./helm -f values-custom.yaml
 ```
 
 ## Configuration Scenarios
@@ -250,9 +250,9 @@ RESIZE_INTERVAL: "1h"    # Every hour (slow - for stable workloads)
    - `controllers/nondisruptive_rightsizer.go` - Use config for calculations, RESIZE_INTERVAL, and logger
    - `controllers/rightsizer_controller.go` - Use config for calculations and logger
    - `deployment.yaml` - Added environment variables
-   - `charts/right-sizer/values.yaml` - Added configuration section
-   - `charts/right-sizer/templates/deployment.yaml` - Added env vars
-   - `charts/right-sizer/templates/_helpers.tpl` - Added helper templates
+   - `helm/values.yaml` - Added configuration section
+   - `helm/templates/deployment.yaml` - Added env vars
+   - `helm/templates/_helpers.tpl` - Added helper templates
    - `README.md` - Added configuration documentation
 
 ## Testing the Configuration

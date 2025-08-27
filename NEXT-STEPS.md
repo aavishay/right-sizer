@@ -148,7 +148,7 @@ go-licenses check ./...
 
 ```bash
 # Package Helm chart
-helm package charts/right-sizer
+helm package helm
 
 # Create index for GitHub Pages
 helm repo index . --url https://yourusername.github.io/right-sizer

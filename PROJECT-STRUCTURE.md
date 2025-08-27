@@ -6,10 +6,9 @@ This document describes the organization and structure of the right-sizer operat
 
 ```
 right-sizer/
-├── charts/              # Helm charts for Kubernetes deployment
-│   └── right-sizer/     # Main Helm chart
-│       ├── templates/   # Kubernetes manifest templates
-│       └── values.yaml  # Default configuration values
+├── helm/                # Helm chart for Kubernetes deployment
+│   ├── templates/       # Kubernetes manifest templates
+│   └── values.yaml      # Default configuration values
 ├── config/              # Configuration management
 │   └── config.go        # Environment variable parsing and validation
 ├── controllers/         # Kubernetes controller implementations
@@ -96,9 +95,9 @@ kubectl apply -f deploy/kubernetes/
 ```
 
 ### Helm Chart
-Production-ready Helm chart in `/charts/right-sizer/`:
+Production-ready Helm chart in `/helm/`:
 ```bash
-helm install right-sizer ./charts/right-sizer
+helm install right-sizer ./helm
 ```
 
 ### Docker Image

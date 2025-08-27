@@ -3,7 +3,6 @@
 # Copyright (C) 2024 right-sizer contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-
 set -e
 
 echo "=== Starting Minikube ==="
@@ -26,7 +25,7 @@ echo "=== Resetting Docker to host daemon ==="
 eval $(minikube docker-env -u)
 
 echo "=== Creating Helm chart if not present ==="
-CHART_DIR="charts/right-sizer"
+CHART_DIR="helm"
 if [ ! -d "$CHART_DIR" ]; then
   echo "Helm chart directory $CHART_DIR not found!"
   exit 1

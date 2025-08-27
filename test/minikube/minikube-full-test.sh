@@ -3,7 +3,6 @@
 # Copyright (C) 2024 right-sizer contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-
 set -e
 
 echo "=== 1. Starting Minikube ==="
@@ -26,7 +25,7 @@ echo "=== 6. Resetting Docker to host daemon ==="
 eval $(minikube docker-env -u)
 
 echo "=== 7. Installing/Upgrading right-sizer operator via Helm ==="
-helm upgrade --install right-sizer ./charts/right-sizer \
+helm upgrade --install right-sizer ./helm \
   --set image.repository=right-sizer \
   --set image.tag=latest \
   --set image.pullPolicy=IfNotPresent

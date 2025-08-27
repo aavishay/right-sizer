@@ -7,13 +7,13 @@ A Kubernetes operator for automatic pod resource right-sizing.
 ### Install
 
 ```sh
-helm install right-sizer ./charts/right-sizer
+helm install right-sizer ./helm
 ```
 
 ### Upgrade
 
 ```sh
-helm upgrade right-sizer ./charts/right-sizer
+helm upgrade right-sizer ./helm
 ```
 
 ### Uninstall
@@ -29,7 +29,7 @@ You can override values in `values.yaml` using `--set` or by editing the file.
 Example:
 
 ```sh
-helm install right-sizer ./charts/right-sizer \
+helm install right-sizer ./helm \
   --set image.repository=myrepo/right-sizer \
   --set image.tag=v1.2.3 \
   --set prometheusUrl=http://prometheus.mynamespace.svc:9090

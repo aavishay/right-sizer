@@ -152,7 +152,7 @@ By contributing to this project, you agree to license your contributions under t
 When deploying with Helm, configure these values in your `values.yaml` or via `--set`:
 
 ```bash
-helm install right-sizer ./charts/right-sizer \
+helm install right-sizer ./helm \
   --set resizeInterval=1m \
   --set logLevel=debug \
   --set config.cpuRequestMultiplier=1.5 \
@@ -243,7 +243,7 @@ kubectl apply -f deployment.yaml
 #### b. Using Helm
 
 ```sh
-helm install right-sizer ./charts/right-sizer \
+helm install right-sizer ./helm \
   --set image.repository=right-sizer \
   --set image.tag=latest \
   --set image.pullPolicy=IfNotPresent

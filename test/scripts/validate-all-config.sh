@@ -3,7 +3,6 @@
 # Copyright (C) 2024 right-sizer contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-
 # Final validation script for all Right-Sizer configuration features
 # This script validates that all environment variable configurations work correctly
 
@@ -309,14 +308,14 @@ if [ -f "deployment.yaml" ]; then
   done
 fi
 
-if [ -f "charts/right-sizer/values.yaml" ]; then
-  if grep -q "resizeInterval:" charts/right-sizer/values.yaml; then
+if [ -f "helm/values.yaml" ]; then
+  if grep -q "resizeInterval:" helm/values.yaml; then
     print_status "resizeInterval in Helm values"
   else
     print_error "resizeInterval missing from Helm values"
   fi
 
-  if grep -q "logLevel:" charts/right-sizer/values.yaml; then
+  if grep -q "logLevel:" helm/values.yaml; then
     print_status "logLevel in Helm values"
   else
     print_error "logLevel missing from Helm values"
