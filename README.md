@@ -71,8 +71,8 @@ The right-sizer operator can be configured using environment variables to custom
 | `MEMORY_REQUEST_MULTIPLIER` | `1.2` | Multiplier applied to memory usage to calculate memory requests |
 | `CPU_LIMIT_MULTIPLIER` | `2.0` | Multiplier applied to CPU requests to calculate CPU limits |
 | `MEMORY_LIMIT_MULTIPLIER` | `2.0` | Multiplier applied to memory requests to calculate memory limits |
-| `KUBE_NAMESPACE_INCLUDE` | (empty) | Comma-separated list of namespaces to monitor |
-| `KUBE_NAMESPACE_EXCLUDE` | (empty) | Comma-separated list of namespaces to exclude |
+| `KUBE_NAMESPACE_INCLUDE` | (empty) | Comma-separated list of namespaces to monitor. Default: monitors all namespaces |
+| `KUBE_NAMESPACE_EXCLUDE` | (empty) | Comma-separated list of namespaces to exclude. Default: excludes none |
 ### Namespace Filtering
 
 You can restrict monitoring to specific namespaces using:
