@@ -36,6 +36,8 @@ The right-sizer operator now supports comprehensive configuration through enviro
 | `MEMORY_REQUEST_MULTIPLIER` | `1.2` | Multiplier applied to actual memory usage to calculate memory requests | `1.3` = 30% buffer |
 | `CPU_LIMIT_MULTIPLIER` | `2.0` | Multiplier applied to CPU requests to calculate CPU limits | `3.0` = 3x burst capacity |
 | `MEMORY_LIMIT_MULTIPLIER` | `2.0` | Multiplier applied to memory requests to calculate memory limits | `2.5` = 2.5x burst capacity |
+| `KUBE_NAMESPACE_INCLUDE` | (empty) | Comma-separated list of namespaces to monitor (only these) | `default,prod,staging` |
+| `KUBE_NAMESPACE_EXCLUDE` | (empty) | Comma-separated list of namespaces to exclude from monitoring | `kube-system,dev` |
 
 ### Resource Boundaries
 
@@ -54,6 +56,26 @@ The right-sizer operator now supports comprehensive configuration through enviro
 | `LOG_LEVEL` | `info` | Logging verbosity level | `debug`, `info`, `warn`, `error` |
 
 ## How Resource Calculation Works
+## Namespace Filtering
+
+The operator supports filtering which namespaces are monitored using two environment variables:
+
+- `KUBE_NAMESPACE_INCLUDE`: If set, only pods in these namespaces will be monitored. Accepts a comma-separated list (CSV).
+- `KUBE_NAMESPACE_EXCLUDE`: If set, pods in these namespaces will be excluded from monitoring. Accepts a comma-separated list (CSV).
+
+**Inclusion takes priority:** If `KUBE_NAMESPACE_INCLUDE` is set, only those namespaces are monitored, regardless of the exclude list.
+
+**Example:**
+
+```yaml
+env:
+   - name: KUBE_NAMESPACE_INCLUDE
+      value: "default,prod"
+   - name: KUBE_NAMESPACE_EXCLUDE
+      value: "dev,kube-system"
+```
+
+This will monitor only pods in `default` and `prod`, and ignore all others.
 
 The operator calculates resources using the following formula:
 

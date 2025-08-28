@@ -71,7 +71,7 @@ Main Go source code directory containing all Go modules and packages:
 
 ### `/go/config`
 Configuration management package that handles:
-- Environment variable parsing
+- Environment variable parsing (including CSV for namespace include/exclude)
 - Default value management
 - Configuration validation
 - Global configuration singleton

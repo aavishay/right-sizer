@@ -71,6 +71,16 @@ The right-sizer operator can be configured using environment variables to custom
 | `MEMORY_REQUEST_MULTIPLIER` | `1.2` | Multiplier applied to memory usage to calculate memory requests |
 | `CPU_LIMIT_MULTIPLIER` | `2.0` | Multiplier applied to CPU requests to calculate CPU limits |
 | `MEMORY_LIMIT_MULTIPLIER` | `2.0` | Multiplier applied to memory requests to calculate memory limits |
+| `KUBE_NAMESPACE_INCLUDE` | (empty) | Comma-separated list of namespaces to monitor |
+| `KUBE_NAMESPACE_EXCLUDE` | (empty) | Comma-separated list of namespaces to exclude |
+### Namespace Filtering
+
+You can restrict monitoring to specific namespaces using:
+
+- `KUBE_NAMESPACE_INCLUDE`: Only monitor pods in these namespaces (CSV).
+- `KUBE_NAMESPACE_EXCLUDE`: Exclude pods in these namespaces (CSV).
+
+If both are set, only namespaces in the include list are monitored.
 
 ### Resource Boundaries
 

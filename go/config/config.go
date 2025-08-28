@@ -43,6 +43,9 @@ type Config struct {
 	// Operational configuration
 	ResizeInterval time.Duration // How often to check and resize resources
 	LogLevel       string        // Log level: debug, info, warn, error
+	// Namespace filters
+	NamespaceInclude []string // Namespaces to include (from KUBE_NAMESPACE_INCLUDE)
+	NamespaceExclude []string // Namespaces to exclude (from KUBE_NAMESPACE_EXCLUDE)
 }
 
 // Global config instance
@@ -163,10 +166,19 @@ func Load() *Config {
 		}
 		if validLevels[val] {
 			cfg.LogLevel = val
-			log.Printf("LOG_LEVEL set to: %s", val)
-		} else {
-			log.Printf("Warning: Invalid LOG_LEVEL value: %s (valid: debug, info, warn, error)", val)
 		}
+	}
+
+	// Load KUBE_NAMESPACE_INCLUDE (CSV)
+	if val := os.Getenv("KUBE_NAMESPACE_INCLUDE"); val != "" {
+		cfg.NamespaceInclude = parseCSV(val)
+		log.Printf("KUBE_NAMESPACE_INCLUDE set to: %v", cfg.NamespaceInclude)
+	}
+
+	// Load KUBE_NAMESPACE_EXCLUDE (CSV)
+	if val := os.Getenv("KUBE_NAMESPACE_EXCLUDE"); val != "" {
+		cfg.NamespaceExclude = parseCSV(val)
+		log.Printf("KUBE_NAMESPACE_EXCLUDE set to: %v", cfg.NamespaceExclude)
 	}
 
 	Global = cfg
@@ -179,4 +191,43 @@ func Get() *Config {
 		return Load()
 	}
 	return Global
+}
+
+// parseCSV splits a comma-separated string into a slice, trimming spaces
+func parseCSV(s string) []string {
+	var out []string
+	for _, v := range splitAndTrim(s, ',') {
+		if v != "" {
+			out = append(out, v)
+		}
+	}
+	return out
+}
+
+// splitAndTrim splits by sep and trims spaces
+func splitAndTrim(s string, sep rune) []string {
+	var res []string
+	field := ""
+	for _, c := range s {
+		if c == sep {
+			res = append(res, trimSpace(field))
+			field = ""
+		} else {
+			field += string(c)
+		}
+	}
+	res = append(res, trimSpace(field))
+	return res
+}
+
+// trimSpace trims leading/trailing spaces
+func trimSpace(s string) string {
+	i, j := 0, len(s)-1
+	for i <= j && (s[i] == ' ' || s[i] == '\t') {
+		i++
+	}
+	for j >= i && (s[j] == ' ' || s[j] == '\t') {
+		j--
+	}
+	return s[i : j+1]
 }
