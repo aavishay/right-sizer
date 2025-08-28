@@ -3,7 +3,6 @@
 # Copyright (C) 2024 right-sizer contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-
 # Deploy script for right-sizer operator with Kubernetes 1.33 in-place resize support
 # This script builds and deploys the operator to your current Kubernetes context
 
@@ -22,6 +21,10 @@ NAMESPACE="default"
 IMAGE_TAG="latest"
 BUILD_LOCAL=true
 USE_HELM=false
+
+# Project root detection (two levels up from this script)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
@@ -129,10 +132,12 @@ if [[ "$BUILD_LOCAL" == true ]]; then
   else
     # Build Go binary
     echo "Running go mod tidy..."
+    cd "$ROOT_DIR/go"
     go mod tidy
 
     echo "Building binary..."
-    CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o ${OPERATOR_NAME} main.go
+    CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o ../${OPERATOR_NAME} main.go
+    cd "$ROOT_DIR"
 
     # Build Docker image
     echo "Building Docker image..."
@@ -164,7 +169,7 @@ if [[ "$USE_HELM" == true ]]; then
 
   echo -e "${YELLOW}Installing with Helm...${NC}"
 
-  helm upgrade --install ${OPERATOR_NAME} ./charts/${OPERATOR_NAME} \
+  helm upgrade --install ${OPERATOR_NAME} ./helm \
     --namespace ${NAMESPACE} \
     --set image.repository=${OPERATOR_NAME} \
     --set image.tag=${IMAGE_TAG} \
@@ -175,7 +180,7 @@ if [[ "$USE_HELM" == true ]]; then
 else
   # Deploy using kubectl manifests
   echo -e "${YELLOW}Applying RBAC permissions...${NC}"
-  kubectl apply -f rbac.yaml -n ${NAMESPACE}
+  kubectl apply -f "$ROOT_DIR/deploy/kubernetes/rbac.yaml" -n ${NAMESPACE}
 
   echo -e "${YELLOW}Deploying operator...${NC}"
 
@@ -245,7 +250,7 @@ echo -e "\n${YELLOW}Waiting for operator to be ready...${NC}"
 kubectl rollout status deployment/${OPERATOR_NAME} -n ${NAMESPACE} --timeout=120s
 
 # Get pod status
-POD_NAME=$(kubectl get pods -n ${NAMESPACE} -l app=${OPERATOR_NAME} -o jsonpath='{.items[0].metadata.name}')
+POD_NAME=$(kubectl get pods -n ${NAMESPACE} -l app.kubernetes.io/name=${OPERATOR_NAME} -o jsonpath='{.items[0].metadata.name}')
 if [[ -n "$POD_NAME" ]]; then
   echo -e "${GREEN}✓ Operator pod is running: ${POD_NAME}${NC}"
 
@@ -275,7 +280,7 @@ fi
 
 echo -e "\n${BLUE}Useful Commands:${NC}"
 echo -e "Watch logs: ${YELLOW}kubectl logs -f ${POD_NAME} -n ${NAMESPACE}${NC}"
-echo -e "Check status: ${YELLOW}kubectl get pods -n ${NAMESPACE} -l app=${OPERATOR_NAME}${NC}"
+echo -e "Check status: ${YELLOW}kubectl get pods -n ${NAMESPACE} -l app.kubernetes.io/name=${OPERATOR_NAME}${NC}"
 echo -e "Describe pod: ${YELLOW}kubectl describe pod ${POD_NAME} -n ${NAMESPACE}${NC}"
 echo -e "Test resize: ${YELLOW}./test-inplace-resize.sh${NC}"
 echo -e "View metrics: ${YELLOW}kubectl top pods -n ${NAMESPACE}${NC}"

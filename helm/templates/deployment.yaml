@@ -42,6 +42,10 @@ spec:
               value: "{{ .Values.resizeInterval }}"
             - name: LOG_LEVEL
               value: "{{ .Values.logLevel }}"
+            - name: KUBE_NAMESPACE_INCLUDE
+              value: "{{ .Values.namespaceInclude }}"
+            - name: KUBE_NAMESPACE_EXCLUDE
+              value: "{{ .Values.namespaceExclude }}"
             # Resource sizing configuration
             - name: CPU_REQUEST_MULTIPLIER
               value: "{{ .Values.config.cpuRequestMultiplier }}"

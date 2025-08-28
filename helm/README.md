@@ -43,6 +43,8 @@ helm install right-sizer ./helm \
 | `image.tag`         | Docker image tag                  | `latest`                                 |
 | `image.pullPolicy`  | Image pull policy                 | `Always`                                 |
 | `prometheusUrl`     | Prometheus endpoint for metrics   | `http://prometheus:9090`                 |
+| `namespaceInclude`  | Comma-separated namespaces to include | `default`                           |
+| `namespaceExclude`  | Comma-separated namespaces to exclude | `kube-system`                        |
 | `resources.requests.cpu`    | Pod CPU request            | `100m`                                   |
 | `resources.requests.memory` | Pod memory request         | `128Mi`                                  |
 | `resources.limits.cpu`      | Pod CPU limit              | `500m`                                   |

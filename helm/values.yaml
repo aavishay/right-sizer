@@ -2,7 +2,7 @@
 replicaCount: 1
 
 image:
-  repository: your-dockerhub-username/right-sizer
+  repository: right-sizer
   tag: latest
   pullPolicy: Always
 
@@ -70,6 +70,9 @@ securityContext: {}
 
 # Pod security context
 podSecurityContext: {}
+
+namespaceInclude: "default" # Comma-separated list of namespaces to include (e.g., "default,kube-system")
+namespaceExclude: "kube-system" # Comma-separated list of namespaces to exclude (e.g., "test,dev")
 
 # Service
 service:

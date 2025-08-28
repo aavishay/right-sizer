@@ -17,7 +17,7 @@ CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
 # Configuration
-NAMESPACE="right-sizer-test"
+NAMESPACE="default"
 RELEASE_NAME="right-sizer"
 HELM_CHART="./helm"
 TEST_APP_NAME="test-app"
