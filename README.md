@@ -56,12 +56,20 @@ helm install right-sizer ./helm \
 | `image.tag`         | Docker image tag                  | `latest`                                 |
 | `image.pullPolicy`  | Image pull policy                 | `Always`                                 |
 | `prometheusUrl`     | Prometheus endpoint for metrics   | `http://prometheus:9090`                 |
-| `namespaceInclude`  | Comma-separated list of namespaces to include (e.g., `default,kube-system`) | `default` |
-| `namespaceExclude`  | Comma-separated list of namespaces to exclude (e.g., `test,dev`) | `kube-system` |
+| `namespaceInclude`  | Comma-separated list of namespaces to include (e.g., `"default,kube-system"`) | `default` |
+| `namespaceExclude`  | Comma-separated list of namespaces to exclude (e.g., `"test,dev"`) | `kube-system` |
 | `resources.requests.cpu`    | Pod CPU request            | `100m`                                   |
 | `resources.requests.memory` | Pod memory request         | `128Mi`                                  |
 | `resources.limits.cpu`      | Pod CPU limit              | `500m`                                   |
 | `resources.limits.memory`   | Pod memory limit           | `512Mi`                                  |
+
+---
+
+#### Namespace Filtering
+
+- `namespaceInclude`: Only pods in these namespaces will be monitored. Example: `"default,kube-system"`
+- `namespaceExclude`: Pods in these namespaces will be excluded from monitoring. Example: `"test,dev"`
+- If both are set, only namespaces in the include list are monitored, except those in the exclude list.
 
 ---
 
@@ -123,8 +131,6 @@ The right-sizer operator can be configured using environment variables to custom
 | `MEMORY_REQUEST_MULTIPLIER` | `1.2` | Multiplier applied to memory usage to calculate memory requests |
 | `CPU_LIMIT_MULTIPLIER` | `2.0` | Multiplier applied to CPU requests to calculate CPU limits |
 | `MEMORY_LIMIT_MULTIPLIER` | `2.0` | Multiplier applied to memory requests to calculate memory limits |
-| `KUBE_NAMESPACE_INCLUDE` | (empty) | Comma-separated list of namespaces to monitor. Default: monitors all namespaces |
-| `KUBE_NAMESPACE_EXCLUDE` | (empty) | Comma-separated list of namespaces to exclude. Default: excludes none |
 ### Namespace Filtering
 
 You can restrict monitoring to specific namespaces using:
