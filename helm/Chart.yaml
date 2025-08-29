@@ -4,7 +4,6 @@ description: A Kubernetes operator for automatic pod resource right-sizing
 type: application
 version: 0.1.0
 appVersion: "latest"
-license: AGPL-3.0
 home: https://github.com/yourusername/right-sizer
 sources:
   - https://github.com/yourusername/right-sizer

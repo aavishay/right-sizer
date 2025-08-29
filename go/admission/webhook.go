@@ -1,0 +1,539 @@
+// Copyright (C) 2024 right-sizer contributors
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+package admission
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"strings"
+
+	"right-sizer/config"
+	"right-sizer/logger"
+	"right-sizer/metrics"
+	"right-sizer/validation"
+
+	admissionv1 "k8s.io/api/admission/v1"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/serializer"
+	"k8s.io/client-go/kubernetes"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+)
+
+// WebhookServer represents the admission webhook server
+type WebhookServer struct {
+	server       *http.Server
+	client       client.Client
+	clientset    *kubernetes.Clientset
+	validator    *validation.ResourceValidator
+	config       *config.Config
+	metrics      *metrics.OperatorMetrics
+	codecs       serializer.CodecFactory
+	deserializer runtime.Decoder
+}
+
+// WebhookConfig holds webhook configuration
+type WebhookConfig struct {
+	CertPath          string
+	KeyPath           string
+	Port              int
+	EnableValidation  bool
+	EnableMutation    bool
+	DryRun            bool
+	RequireAnnotation bool
+}
+
+// NewWebhookServer creates a new admission webhook server
+func NewWebhookServer(
+	client client.Client,
+	clientset *kubernetes.Clientset,
+	validator *validation.ResourceValidator,
+	cfg *config.Config,
+	metrics *metrics.OperatorMetrics,
+	webhookConfig WebhookConfig,
+) *WebhookServer {
+	scheme := runtime.NewScheme()
+	corev1.AddToScheme(scheme)
+	codecs := serializer.NewCodecFactory(scheme)
+
+	mux := http.NewServeMux()
+	server := &http.Server{
+		Addr:    fmt.Sprintf(":%d", webhookConfig.Port),
+		Handler: mux,
+	}
+
+	ws := &WebhookServer{
+		server:       server,
+		client:       client,
+		clientset:    clientset,
+		validator:    validator,
+		config:       cfg,
+		metrics:      metrics,
+		codecs:       codecs,
+		deserializer: codecs.UniversalDeserializer(),
+	}
+
+	// Register webhook endpoints
+	if webhookConfig.EnableValidation {
+		mux.HandleFunc("/validate", ws.handleValidate)
+		logger.Info("Registered validation webhook at /validate")
+	}
+
+	if webhookConfig.EnableMutation {
+		mux.HandleFunc("/mutate", ws.handleMutate)
+		logger.Info("Registered mutation webhook at /mutate")
+	}
+
+	// Health check endpoint
+	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("healthy"))
+	})
+
+	return ws
+}
+
+// Start starts the webhook server
+func (ws *WebhookServer) Start(certPath, keyPath string) error {
+	logger.Info("Starting admission webhook server on %s", ws.server.Addr)
+
+	if certPath != "" && keyPath != "" {
+		return ws.server.ListenAndServeTLS(certPath, keyPath)
+	}
+
+	logger.Warn("Running webhook server without TLS (not recommended for production)")
+	return ws.server.ListenAndServe()
+}
+
+// Stop stops the webhook server
+func (ws *WebhookServer) Stop(ctx context.Context) error {
+	logger.Info("Stopping admission webhook server")
+	return ws.server.Shutdown(ctx)
+}
+
+// handleValidate handles validation admission requests
+func (ws *WebhookServer) handleValidate(w http.ResponseWriter, r *http.Request) {
+	timer := metrics.NewTimer()
+	defer func() {
+		if ws.metrics != nil {
+			ws.metrics.RecordProcessingDuration("validation_webhook", timer.Duration())
+		}
+	}()
+
+	body, err := ws.readRequestBody(r)
+	if err != nil {
+		ws.sendError(w, fmt.Errorf("failed to read request body: %v", err))
+		return
+	}
+
+	var review admissionv1.AdmissionReview
+	if err := json.Unmarshal(body, &review); err != nil {
+		ws.sendError(w, fmt.Errorf("failed to decode admission review: %v", err))
+		return
+	}
+
+	response := ws.validatePodResourceChange(&review)
+	ws.sendResponse(w, response.Response)
+}
+
+// handleMutate handles mutation admission requests
+func (ws *WebhookServer) handleMutate(w http.ResponseWriter, r *http.Request) {
+	timer := metrics.NewTimer()
+	defer func() {
+		if ws.metrics != nil {
+			ws.metrics.RecordProcessingDuration("mutation_webhook", timer.Duration())
+		}
+	}()
+
+	body, err := ws.readRequestBody(r)
+	if err != nil {
+		ws.sendError(w, fmt.Errorf("failed to read request body: %v", err))
+		return
+	}
+
+	var review admissionv1.AdmissionReview
+	if err := json.Unmarshal(body, &review); err != nil {
+		ws.sendError(w, fmt.Errorf("failed to decode admission review: %v", err))
+		return
+	}
+
+	response := ws.mutatePodResources(&review)
+	ws.sendResponse(w, response.Response)
+}
+
+// validatePodResourceChange validates pod resource changes
+func (ws *WebhookServer) validatePodResourceChange(review *admissionv1.AdmissionReview) admissionv1.AdmissionReview {
+	req := review.Request
+	response := &admissionv1.AdmissionResponse{
+		UID:     req.UID,
+		Allowed: true,
+	}
+
+	// Only validate pods
+	if req.Kind.Kind != "Pod" {
+		return admissionv1.AdmissionReview{Response: response}
+	}
+
+	// Skip if not enabled for this namespace
+	if !ws.config.IsNamespaceIncluded(req.Namespace) {
+		logger.Debug("Skipping validation for namespace %s (not included)", req.Namespace)
+		return admissionv1.AdmissionReview{Response: response}
+	}
+
+	// Parse old and new pod objects
+	var oldPod, newPod corev1.Pod
+	if req.OldObject.Raw != nil {
+		if err := json.Unmarshal(req.OldObject.Raw, &oldPod); err != nil {
+			response.Allowed = false
+			response.Result = &metav1.Status{
+				Message: fmt.Sprintf("Failed to parse old pod: %v", err),
+			}
+			return admissionv1.AdmissionReview{Response: response}
+		}
+	}
+
+	if err := json.Unmarshal(req.Object.Raw, &newPod); err != nil {
+		response.Allowed = false
+		response.Result = &metav1.Status{
+			Message: fmt.Sprintf("Failed to parse new pod: %v", err),
+		}
+		return admissionv1.AdmissionReview{Response: response}
+	}
+
+	// Skip if pod has opt-out annotation
+	if ws.shouldSkipValidation(&newPod) {
+		logger.Debug("Skipping validation for pod %s/%s (opt-out annotation)", newPod.Namespace, newPod.Name)
+		return admissionv1.AdmissionReview{Response: response}
+	}
+
+	// Validate resource changes for each container
+	var validationErrors []string
+	var validationWarnings []string
+
+	for i, container := range newPod.Spec.Containers {
+		// Compare with old container resources if available
+		var oldResources corev1.ResourceRequirements
+		if req.Operation == admissionv1.Update && len(oldPod.Spec.Containers) > i {
+			oldResources = oldPod.Spec.Containers[i].Resources
+		}
+
+		// Skip if no resource change
+		if ws.areResourcesEqual(oldResources, container.Resources) {
+			continue
+		}
+
+		// Validate the resource change
+		validationResult := ws.validator.ValidateResourceChange(
+			context.Background(),
+			&newPod,
+			container.Resources,
+			container.Name,
+		)
+
+		if !validationResult.IsValid() {
+			validationErrors = append(validationErrors, validationResult.Errors...)
+		}
+
+		if validationResult.HasWarnings() {
+			validationWarnings = append(validationWarnings, validationResult.Warnings...)
+		}
+
+		// Record metrics
+		if ws.metrics != nil && !validationResult.IsValid() {
+			ws.metrics.RecordResourceValidationError("admission_webhook", strings.Join(validationResult.Errors, "; "))
+		}
+	}
+
+	// Set response based on validation results
+	if len(validationErrors) > 0 {
+		response.Allowed = false
+		response.Result = &metav1.Status{
+			Code:    http.StatusForbidden,
+			Message: fmt.Sprintf("Resource validation failed: %s", strings.Join(validationErrors, "; ")),
+		}
+	} else if len(validationWarnings) > 0 {
+		// Allow but include warnings
+		response.Warnings = validationWarnings
+		logger.Warn("Pod %s/%s has resource validation warnings: %s",
+			newPod.Namespace, newPod.Name, strings.Join(validationWarnings, "; "))
+	}
+
+	return admissionv1.AdmissionReview{Response: response}
+}
+
+// mutatePodResources applies automatic resource adjustments
+func (ws *WebhookServer) mutatePodResources(review *admissionv1.AdmissionReview) admissionv1.AdmissionReview {
+	req := review.Request
+	response := &admissionv1.AdmissionResponse{
+		UID:     req.UID,
+		Allowed: true,
+	}
+
+	// Only mutate pods
+	if req.Kind.Kind != "Pod" {
+		return admissionv1.AdmissionReview{Response: response}
+	}
+
+	// Skip if not enabled for this namespace
+	if !ws.config.IsNamespaceIncluded(req.Namespace) {
+		return admissionv1.AdmissionReview{Response: response}
+	}
+
+	var pod corev1.Pod
+	if err := json.Unmarshal(req.Object.Raw, &pod); err != nil {
+		response.Allowed = false
+		response.Result = &metav1.Status{
+			Message: fmt.Sprintf("Failed to parse pod: %v", err),
+		}
+		return admissionv1.AdmissionReview{Response: response}
+	}
+
+	// Skip if pod has opt-out annotation
+	if ws.shouldSkipMutation(&pod) {
+		return admissionv1.AdmissionReview{Response: response}
+	}
+
+	// Apply mutations
+	patches := ws.generateResourcePatches(&pod)
+	if len(patches) > 0 {
+		patchBytes, err := json.Marshal(patches)
+		if err != nil {
+			logger.Error("Failed to marshal patches: %v", err)
+			return admissionv1.AdmissionReview{Response: response}
+		}
+
+		patchType := admissionv1.PatchTypeJSONPatch
+		response.Patch = patchBytes
+		response.PatchType = &patchType
+
+		logger.Info("Applied resource patches to pod %s/%s", pod.Namespace, pod.Name)
+	}
+
+	return admissionv1.AdmissionReview{Response: response}
+}
+
+// shouldSkipValidation checks if validation should be skipped for this pod
+func (ws *WebhookServer) shouldSkipValidation(pod *corev1.Pod) bool {
+	// Check for opt-out annotation
+	if pod.Annotations != nil {
+		if skip, exists := pod.Annotations["rightsizer.io/skip-validation"]; exists && skip == "true" {
+			return true
+		}
+		if disable, exists := pod.Annotations["rightsizer.io/disable"]; exists && disable == "true" {
+			return true
+		}
+	}
+
+	// Check for opt-out label
+	if pod.Labels != nil {
+		if skip, exists := pod.Labels["rightsizer.skip-validation"]; exists && skip == "true" {
+			return true
+		}
+	}
+
+	return false
+}
+
+// shouldSkipMutation checks if mutation should be skipped for this pod
+func (ws *WebhookServer) shouldSkipMutation(pod *corev1.Pod) bool {
+	// Check for opt-out annotation
+	if pod.Annotations != nil {
+		if skip, exists := pod.Annotations["rightsizer.io/skip-mutation"]; exists && skip == "true" {
+			return true
+		}
+		if disable, exists := pod.Annotations["rightsizer.io/disable"]; exists && disable == "true" {
+			return true
+		}
+	}
+
+	// Check for opt-out label
+	if pod.Labels != nil {
+		if skip, exists := pod.Labels["rightsizer.skip-mutation"]; exists && skip == "true" {
+			return true
+		}
+	}
+
+	return false
+}
+
+// areResourcesEqual compares two resource requirements
+func (ws *WebhookServer) areResourcesEqual(old, new corev1.ResourceRequirements) bool {
+	// Compare requests
+	if !ws.areResourceListsEqual(old.Requests, new.Requests) {
+		return false
+	}
+
+	// Compare limits
+	if !ws.areResourceListsEqual(old.Limits, new.Limits) {
+		return false
+	}
+
+	return true
+}
+
+// areResourceListsEqual compares two resource lists
+func (ws *WebhookServer) areResourceListsEqual(old, new corev1.ResourceList) bool {
+	if len(old) != len(new) {
+		return false
+	}
+
+	for k, v := range old {
+		if newV, exists := new[k]; !exists || !v.Equal(newV) {
+			return false
+		}
+	}
+
+	return true
+}
+
+// generateResourcePatches generates JSON patches for resource optimization
+func (ws *WebhookServer) generateResourcePatches(pod *corev1.Pod) []JSONPatch {
+	var patches []JSONPatch
+
+	// Add default resource requests if missing
+	for i, container := range pod.Spec.Containers {
+		if container.Resources.Requests == nil {
+			patches = append(patches, JSONPatch{
+				Op:   "add",
+				Path: fmt.Sprintf("/spec/containers/%d/resources/requests", i),
+				Value: map[string]string{
+					"cpu":    fmt.Sprintf("%dm", ws.config.MinCPURequest),
+					"memory": fmt.Sprintf("%dMi", ws.config.MinMemoryRequest),
+				},
+			})
+		}
+
+		// Add labels for tracking
+		if pod.Labels == nil {
+			patches = append(patches, JSONPatch{
+				Op:    "add",
+				Path:  "/metadata/labels",
+				Value: map[string]string{},
+			})
+		}
+
+		patches = append(patches, JSONPatch{
+			Op:    "add",
+			Path:  "/metadata/labels/rightsizer.io~1managed",
+			Value: "true",
+		})
+	}
+
+	return patches
+}
+
+// JSONPatch represents a JSON patch operation
+type JSONPatch struct {
+	Op    string      `json:"op"`
+	Path  string      `json:"path"`
+	Value interface{} `json:"value,omitempty"`
+}
+
+// readRequestBody reads and validates the request body
+func (ws *WebhookServer) readRequestBody(r *http.Request) ([]byte, error) {
+	if r.Body == nil {
+		return nil, fmt.Errorf("request body is empty")
+	}
+	defer r.Body.Close()
+
+	if r.Header.Get("Content-Type") != "application/json" {
+		return nil, fmt.Errorf("expected Content-Type application/json")
+	}
+
+	body := make([]byte, r.ContentLength)
+	if _, err := r.Body.Read(body); err != nil {
+		return nil, err
+	}
+
+	return body, nil
+}
+
+// sendResponse sends an admission review response
+func (ws *WebhookServer) sendResponse(w http.ResponseWriter, response *admissionv1.AdmissionResponse) {
+	review := admissionv1.AdmissionReview{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "admission.k8s.io/v1",
+			Kind:       "AdmissionReview",
+		},
+		Response: response,
+	}
+
+	respBytes, err := json.Marshal(review)
+	if err != nil {
+		logger.Error("Failed to marshal admission response: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write(respBytes)
+}
+
+// sendError sends an error response
+func (ws *WebhookServer) sendError(w http.ResponseWriter, err error) {
+	logger.Error("Admission webhook error: %v", err)
+	http.Error(w, err.Error(), http.StatusInternalServerError)
+
+	if ws.metrics != nil {
+		ws.metrics.RecordProcessingError("", "", "admission_webhook")
+	}
+}
+
+// WebhookManager manages the lifecycle of admission webhooks
+type WebhookManager struct {
+	server *WebhookServer
+	config WebhookConfig
+}
+
+// NewWebhookManager creates a new webhook manager
+func NewWebhookManager(
+	client client.Client,
+	clientset *kubernetes.Clientset,
+	validator *validation.ResourceValidator,
+	cfg *config.Config,
+	metrics *metrics.OperatorMetrics,
+	webhookConfig WebhookConfig,
+) *WebhookManager {
+	return &WebhookManager{
+		server: NewWebhookServer(client, clientset, validator, cfg, metrics, webhookConfig),
+		config: webhookConfig,
+	}
+}
+
+// Start starts the webhook manager
+func (wm *WebhookManager) Start(ctx context.Context) error {
+	errChan := make(chan error, 1)
+
+	go func() {
+		errChan <- wm.server.Start(wm.config.CertPath, wm.config.KeyPath)
+	}()
+
+	select {
+	case err := <-errChan:
+		return err
+	case <-ctx.Done():
+		return wm.server.Stop(context.Background())
+	}
+}
+
+// Stop stops the webhook manager
+func (wm *WebhookManager) Stop(ctx context.Context) error {
+	return wm.server.Stop(ctx)
+}

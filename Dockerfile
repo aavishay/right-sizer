@@ -37,7 +37,7 @@ RUN adduser -D -s /bin/sh appuser
 USER appuser
 
 # Expose health check port
-EXPOSE 8080
+EXPOSE 8081
 
 # Run the binary
 ENTRYPOINT ["./right-sizer"]

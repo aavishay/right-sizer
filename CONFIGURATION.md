@@ -2,33 +2,48 @@
 
 ## Overview
 
-The right-sizer operator now supports comprehensive configuration through environment variables, allowing you to customize resource sizing behavior and operational settings without rebuilding the application. This guide documents all available configuration options and provides examples for different use cases.
+The right-sizer operator supports comprehensive configuration through environment variables, allowing you to customize resource sizing behavior, operational settings, security features, policy-based rules, and observability options without rebuilding the application. This guide documents all available configuration options and provides examples for different use cases and deployment scenarios.
 
 ## Configuration Changes Summary
 
-### New Features Added
+### Enhanced Features Added
 
-1. **Config Package** (`config/config.go`)
-   - Centralized configuration management
-   - Environment variable parsing with validation
-   - Default values with override capability
-   - Global configuration singleton
+1. **Enhanced Configuration Management**
+   - Centralized configuration with comprehensive validation
+   - Environment variable parsing with type safety and bounds checking
+   - Default values with intelligent override capability
+   - Global configuration singleton with hot-reload support
 
-2. **Environment Variables Support**
-   - All multipliers are now configurable
-   - Resource limits and minimums are configurable
-   - Resize interval is configurable (default 30s)
-   - Log levels for controlling verbosity
-   - Configuration is loaded at startup and logged
+2. **Advanced Resource Management**
+   - Policy-based sizing with complex rule evaluation
+   - Safety thresholds to prevent excessive changes
+   - Custom metrics integration beyond CPU/memory
+   - Historical trend analysis and prediction
+   - Multiple sizing strategies with fallback mechanisms
 
-3. **Updated Controllers**
-   - All controllers now use the centralized configuration
-   - Removed hardcoded values for multipliers and limits
-   - Consistent configuration across all sizing strategies
+3. **Enterprise Security & Compliance**
+   - Admission controller for resource validation and mutation
+   - Comprehensive audit logging with configurable retention
+   - RBAC integration with minimal privilege principles
+   - Security event tracking and alerting
+
+4. **Enhanced Observability**
+   - Prometheus metrics with detailed operator insights
+   - Circuit breaker patterns for reliability
+   - Health check endpoints with detailed status
+   - Distributed tracing support
+   - Performance monitoring and alerting
+
+5. **Reliability & Operations**
+   - Exponential backoff retry mechanisms
+   - Circuit breakers for failure handling
+   - High availability with leader election
+   - Graceful shutdown and resource cleanup
+   - Configuration validation and error recovery
 
 ## Environment Variables
 
-### Resource Calculation Multipliers
+### Core Resource Calculation
 
 | Variable | Default | Description | Example |
 |----------|---------|-------------|---------|
@@ -36,6 +51,11 @@ The right-sizer operator now supports comprehensive configuration through enviro
 | `MEMORY_REQUEST_MULTIPLIER` | `1.2` | Multiplier applied to actual memory usage to calculate memory requests | `1.3` = 30% buffer |
 | `CPU_LIMIT_MULTIPLIER` | `2.0` | Multiplier applied to CPU requests to calculate CPU limits | `3.0` = 3x burst capacity |
 | `MEMORY_LIMIT_MULTIPLIER` | `2.0` | Multiplier applied to memory requests to calculate memory limits | `2.5` = 2.5x burst capacity |
+
+### Namespace Filtering
+
+| Variable | Default | Description | Example |
+|----------|---------|-------------|---------|
 | `KUBE_NAMESPACE_INCLUDE` | (empty) | Comma-separated list of namespaces to monitor (only these) | `default,prod,staging` |
 | `KUBE_NAMESPACE_EXCLUDE` | (empty) | Comma-separated list of namespaces to exclude from monitoring | `kube-system,dev` |
 
@@ -54,6 +74,43 @@ The right-sizer operator now supports comprehensive configuration through enviro
 |----------|---------|-------------|---------|
 | `RESIZE_INTERVAL` | `30s` | How often to check and resize resources | `10s`, `1m`, `5m`, `1h` |
 | `LOG_LEVEL` | `info` | Logging verbosity level | `debug`, `info`, `warn`, `error` |
+| `METRICS_PROVIDER` | `kubernetes` | Source for metrics collection | `kubernetes`, `prometheus` |
+| `PROMETHEUS_URL` | `http://prometheus:9090` | Prometheus endpoint URL | `http://prometheus.monitoring:9090` |
+| `ENABLE_INPLACE_RESIZE` | `true` | Enable Kubernetes 1.33+ in-place pod resizing | `true`, `false` |
+| `DRY_RUN` | `false` | Only log recommendations without applying changes | `true`, `false` |
+
+### Enhanced Reliability Settings
+
+| Variable | Default | Description | Example |
+|----------|---------|-------------|---------|
+| `MAX_RETRIES` | `3` | Maximum retry attempts for failed operations | `5`, `10` |
+| `RETRY_INTERVAL` | `5s` | Base interval between retry attempts | `3s`, `10s` |
+| `SAFETY_THRESHOLD` | `0.5` | Maximum allowed resource change percentage (0-1) | `0.3` = 30% max change |
+
+### Advanced Features
+
+| Variable | Default | Description | Example |
+|----------|---------|-------------|---------|
+| `POLICY_BASED_SIZING` | `false` | Enable policy-based resource sizing rules | `true`, `false` |
+| `HISTORY_DAYS` | `7` | Number of days to retain historical data | `14`, `30` |
+| `CUSTOM_METRICS` | `""` | Comma-separated list of custom metrics to consider | `network_rx,disk_io` |
+| `ADMISSION_CONTROLLER` | `false` | Enable admission controller for validation | `true`, `false` |
+
+### Observability Configuration
+
+| Variable | Default | Description | Example |
+|----------|---------|-------------|---------|
+| `METRICS_ENABLED` | `true` | Enable Prometheus metrics export | `true`, `false` |
+| `METRICS_PORT` | `9090` | Port for Prometheus metrics endpoint | `8080`, `9090` |
+| `AUDIT_ENABLED` | `true` | Enable comprehensive audit logging | `true`, `false` |
+
+### Security Settings
+
+| Variable | Default | Description | Example |
+|----------|---------|-------------|---------|
+| `ADMISSION_WEBHOOK_PORT` | `8443` | Port for admission webhook server | `8443`, `9443` |
+| `ADMISSION_CERT_PATH` | `/etc/certs/tls.crt` | Path to TLS certificate | `/etc/ssl/certs/webhook.crt` |
+| `ADMISSION_KEY_PATH` | `/etc/certs/tls.key` | Path to TLS private key | `/etc/ssl/certs/webhook.key` |
 
 ## How Resource Calculation Works
 ## Namespace Filtering
@@ -172,48 +229,128 @@ helm install right-sizer ./helm -f values-custom.yaml
 
 ## Configuration Scenarios
 
-### Conservative (Production)
-- Higher multipliers for stability
-- More headroom for unexpected spikes
-- Higher minimum values
+### Conservative Production Configuration
+High stability with generous resource allocation and comprehensive monitoring:
 
 ```yaml
+# Resource multipliers - generous for stability
 CPU_REQUEST_MULTIPLIER: "1.5"
 MEMORY_REQUEST_MULTIPLIER: "1.4"
 CPU_LIMIT_MULTIPLIER: "2.5"
 MEMORY_LIMIT_MULTIPLIER: "2.0"
+
+# Boundaries - higher minimums, reasonable maximums
 MIN_CPU_REQUEST: "50"
 MIN_MEMORY_REQUEST: "256"
+MAX_CPU_LIMIT: "8000"
+MAX_MEMORY_LIMIT: "16384"
+
+# Safety and reliability
+SAFETY_THRESHOLD: "0.3"  # Only 30% change allowed
+MAX_RETRIES: "5"
+RETRY_INTERVAL: "5s"
+RESIZE_INTERVAL: "5m"    # Conservative interval
+
+# Enhanced features
+POLICY_BASED_SIZING: "true"
+AUDIT_ENABLED: "true"
+METRICS_ENABLED: "true"
+
+# Security
+ADMISSION_CONTROLLER: "true"
+LOG_LEVEL: "info"
 ```
 
-### Aggressive (Cost Optimization)
-- Lower multipliers to reduce resource allocation
-- Suitable for development/staging
-- Lower maximum caps
+### Aggressive Cost Optimization
+Minimal resource allocation for development/testing environments:
 
 ```yaml
+# Resource multipliers - minimal overhead
 CPU_REQUEST_MULTIPLIER: "1.1"
 MEMORY_REQUEST_MULTIPLIER: "1.1"
 CPU_LIMIT_MULTIPLIER: "1.5"
 MEMORY_LIMIT_MULTIPLIER: "1.5"
-MAX_CPU_LIMIT: "2000"
-MAX_MEMORY_LIMIT: "4096"
+
+# Boundaries - lower caps for cost control
+MAX_CPU_LIMIT: "2000"    # 2 cores max
+MAX_MEMORY_LIMIT: "4096" # 4GB max
+MIN_CPU_REQUEST: "10"
+MIN_MEMORY_REQUEST: "32"
+
+# Faster iteration for development
+RESIZE_INTERVAL: "30s"
+SAFETY_THRESHOLD: "0.6"  # Allow larger changes
+
+# Minimal monitoring overhead
+METRICS_ENABLED: "false"
+AUDIT_ENABLED: "false"
+LOG_LEVEL: "warn"
+DRY_RUN: "true"  # Safe for experimentation
 ```
 
-### High Performance
-- Higher multipliers for consistent performance
-- Large burst capacity
-- Higher resource caps
+### High Performance Enterprise
+Maximum performance with comprehensive observability:
 
 ```yaml
+# Resource multipliers - performance focused
 CPU_REQUEST_MULTIPLIER: "1.8"
 MEMORY_REQUEST_MULTIPLIER: "1.5"
 CPU_LIMIT_MULTIPLIER: "3.0"
 MEMORY_LIMIT_MULTIPLIER: "2.5"
-MAX_CPU_LIMIT: "16000"
-MAX_MEMORY_LIMIT: "32768"
+
+# Boundaries - high capacity for performance
+MIN_CPU_REQUEST: "100"
+MIN_MEMORY_REQUEST: "512"
+MAX_CPU_LIMIT: "32000"   # 32 cores max
+MAX_MEMORY_LIMIT: "65536" # 64GB max
+
+# Fast response with safety
 RESIZE_INTERVAL: "30s"
+SAFETY_THRESHOLD: "0.4"
+MAX_RETRIES: "3"
+RETRY_INTERVAL: "3s"
+
+# Full enterprise features
+POLICY_BASED_SIZING: "true"
+ADMISSION_CONTROLLER: "true"
+AUDIT_ENABLED: "true"
+METRICS_ENABLED: "true"
+CUSTOM_METRICS: "network_rx_bytes,network_tx_bytes,disk_io"
+HISTORY_DAYS: "30"
+
+# Comprehensive monitoring
 LOG_LEVEL: "info"
+METRICS_PROVIDER: "prometheus"
+PROMETHEUS_URL: "http://prometheus.monitoring:9090"
+```
+
+### Policy-Based Configuration Example
+Advanced configuration with sophisticated policy rules:
+
+```yaml
+# Enable policy engine
+POLICY_BASED_SIZING: "true"
+HISTORY_DAYS: "14"
+
+# Base multipliers - policies will override these
+CPU_REQUEST_MULTIPLIER: "1.2"
+MEMORY_REQUEST_MULTIPLIER: "1.2"
+
+# Safety settings
+SAFETY_THRESHOLD: "0.35"
+MAX_RETRIES: "5"
+
+# Full observability
+AUDIT_ENABLED: "true"
+METRICS_ENABLED: "true"
+ADMISSION_CONTROLLER: "true"
+
+# Custom metrics for advanced decisions
+CUSTOM_METRICS: "jvm_memory_used,redis_memory_usage,db_connections"
+
+# Namespace filtering for policy application
+KUBE_NAMESPACE_INCLUDE: "production,staging,critical"
+KUBE_NAMESPACE_EXCLUDE: "kube-system,monitoring,logging"
 ```
 
 ## Log Levels
@@ -303,42 +440,238 @@ RESIZE_INTERVAL: "1h"    # Every hour (slow - for stable workloads)
       Log Level: info
    ```
 
+## Policy-Based Resource Sizing
+
+The operator supports sophisticated policy-based resource allocation with configurable rules that can be applied based on various pod characteristics.
+
+### Policy Configuration
+
+Policies are defined in ConfigMaps and loaded by the operator. Each policy rule includes:
+
+- **Selectors**: Criteria for matching pods (namespace, labels, annotations, regex patterns)
+- **Actions**: Resource modifications to apply (multipliers, fixed values, constraints)
+- **Priority**: Evaluation order (higher priority rules override lower ones)
+- **Schedule**: Time-based activation (business hours, weekends, etc.)
+
+### Example Policy ConfigMap
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: right-sizer-policies
+  namespace: right-sizer-system
+data:
+  rules.yaml: |
+    - name: high-priority-production
+      priority: 150
+      enabled: true
+      selectors:
+        namespaces: ["production"]
+        labels:
+          priority: high
+      actions:
+        cpuMultiplier: 1.8
+        memoryMultiplier: 1.6
+        minMemory: "1Gi"
+```
+
+See [examples/policy-rules-example.yaml](examples/policy-rules-example.yaml) for comprehensive examples.
+
+## Security & Compliance Configuration
+
+### Admission Controller Setup
+
+```yaml
+# Enable admission webhook
+ADMISSION_CONTROLLER: "true"
+ADMISSION_WEBHOOK_PORT: "8443"
+ADMISSION_CERT_PATH: "/etc/certs/tls.crt"
+ADMISSION_KEY_PATH: "/etc/certs/tls.key"
+
+# Validation settings
+SAFETY_THRESHOLD: "0.3"  # Strict change limits
+AUDIT_ENABLED: "true"    # Track all decisions
+```
+
+### Audit Logging Configuration
+
+```yaml
+# Enable comprehensive audit logging
+AUDIT_ENABLED: "true"
+
+# Audit log retention (via Helm values)
+observability:
+  auditConfig:
+    retentionDays: 90
+    maxFileSize: 104857600  # 100MB
+    enableFileLog: true
+    enableEventLog: true
+```
+
+## Observability Configuration
+
+### Metrics and Monitoring
+
+```yaml
+# Enable Prometheus metrics
+METRICS_ENABLED: "true"
+METRICS_PORT: "9090"
+
+# Comprehensive monitoring
+HISTORY_DAYS: "30"
+CUSTOM_METRICS: "network_utilization,disk_io,jvm_memory"
+```
+
+### Health Checks and Circuit Breakers
+
+```yaml
+# Retry and circuit breaker settings
+MAX_RETRIES: "5"
+RETRY_INTERVAL: "3s"
+SAFETY_THRESHOLD: "0.3"
+
+# Health check endpoints are enabled by default
+# Available at :8081/healthz and :8081/readyz
+```
+
 ## Best Practices
 
-1. **Start Conservative**: Begin with higher multipliers and gradually reduce based on observed behavior
-2. **Monitor Metrics**: Watch actual usage vs. allocated resources to fine-tune multipliers
-3. **Environment-Specific**: Use different configurations for dev/staging/production
-4. **Document Changes**: Keep track of configuration changes and their impact
-5. **Test Thoroughly**: Test configuration changes in non-production environments first
-6. **Tune Resize Interval**: Use shorter intervals (30s-1m) for dynamic workloads, longer (5m-1h) for stable ones
-7. **Adjust Log Level**: Use `debug` for troubleshooting, `info` for normal operation, `error` for production
+### Configuration Management
+1. **Start Conservative**: Begin with higher multipliers and safety thresholds
+2. **Environment-Specific**: Use different configurations for dev/staging/production
+3. **Policy-Driven**: Leverage policy engine for complex scenarios
+4. **Version Control**: Store configurations in Git with proper versioning
+5. **Validate Changes**: Use dry-run mode to test configuration changes
+
+### Security & Compliance
+6. **Enable Audit Logging**: Track all resource changes for compliance
+7. **Use Admission Controllers**: Validate changes before they're applied
+8. **Implement RBAC**: Follow least-privilege principles
+9. **Monitor Security Events**: Set up alerting for security-related events
+10. **Certificate Management**: Use cert-manager for webhook certificates
+
+### Observability & Monitoring
+11. **Monitor Metrics**: Set up Prometheus scraping and Grafana dashboards
+12. **Configure Alerts**: Alert on safety threshold violations and failures
+13. **Log Analysis**: Use structured logging for better troubleshooting
+14. **Performance Tracking**: Monitor processing duration and circuit breaker state
+15. **Historical Analysis**: Retain enough historical data for trend analysis
+
+### Operational Excellence
+16. **Graceful Degradation**: Configure circuit breakers for reliability
+17. **Resource Boundaries**: Set appropriate min/max limits for your cluster
+18. **Namespace Filtering**: Be explicit about which namespaces to monitor
+19. **Safety Thresholds**: Prevent excessive resource changes
+20. **Documentation**: Maintain runbooks and troubleshooting guides
 
 ## Troubleshooting
 
-### Configuration Not Applied
-- Check operator logs for configuration loading messages
-- Verify environment variables are set correctly
-- Ensure operator pod has been restarted after configuration changes
+### Configuration Issues
 
-### Invalid Values
+**Configuration Not Applied**
+- Check operator logs for configuration loading messages
+- Verify environment variables are set correctly in deployment
+- Ensure operator pod has been restarted after configuration changes
+- Validate ConfigMap changes are properly mounted
+
+**Invalid Values**
 - The operator logs warnings for invalid configuration values
 - Falls back to defaults if parsing fails
-- Check logs for lines like: `Warning: Invalid CPU_REQUEST_MULTIPLIER value`
+- Check logs for validation errors: `Configuration validation failed`
+- Use `kubectl logs` to see detailed error messages
 
-### Resize Interval Too Short
-- Very short intervals (< 10s) may cause excessive API calls
-- Recommended minimum: 30s for production
-- For testing: 10s is acceptable
+**Policy Rules Not Working**
+- Verify policy ConfigMap is in the correct namespace
+- Check policy rule syntax and selectors
+- Review policy evaluation logs with `LOG_LEVEL=debug`
+- Ensure `POLICY_BASED_SIZING=true` is set
 
-### Log Level Not Working
-- Ensure LOG_LEVEL is set to valid values: `debug`, `info`, `warn`, `error`
-- Check that the logger is initialized before use
-- Debug logs will only appear when LOG_LEVEL=debug
+### Performance Issues
 
-### Unexpected Resource Allocations
-- Verify actual usage metrics are being collected correctly
-- Check that multipliers are appropriate for your workload patterns
-- Review minimum and maximum boundaries
+**High Resource Usage**
+- Check metrics collection frequency and retention
+- Verify circuit breaker status and retry patterns
+- Monitor admission webhook response times
+- Review audit log volume and rotation
+
+**Slow Pod Processing**
+- Increase `RESIZE_INTERVAL` for less frequent checks
+- Optimize policy rules to reduce evaluation overhead
+- Check metrics provider response times
+- Monitor Kubernetes API rate limiting
+
+### Security and Admission Controller
+
+**Admission Webhook Failures**
+- Verify TLS certificates are valid and not expired
+- Check webhook service is accessible from API server
+- Review admission webhook logs: `kubectl logs -l app=right-sizer`
+- Validate webhook configuration and selectors
+
+**Certificate Issues**
+- Ensure cert-manager is properly configured
+- Check certificate expiration dates
+- Verify CA bundle is correctly configured in webhook
+- Test certificate chain validation
+
+**RBAC Permissions**
+- Verify service account has required permissions
+- Check for missing RBAC rules in cluster roles
+- Review admission controller permissions
+- Validate metrics collection permissions
+
+### Operational Issues
+
+**Circuit Breaker Triggered**
+- Check circuit breaker state in metrics
+- Review error patterns that triggered the breaker
+- Adjust failure threshold or recovery timeout
+- Monitor retry attempt metrics
+
+**Audit Log Problems**
+- Check audit log file permissions and disk space
+- Verify log rotation is working properly
+- Review audit event volume and retention policy
+- Check Kubernetes event creation permissions
+
+**Metrics Collection Failures**
+- Verify metrics-server or Prometheus accessibility
+- Check custom metrics endpoint availability
+- Review metrics provider configuration
+- Monitor metrics collection duration
+
+### Diagnostic Commands
+
+```bash
+# Check operator status and configuration
+kubectl get pods -l app=right-sizer -o wide
+kubectl logs -l app=right-sizer --tail=100 -f
+
+# Review configuration
+kubectl describe configmap right-sizer-config
+kubectl get secret right-sizer-admission-certs
+
+# Check metrics and health
+kubectl port-forward svc/right-sizer-operator 9090:9090
+curl http://localhost:9090/metrics | grep rightsizer
+curl http://localhost:8081/healthz
+
+# Review policy applications and events
+kubectl get events --field-selector reason=PolicyApplied
+kubectl get events --field-selector reason=ResourceValidation
+
+# Check admission webhook
+kubectl describe validatingadmissionwebhook right-sizer-resource-validator
+kubectl get endpoints right-sizer-admission-webhook
+
+# Review audit logs (if mounted)
+kubectl exec deployment/right-sizer-operator -- tail -f /var/log/right-sizer/audit.log
+
+# Circuit breaker and retry status
+kubectl port-forward svc/right-sizer-operator 9090:9090
+curl http://localhost:9090/metrics | grep -E "(retry|circuit)"
+```
 
 ## Migration Guide
 

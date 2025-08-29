@@ -1,0 +1,381 @@
+# Right-Sizer Policy Rules Configuration Example
+# This file demonstrates various policy rules for the right-sizer operator
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: right-sizer-policies
+  namespace: right-sizer-system
+  labels:
+    app: right-sizer
+    component: policy-engine
+data:
+  rules.yaml: |
+    # Policy rules are evaluated in order of priority (highest first)
+    # Each rule can match pods based on selectors and apply specific actions
+
+    # Rule 1: Skip system and infrastructure pods
+    - name: skip-system-pods
+      description: Skip right-sizing for critical system pods
+      priority: 200
+      enabled: true
+      selectors:
+        namespaces:
+          - kube-system
+          - kube-public
+          - kube-node-lease
+          - cert-manager
+          - ingress-nginx
+          - monitoring
+          - logging
+        labels:
+          app.kubernetes.io/component: system
+      actions:
+        skip: true
+
+    # Rule 2: High priority production workloads
+    - name: high-priority-production
+      description: Enhanced resource allocation for high priority production workloads
+      priority: 150
+      enabled: true
+      selectors:
+        namespaces:
+          - production
+          - prod
+        labels:
+          priority: high
+          environment: production
+        annotations:
+          rightsizer.io/priority: high
+      actions:
+        cpuMultiplier: 1.8
+        memoryMultiplier: 1.6
+        minCPU: "100m"
+        minMemory: "256Mi"
+        maxCPU: "8"
+        maxMemory: "16Gi"
+
+    # Rule 3: Database workloads
+    - name: database-workloads
+      description: Special handling for database containers requiring more memory
+      priority: 120
+      enabled: true
+      selectors:
+        labels:
+          app.kubernetes.io/component: database
+        containerName: "*db*" # Matches any container with 'db' in name
+        qosClass: Guaranteed
+      actions:
+        cpuMultiplier: 1.3
+        memoryMultiplier: 2.2
+        minMemory: "1Gi"
+        maxMemory: "32Gi"
+        setCPULimit: "4"
+
+    # Rule 4: Web frontend applications
+    - name: web-frontend
+      description: Optimized settings for web frontend applications
+      priority: 100
+      enabled: true
+      selectors:
+        labels:
+          app.kubernetes.io/component: frontend
+          tier: web
+        workloadType: Deployment
+      actions:
+        cpuMultiplier: 1.1
+        memoryMultiplier: 1.2
+        maxCPU: "2"
+        maxMemory: "4Gi"
+        setCPURequest: "50m"
+        setMemoryRequest: "128Mi"
+
+    # Rule 5: Batch processing jobs
+    - name: batch-jobs
+      description: Resource limits for batch processing workloads
+      priority: 90
+      enabled: true
+      selectors:
+        workloadType: Job
+        labels:
+          app.kubernetes.io/component: worker
+      actions:
+        cpuMultiplier: 1.0
+        memoryMultiplier: 1.3
+        maxCPU: "4"
+        maxMemory: "8Gi"
+        minCPU: "100m"
+
+    # Rule 6: Machine learning workloads
+    - name: ml-workloads
+      description: Resource allocation for ML/AI workloads
+      priority: 110
+      enabled: true
+      selectors:
+        labels:
+          workload-type: ml
+          app.kubernetes.io/component: training
+        annotations:
+          rightsizer.io/workload-type: ml
+      actions:
+        cpuMultiplier: 2.0
+        memoryMultiplier: 3.0
+        minCPU: "500m"
+        minMemory: "2Gi"
+        setCPULimit: "16"
+        setMemoryLimit: "64Gi"
+
+    # Rule 7: Development environments
+    - name: development-conservative
+      description: Conservative resource allocation for development environments
+      priority: 30
+      enabled: true
+      selectors:
+        namespaces:
+          - development
+          - dev
+          - staging
+          - test
+        labels:
+          environment: dev
+      actions:
+        cpuMultiplier: 1.0
+        memoryMultiplier: 1.1
+        maxCPU: "1"
+        maxMemory: "2Gi"
+
+    # Rule 8: Microservices with specific patterns
+    - name: microservices-pattern
+      description: Optimized settings for microservices following naming patterns
+      priority: 80
+      enabled: true
+      selectors:
+        podNameRegex: "^(api|service|svc)-.*"
+        workloadType: Deployment
+        labels:
+          architecture: microservices
+      actions:
+        cpuMultiplier: 1.15
+        memoryMultiplier: 1.25
+        minCPU: "20m"
+        minMemory: "64Mi"
+        maxCPU: "2"
+        maxMemory: "4Gi"
+
+    # Rule 9: Stateful workloads
+    - name: stateful-workloads
+      description: Enhanced resource allocation for stateful workloads
+      priority: 95
+      enabled: true
+      selectors:
+        workloadType: StatefulSet
+        labels:
+          app.kubernetes.io/component: database
+      actions:
+        cpuMultiplier: 1.4
+        memoryMultiplier: 1.8
+        minMemory: "512Mi"
+        maxMemory: "16Gi"
+
+    # Rule 10: Time-based rules for different periods
+    - name: business-hours-scaling
+      description: Higher resource allocation during business hours
+      priority: 70
+      enabled: true
+      selectors:
+        namespaces:
+          - production
+        labels:
+          scaling-policy: business-hours
+      schedule:
+        timeRanges:
+          - start: "08:00"
+            end: "18:00"
+        daysOfWeek:
+          - Monday
+          - Tuesday
+          - Wednesday
+          - Thursday
+          - Friday
+        timezone: "America/New_York"
+      actions:
+        cpuMultiplier: 1.5
+        memoryMultiplier: 1.3
+
+    # Rule 11: Night/weekend conservative scaling
+    - name: off-hours-conservative
+      description: Conservative resource allocation during off-hours
+      priority: 65
+      enabled: true
+      selectors:
+        namespaces:
+          - production
+        labels:
+          scaling-policy: off-hours
+      schedule:
+        timeRanges:
+          - start: "18:01"
+            end: "07:59"
+        timezone: "America/New_York"
+      actions:
+        cpuMultiplier: 0.8
+        memoryMultiplier: 0.9
+        maxCPU: "2"
+        maxMemory: "4Gi"
+
+    # Rule 12: Memory-intensive applications
+    - name: memory-intensive
+      description: Special handling for memory-intensive applications
+      priority: 85
+      enabled: true
+      selectors:
+        labels:
+          workload-profile: memory-intensive
+          app.kubernetes.io/component: cache
+        annotations:
+          rightsizer.io/profile: memory-intensive
+      actions:
+        cpuMultiplier: 1.1
+        memoryMultiplier: 2.5
+        minMemory: "2Gi"
+        maxMemory: "64Gi"
+
+    # Rule 13: CPU-intensive applications
+    - name: cpu-intensive
+      description: Enhanced CPU allocation for compute-intensive workloads
+      priority: 85
+      enabled: true
+      selectors:
+        labels:
+          workload-profile: cpu-intensive
+          app.kubernetes.io/component: compute
+      actions:
+        cpuMultiplier: 2.2
+        memoryMultiplier: 1.2
+        minCPU: "1"
+        maxCPU: "16"
+
+    # Rule 14: Queue workers
+    - name: queue-workers
+      description: Optimized settings for background queue workers
+      priority: 75
+      enabled: true
+      selectors:
+        labels:
+          app.kubernetes.io/component: worker
+          queue-type: background
+        containerName: "worker"
+      actions:
+        cpuMultiplier: 1.2
+        memoryMultiplier: 1.4
+        minCPU: "50m"
+        maxCPU: "4"
+
+    # Rule 15: Legacy applications
+    - name: legacy-applications
+      description: Conservative scaling for legacy applications
+      priority: 40
+      enabled: true
+      selectors:
+        labels:
+          app-type: legacy
+          rightsizer.io/profile: conservative
+        annotations:
+          legacy: "true"
+      actions:
+        cpuMultiplier: 1.0
+        memoryMultiplier: 1.1
+        maxCPU: "2"
+        maxMemory: "4Gi"
+
+    # Rule 16: Test and QA environments
+    - name: qa-environments
+      description: Moderate resource allocation for QA environments
+      priority: 35
+      enabled: true
+      selectors:
+        namespaces:
+          - qa
+          - quality-assurance
+          - testing
+        labels:
+          environment: qa
+      actions:
+        cpuMultiplier: 1.1
+        memoryMultiplier: 1.15
+        maxCPU: "2"
+        maxMemory: "4Gi"
+
+    # Rule 17: Canary deployments
+    - name: canary-deployments
+      description: Conservative resources for canary deployments
+      priority: 60
+      enabled: true
+      selectors:
+        labels:
+          deployment-type: canary
+          version: canary
+        annotations:
+          rightsizer.io/deployment-type: canary
+      actions:
+        cpuMultiplier: 0.9
+        memoryMultiplier: 1.0
+        maxCPU: "1"
+        maxMemory: "2Gi"
+
+    # Rule 18: Monitoring and observability
+    - name: monitoring-workloads
+      description: Special handling for monitoring and observability tools
+      priority: 55
+      enabled: true
+      selectors:
+        labels:
+          app.kubernetes.io/component: monitoring
+          app: prometheus
+        namespaces:
+          - monitoring
+          - observability
+      actions:
+        cpuMultiplier: 1.3
+        memoryMultiplier: 2.0
+        minMemory: "1Gi"
+        maxMemory: "32Gi"
+
+    # Rule 19: Sidecar containers
+    - name: sidecar-containers
+      description: Minimal resources for sidecar containers
+      priority: 25
+      enabled: true
+      selectors:
+        containerName: "*sidecar*"
+        labels:
+          app.kubernetes.io/component: sidecar
+      actions:
+        cpuMultiplier: 0.8
+        memoryMultiplier: 0.9
+        maxCPU: "200m"
+        maxMemory: "256Mi"
+        setCPURequest: "10m"
+        setMemoryRequest: "32Mi"
+
+    # Rule 20: Default fallback rule
+    - name: default-scaling
+      description: Default resource scaling for all other pods
+      priority: 10
+      enabled: true
+      selectors: {} # Matches all pods not caught by other rules
+      actions:
+        cpuMultiplier: 1.2
+        memoryMultiplier: 1.2
+        minCPU: "10m"
+        minMemory: "64Mi"
+        maxCPU: "4"
+        maxMemory: "8Gi"
+
+---
+# Example of how to apply this ConfigMap
+# kubectl apply -f policy-rules-example.yaml
+
+# To use these policies, ensure your right-sizer operator is configured with:
+# policyBasedSizing: true
+# And the policy engine is pointing to this ConfigMap

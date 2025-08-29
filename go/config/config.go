@@ -16,9 +16,11 @@
 package config
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -41,11 +43,25 @@ type Config struct {
 	MinMemoryRequest int64 // in MB
 
 	// Operational configuration
-	ResizeInterval time.Duration // How often to check and resize resources
-	LogLevel       string        // Log level: debug, info, warn, error
+	ResizeInterval  time.Duration // How often to check and resize resources
+	LogLevel        string        // Log level: debug, info, warn, error
+	MaxRetries      int           // Maximum retry attempts for operations
+	RetryInterval   time.Duration // Interval between retries
+	MetricsEnabled  bool          // Enable Prometheus metrics
+	MetricsPort     int           // Port for metrics endpoint
+	AuditEnabled    bool          // Enable audit logging for resource changes
+	DryRun          bool          // Only log recommendations without applying changes
+	SafetyThreshold float64       // Safety threshold for resource changes (0-1)
+
 	// Namespace filters
 	NamespaceInclude []string // Namespaces to include (from KUBE_NAMESPACE_INCLUDE)
 	NamespaceExclude []string // Namespaces to exclude (from KUBE_NAMESPACE_EXCLUDE)
+
+	// Advanced features
+	PolicyBasedSizing   bool     // Enable policy-based sizing rules
+	HistoryDays         int      // Days of history to keep for trend analysis
+	CustomMetrics       []string // Custom metrics to consider
+	AdmissionController bool     // Enable admission controller for validation
 }
 
 // Global config instance
@@ -65,6 +81,16 @@ func Load() *Config {
 		MinMemoryRequest:        64,
 		ResizeInterval:          30 * time.Second,
 		LogLevel:                "info",
+		MaxRetries:              3,
+		RetryInterval:           5 * time.Second,
+		MetricsEnabled:          true,
+		MetricsPort:             9090,
+		AuditEnabled:            true,
+		DryRun:                  false,
+		SafetyThreshold:         0.5, // 50% change threshold
+		PolicyBasedSizing:       false,
+		HistoryDays:             7,
+		AdmissionController:     false,
 	}
 
 	// Load from environment variables with defaults
@@ -181,6 +207,88 @@ func Load() *Config {
 		log.Printf("KUBE_NAMESPACE_EXCLUDE set to: %v", cfg.NamespaceExclude)
 	}
 
+	// Load MAX_RETRIES
+	if val := os.Getenv("MAX_RETRIES"); val != "" {
+		if i, err := strconv.Atoi(val); err == nil && i > 0 {
+			cfg.MaxRetries = i
+			log.Printf("MAX_RETRIES set to: %d", i)
+		}
+	}
+
+	// Load RETRY_INTERVAL
+	if val := os.Getenv("RETRY_INTERVAL"); val != "" {
+		if duration, err := time.ParseDuration(val); err == nil {
+			cfg.RetryInterval = duration
+			log.Printf("RETRY_INTERVAL set to: %v", duration)
+		}
+	}
+
+	// Load METRICS_ENABLED
+	if val := os.Getenv("METRICS_ENABLED"); val != "" {
+		cfg.MetricsEnabled = strings.ToLower(val) == "true"
+		log.Printf("METRICS_ENABLED set to: %v", cfg.MetricsEnabled)
+	}
+
+	// Load METRICS_PORT
+	if val := os.Getenv("METRICS_PORT"); val != "" {
+		if i, err := strconv.Atoi(val); err == nil && i > 0 && i < 65536 {
+			cfg.MetricsPort = i
+			log.Printf("METRICS_PORT set to: %d", i)
+		}
+	}
+
+	// Load AUDIT_ENABLED
+	if val := os.Getenv("AUDIT_ENABLED"); val != "" {
+		cfg.AuditEnabled = strings.ToLower(val) == "true"
+		log.Printf("AUDIT_ENABLED set to: %v", cfg.AuditEnabled)
+	}
+
+	// Load DRY_RUN
+	if val := os.Getenv("DRY_RUN"); val != "" {
+		cfg.DryRun = strings.ToLower(val) == "true"
+		log.Printf("DRY_RUN set to: %v", cfg.DryRun)
+	}
+
+	// Load SAFETY_THRESHOLD
+	if val := os.Getenv("SAFETY_THRESHOLD"); val != "" {
+		if f, err := strconv.ParseFloat(val, 64); err == nil && f >= 0 && f <= 1 {
+			cfg.SafetyThreshold = f
+			log.Printf("SAFETY_THRESHOLD set to: %.2f", f)
+		}
+	}
+
+	// Load POLICY_BASED_SIZING
+	if val := os.Getenv("POLICY_BASED_SIZING"); val != "" {
+		cfg.PolicyBasedSizing = strings.ToLower(val) == "true"
+		log.Printf("POLICY_BASED_SIZING set to: %v", cfg.PolicyBasedSizing)
+	}
+
+	// Load HISTORY_DAYS
+	if val := os.Getenv("HISTORY_DAYS"); val != "" {
+		if i, err := strconv.Atoi(val); err == nil && i > 0 {
+			cfg.HistoryDays = i
+			log.Printf("HISTORY_DAYS set to: %d", i)
+		}
+	}
+
+	// Load CUSTOM_METRICS (CSV)
+	if val := os.Getenv("CUSTOM_METRICS"); val != "" {
+		cfg.CustomMetrics = parseCSV(val)
+		log.Printf("CUSTOM_METRICS set to: %v", cfg.CustomMetrics)
+	}
+
+	// Load ADMISSION_CONTROLLER
+	if val := os.Getenv("ADMISSION_CONTROLLER"); val != "" {
+		cfg.AdmissionController = strings.ToLower(val) == "true"
+		log.Printf("ADMISSION_CONTROLLER set to: %v", cfg.AdmissionController)
+	}
+
+	// Validate configuration
+	if err := cfg.Validate(); err != nil {
+		log.Printf("⚠️  Configuration validation failed: %v", err)
+		log.Printf("⚠️  Continuing with potentially invalid configuration...")
+	}
+
 	Global = cfg
 	return cfg
 }
@@ -191,6 +299,122 @@ func Get() *Config {
 		return Load()
 	}
 	return Global
+}
+
+// Validate checks the configuration for consistency and validity
+func (c *Config) Validate() error {
+	var errors []string
+
+	// Validate multipliers
+	if c.CPURequestMultiplier <= 0 {
+		errors = append(errors, "CPU request multiplier must be positive")
+	}
+	if c.MemoryRequestMultiplier <= 0 {
+		errors = append(errors, "memory request multiplier must be positive")
+	}
+	if c.CPULimitMultiplier <= 0 {
+		errors = append(errors, "CPU limit multiplier must be positive")
+	}
+	if c.MemoryLimitMultiplier <= 0 {
+		errors = append(errors, "memory limit multiplier must be positive")
+	}
+
+	// Validate resource boundaries
+	if c.MinCPURequest <= 0 {
+		errors = append(errors, "minimum CPU request must be positive")
+	}
+	if c.MinMemoryRequest <= 0 {
+		errors = append(errors, "minimum memory request must be positive")
+	}
+	if c.MaxCPULimit <= c.MinCPURequest {
+		errors = append(errors, "maximum CPU limit must be greater than minimum CPU request")
+	}
+	if c.MaxMemoryLimit <= c.MinMemoryRequest {
+		errors = append(errors, "maximum memory limit must be greater than minimum memory request")
+	}
+
+	// Validate intervals
+	if c.ResizeInterval <= 0 {
+		errors = append(errors, "resize interval must be positive")
+	}
+	if c.RetryInterval <= 0 {
+		errors = append(errors, "retry interval must be positive")
+	}
+
+	// Validate operational settings
+	if c.MaxRetries < 0 {
+		errors = append(errors, "max retries cannot be negative")
+	}
+	if c.MetricsPort <= 0 || c.MetricsPort > 65535 {
+		errors = append(errors, "metrics port must be between 1 and 65535")
+	}
+	if c.SafetyThreshold < 0 || c.SafetyThreshold > 1 {
+		errors = append(errors, "safety threshold must be between 0 and 1")
+	}
+	if c.HistoryDays <= 0 {
+		errors = append(errors, "history days must be positive")
+	}
+
+	// Validate log level
+	validLevels := map[string]bool{
+		"debug": true, "info": true, "warn": true, "error": true,
+	}
+	if !validLevels[c.LogLevel] {
+		errors = append(errors, fmt.Sprintf("invalid log level: %s (must be debug, info, warn, or error)", c.LogLevel))
+	}
+
+	if len(errors) > 0 {
+		return fmt.Errorf("configuration validation errors: %s", strings.Join(errors, "; "))
+	}
+
+	return nil
+}
+
+// IsNamespaceIncluded checks if a namespace should be processed based on include/exclude filters
+func (c *Config) IsNamespaceIncluded(namespace string) bool {
+	// If include list is specified, namespace must be in it
+	if len(c.NamespaceInclude) > 0 {
+		found := false
+		for _, ns := range c.NamespaceInclude {
+			if ns == namespace {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+
+	// If exclude list is specified, namespace must not be in it
+	if len(c.NamespaceExclude) > 0 {
+		for _, ns := range c.NamespaceExclude {
+			if ns == namespace {
+				return false
+			}
+		}
+	}
+
+	return true
+}
+
+// GetRetryConfig returns retry configuration for operations
+func (c *Config) GetRetryConfig() (maxRetries int, interval time.Duration) {
+	return c.MaxRetries, c.RetryInterval
+}
+
+// IsChangeWithinSafetyThreshold checks if a resource change is within safe limits
+func (c *Config) IsChangeWithinSafetyThreshold(current, new int64) bool {
+	if current == 0 {
+		return true // No existing resource, any change is allowed
+	}
+
+	change := float64(new-current) / float64(current)
+	if change < 0 {
+		change = -change // Use absolute value
+	}
+
+	return change <= c.SafetyThreshold
 }
 
 // parseCSV splits a comma-separated string into a slice, trimming spaces

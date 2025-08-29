@@ -47,6 +47,77 @@ config:
   minCpuRequest: 10 # Minimum CPU request in millicores
   minMemoryRequest: 64 # Minimum memory request in MB
 
+  # Retry configuration
+  maxRetries: 3 # Maximum retry attempts for operations
+  retryInterval: "5s" # Interval between retries
+
+  # Safety and validation
+  safetyThreshold: 0.5 # Safety threshold for resource changes (0-1)
+
+  # Advanced features
+  policyBasedSizing: false # Enable policy-based sizing rules
+  historyDays: 7 # Days of history to keep for trend analysis
+  customMetrics: [] # Custom metrics to consider (CSV)
+  admissionController: false # Enable admission controller for validation
+
+# Observability configuration
+observability:
+  # Metrics configuration
+  metricsEnabled: true # Enable Prometheus metrics
+  metricsPort: 9090 # Port for metrics endpoint
+
+  # Audit configuration
+  auditEnabled: true # Enable audit logging for resource changes
+  auditConfig:
+    logPath: "/var/log/right-sizer/audit.log"
+    maxFileSize: 104857600 # 100MB
+    maxFiles: 10
+    bufferSize: 1000
+    flushInterval: "5s"
+    enableFileLog: true
+    enableEventLog: true
+    enableMetrics: true
+    retentionDays: 30
+
+# Security configuration
+security:
+  # Admission webhook configuration
+  admissionWebhook:
+    enabled: false # Enable admission webhook
+    port: 8443
+    certPath: "/etc/certs/tls.crt"
+    keyPath: "/etc/certs/tls.key"
+    enableValidation: true
+    enableMutation: false
+    requireAnnotation: false
+
+  # RBAC configuration
+  rbac:
+    create: true
+    rules:
+      - apiGroups: [""]
+        resources: ["pods", "pods/resize", "events"]
+        verbs: ["get", "list", "watch", "patch", "update", "create"]
+      - apiGroups: [""]
+        resources: ["nodes", "resourcequotas", "limitranges"]
+        verbs: ["get", "list", "watch"]
+      - apiGroups: ["metrics.k8s.io"]
+        resources: ["pods", "nodes"]
+        verbs: ["get", "list"]
+
+# Policy engine configuration
+policyEngine:
+  enabled: false # Enable policy-based sizing
+  configMapName: "right-sizer-policies"
+  rules: [] # Policy rules (can be defined here or in ConfigMap)
+
+# Circuit breaker configuration
+circuitBreaker:
+  enabled: true
+  failureThreshold: 5
+  recoveryTimeout: "30s"
+  successThreshold: 3
+
 # Operator resource limits
 resources:
   requests:
@@ -73,6 +144,68 @@ podSecurityContext: {}
 
 namespaceInclude: "default" # Comma-separated list of namespaces to include (e.g., "default,kube-system")
 namespaceExclude: "kube-system" # Comma-separated list of namespaces to exclude (e.g., "test,dev")
+
+# Volume mounts for audit logs and certificates
+volumes:
+  auditLogs:
+    enabled: true
+    hostPath: "/var/log/right-sizer"
+    mountPath: "/var/log/right-sizer"
+
+  certificates:
+    enabled: false # Enable if using admission webhook with TLS
+    secretName: "right-sizer-certs"
+    mountPath: "/etc/certs"
+
+# Persistent Volume Claims
+persistentVolume:
+  auditLogs:
+    enabled: false
+    storageClass: ""
+    size: "10Gi"
+    accessMode: "ReadWriteOnce"
+
+# Network policies
+networkPolicy:
+  enabled: false
+  ingress: []
+  egress: []
+
+# Pod security context
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+
+# Container security context
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+  seccompProfile:
+    type: RuntimeDefault
+
+# Environment variables
+env:
+  - name: GOMAXPROCS
+    value: "2"
+  - name: GOGC
+    value: "100"
+
+# Additional labels and annotations
+additionalLabels: {}
+additionalAnnotations: {}
+
+# Service monitor for Prometheus
+serviceMonitor:
+  enabled: false
+  namespace: ""
+  labels: {}
+  interval: "30s"
+  path: "/metrics"
 
 # Service
 service:
