@@ -1,0 +1,100 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: stress-test-pod
+  namespace: default
+  labels:
+    app: stress-test
+    test: right-sizer
+spec:
+  containers:
+  - name: stress
+    image: polinux/stress
+    command: ["stress"]
+    args:
+      - "--cpu"
+      - "1"           # Use 1 CPU worker
+      - "--vm"
+      - "1"           # Use 1 memory worker
+      - "--vm-bytes"
+      - "128M"        # Each worker uses 128MB
+      - "--timeout"
+      - "0s"          # Run indefinitely
+    resources:
+      requests:
+        cpu: 50m      # Start with low request
+        memory: 64Mi  # Start with low request
+      limits:
+        cpu: 200m     # Low initial limit
+        memory: 256Mi # Low initial limit
+    # Enable in-place resize without restart
+    resizePolicy:
+    - resourceName: cpu
+      restartPolicy: NotRequired
+    - resourceName: memory
+      restartPolicy: NotRequired
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nginx-test-pod
+  namespace: default
+  labels:
+    app: nginx-test
+    test: right-sizer
+spec:
+  containers:
+  - name: nginx
+    image: nginx:alpine
+    ports:
+    - containerPort: 80
+    resources:
+      requests:
+        cpu: 10m       # Very low initial request
+        memory: 32Mi   # Very low initial request
+      limits:
+        cpu: 100m      # Low initial limit
+        memory: 128Mi  # Low initial limit
+    # Enable in-place resize without restart
+    resizePolicy:
+    - resourceName: cpu
+      restartPolicy: NotRequired
+    - resourceName: memory
+      restartPolicy: NotRequired
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: busybox-test-pod
+  namespace: default
+  labels:
+    app: busybox-test
+    test: right-sizer
+spec:
+  containers:
+  - name: busybox
+    image: busybox:latest
+    command: ["/bin/sh"]
+    args:
+      - "-c"
+      - |
+        # Generate some CPU load periodically
+        while true; do
+          # CPU intensive operation for 10 seconds
+          timeout 10 sh -c 'while true; do echo "scale=5000; 4*a(1)" | busybox dc > /dev/null 2>&1; done' || true
+          # Rest for 20 seconds
+          sleep 20
+        done
+    resources:
+      requests:
+        cpu: 20m       # Low initial request
+        memory: 16Mi   # Very low initial request
+      limits:
+        cpu: 150m      # Low initial limit
+        memory: 64Mi   # Low initial limit
+    # Enable in-place resize without restart
+    resizePolicy:
+    - resourceName: cpu
+      restartPolicy: NotRequired
+    - resourceName: memory
+      restartPolicy: NotRequired

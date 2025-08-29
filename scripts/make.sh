@@ -96,20 +96,32 @@ cmd_clean() {
 
 cmd_test() {
   print_header "Running tests..."
-  cd "${ROOT_DIR}/go"
-  ${GO} test -v ./...
-  cd "${ROOT_DIR}"
+  if [ -f "${ROOT_DIR}/test/run-all-tests.sh" ]; then
+    "${ROOT_DIR}/test/run-all-tests.sh"
+  else
+    # Fallback to direct go test if new test runner doesn't exist
+    cd "${ROOT_DIR}/go"
+    ${GO} test -v ./...
+    cd "${ROOT_DIR}"
+  fi
   print_success "Tests completed"
 }
 
 cmd_test_coverage() {
   print_header "Running tests with coverage..."
-  cd "${ROOT_DIR}/go"
-  ${GO} test -v -coverprofile=coverage.out ./...
-  ${GO} tool cover -html=coverage.out -o coverage.html
-  cd "${ROOT_DIR}"
-  print_success "Coverage report generated: go/coverage.html"
-  print_info "Open go/coverage.html in your browser to view the report"
+  if [ -f "${ROOT_DIR}/test/run-all-tests.sh" ]; then
+    COVERAGE=true "${ROOT_DIR}/test/run-all-tests.sh"
+    print_success "Coverage report generated: coverage.html"
+    print_info "Open coverage.html in your browser to view the report"
+  else
+    # Fallback to direct go test if new test runner doesn't exist
+    cd "${ROOT_DIR}/go"
+    ${GO} test -v -coverprofile=coverage.out ./...
+    ${GO} tool cover -html=coverage.out -o coverage.html
+    cd "${ROOT_DIR}"
+    print_success "Coverage report generated: go/coverage.html"
+    print_info "Open go/coverage.html in your browser to view the report"
+  fi
 }
 
 cmd_fmt() {
