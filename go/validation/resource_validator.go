@@ -324,20 +324,22 @@ func (rv *ResourceValidator) validateNodeCapacity(ctx context.Context, pod *core
 		if cpuRequest, ok := resources.Requests[corev1.ResourceCPU]; ok {
 			availableCPU := availableResources[corev1.ResourceCPU]
 			if cpuRequest.Cmp(availableCPU) > 0 {
+				allocatableCPU := node.Status.Allocatable[corev1.ResourceCPU]
 				result.AddError(fmt.Sprintf("CPU request %s exceeds available node capacity %s (allocatable: %s)",
 					cpuRequest.String(),
-					availableCPU.String(),
-					node.Status.Allocatable[corev1.ResourceCPU].String()))
+					(&availableCPU).String(),
+					(&allocatableCPU).String()))
 			}
 		}
 
 		if memRequest, ok := resources.Requests[corev1.ResourceMemory]; ok {
 			availableMemory := availableResources[corev1.ResourceMemory]
 			if memRequest.Cmp(availableMemory) > 0 {
+				allocatableMemory := node.Status.Allocatable[corev1.ResourceMemory]
 				result.AddError(fmt.Sprintf("Memory request %s exceeds available node capacity %s (allocatable: %s)",
 					memRequest.String(),
-					availableMemory.String(),
-					node.Status.Allocatable[corev1.ResourceMemory].String()))
+					(&availableMemory).String(),
+					(&allocatableMemory).String()))
 			}
 		}
 	}
@@ -349,7 +351,7 @@ func (rv *ResourceValidator) validateNodeCapacity(ctx context.Context, pod *core
 			if cpuLimit.Cmp(allocatableCPU) > 0 {
 				result.AddError(fmt.Sprintf("CPU limit %s exceeds node allocatable capacity %s",
 					cpuLimit.String(),
-					allocatableCPU.String()))
+					(&allocatableCPU).String()))
 			}
 		}
 
@@ -358,7 +360,7 @@ func (rv *ResourceValidator) validateNodeCapacity(ctx context.Context, pod *core
 			if memLimit.Cmp(allocatableMemory) > 0 {
 				result.AddError(fmt.Sprintf("Memory limit %s exceeds node allocatable capacity %s",
 					memLimit.String(),
-					allocatableMemory.String()))
+					(&allocatableMemory).String()))
 			}
 		}
 	}
@@ -370,14 +372,14 @@ func (rv *ResourceValidator) validateAgainstTotalCapacity(node *corev1.Node, res
 		if cpuRequest, ok := resources.Requests[corev1.ResourceCPU]; ok {
 			nodeCPUCapacity := node.Status.Allocatable[corev1.ResourceCPU]
 			if cpuRequest.Cmp(nodeCPUCapacity) > 0 {
-				result.AddError(fmt.Sprintf("CPU request %s exceeds node allocatable capacity %s", cpuRequest.String(), nodeCPUCapacity.String()))
+				result.AddError(fmt.Sprintf("CPU request %s exceeds node allocatable capacity %s", cpuRequest.String(), (&nodeCPUCapacity).String()))
 			}
 		}
 
 		if memRequest, ok := resources.Requests[corev1.ResourceMemory]; ok {
 			nodeMemCapacity := node.Status.Allocatable[corev1.ResourceMemory]
 			if memRequest.Cmp(nodeMemCapacity) > 0 {
-				result.AddError(fmt.Sprintf("Memory request %s exceeds node allocatable capacity %s", memRequest.String(), nodeMemCapacity.String()))
+				result.AddError(fmt.Sprintf("Memory request %s exceeds node allocatable capacity %s", memRequest.String(), (&nodeMemCapacity).String()))
 			}
 		}
 	}
@@ -503,7 +505,7 @@ func (rv *ResourceValidator) checkQuotaLimits(quota *corev1.ResourceQuota, resou
 					available := hardCPU.DeepCopy()
 					available.Sub(usedCPU)
 					if cpuRequest.Cmp(available) > 0 {
-						result.AddError(fmt.Sprintf("CPU request %s exceeds available quota %s", cpuRequest.String(), available.String()))
+						result.AddError(fmt.Sprintf("CPU request %s exceeds available quota %s", cpuRequest.String(), (&available).String()))
 					}
 				}
 			}
@@ -515,7 +517,7 @@ func (rv *ResourceValidator) checkQuotaLimits(quota *corev1.ResourceQuota, resou
 					available := hardMem.DeepCopy()
 					available.Sub(usedMem)
 					if memRequest.Cmp(available) > 0 {
-						result.AddError(fmt.Sprintf("Memory request %s exceeds available quota %s", memRequest.String(), available.String()))
+						result.AddError(fmt.Sprintf("Memory request %s exceeds available quota %s", memRequest.String(), (&available).String()))
 					}
 				}
 			}
@@ -553,7 +555,7 @@ func (rv *ResourceValidator) checkMinimumConstraints(min corev1.ResourceList, re
 		for resourceName, minQuantity := range min {
 			if requestQuantity, ok := resources.Requests[resourceName]; ok {
 				if requestQuantity.Cmp(minQuantity) < 0 {
-					result.AddError(fmt.Sprintf("%s request %s is below minimum %s", resourceName, requestQuantity.String(), minQuantity.String()))
+					result.AddError(fmt.Sprintf("%s request %s is below minimum %s", resourceName, requestQuantity.String(), (&minQuantity).String()))
 				}
 			}
 		}
@@ -566,7 +568,7 @@ func (rv *ResourceValidator) checkMaximumConstraints(max corev1.ResourceList, re
 		for resourceName, maxQuantity := range max {
 			if limitQuantity, ok := resources.Limits[resourceName]; ok {
 				if limitQuantity.Cmp(maxQuantity) > 0 {
-					result.AddError(fmt.Sprintf("%s limit %s exceeds maximum %s", resourceName, limitQuantity.String(), maxQuantity.String()))
+					result.AddError(fmt.Sprintf("%s limit %s exceeds maximum %s", resourceName, limitQuantity.String(), (&maxQuantity).String()))
 				}
 			}
 		}

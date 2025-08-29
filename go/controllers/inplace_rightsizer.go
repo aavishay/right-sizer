@@ -604,12 +604,8 @@ func SetupInPlaceRightSizer(mgr manager.Manager, provider metrics.Provider) erro
 	}
 
 	// Create resource validator
-	validator, err := validation.NewResourceValidator(mgr.GetClient(), cfg)
-	if err != nil {
-		logger.Warn("Failed to create resource validator: %v", err)
-		// Continue without validator - will skip validation checks
-		validator = nil
-	}
+	// Note: passing nil for metrics since we don't have OperatorMetrics here
+	validator := validation.NewResourceValidator(mgr.GetClient(), clientSet, cfg, nil)
 
 	rightsizer := &InPlaceRightSizer{
 		Client:          mgr.GetClient(),
