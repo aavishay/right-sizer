@@ -6,6 +6,8 @@ metadata:
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "right-sizer.labels" . | nindent 4 }}
+automountServiceAccountToken: true
+
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -19,34 +21,64 @@ rules:
     resources: ["pods"]
     verbs: ["get", "list", "watch", "patch", "update"]
 
-  # In-place resize subresource (Kubernetes 1.33+)
-  - apiGroups: [""]
-    resources: ["pods/resize"]
-    verbs: ["patch"]
-
-  # Pod status and metrics
+  # Pod status for monitoring
   - apiGroups: [""]
     resources: ["pods/status"]
-    verbs: ["get", "patch", "update"]
+    verbs: ["get", "list", "watch", "patch", "update"]
 
-  # Metrics API
+  # In-place resize subresource (Kubernetes 1.27+)
+  - apiGroups: [""]
+    resources: ["pods/resize"]
+    verbs: ["patch", "update"]
+
+  # Node information for capacity validation and resource availability
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list", "watch"]
+
+  # Node status for resource capacity checking
+  - apiGroups: [""]
+    resources: ["nodes/status"]
+    verbs: ["get", "list", "watch"]
+
+  # Metrics API for resource usage data
   - apiGroups: ["metrics.k8s.io"]
     resources: ["pods", "nodes"]
     verbs: ["get", "list"]
 
-  # Deployment and StatefulSet management
+  # Custom and external metrics (if available)
+  - apiGroups: ["custom.metrics.k8s.io", "external.metrics.k8s.io"]
+    resources: ["*"]
+    verbs: ["get", "list"]
+
+  # Workload controllers management
   - apiGroups: ["apps"]
     resources: ["deployments", "statefulsets", "daemonsets", "replicasets"]
     verbs: ["get", "list", "watch", "patch", "update"]
 
+  # Workload controller status
+  - apiGroups: ["apps"]
+    resources: ["deployments/status", "statefulsets/status", "daemonsets/status", "replicasets/status"]
+    verbs: ["get", "list", "watch"]
+
+  # Batch jobs
+  - apiGroups: ["batch"]
+    resources: ["jobs", "cronjobs"]
+    verbs: ["get", "list", "watch"]
+
   # Events for logging resize operations
   - apiGroups: [""]
     resources: ["events"]
-    verbs: ["create", "patch"]
+    verbs: ["create", "patch", "update"]
 
-  # ConfigMaps and Secrets for configuration
+  # ConfigMaps for configuration
   - apiGroups: [""]
-    resources: ["configmaps", "secrets"]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch"]
+
+  # Secrets for sensitive configuration
+  - apiGroups: [""]
+    resources: ["secrets"]
     verbs: ["get", "list", "watch"]
 
   # Namespaces for multi-namespace support
@@ -69,10 +101,31 @@ rules:
     resources: ["poddisruptionbudgets"]
     verbs: ["get", "list", "watch"]
 
-  # ResourceQuotas and LimitRanges to respect namespace limits
+  # ResourceQuotas to respect namespace limits
   - apiGroups: [""]
-    resources: ["resourcequotas", "limitranges"]
+    resources: ["resourcequotas"]
     verbs: ["get", "list", "watch"]
+
+  # LimitRanges to respect namespace constraints
+  - apiGroups: [""]
+    resources: ["limitranges"]
+    verbs: ["get", "list", "watch"]
+
+  # Services for admission webhook support
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+
+  # Endpoints for service discovery
+  - apiGroups: [""]
+    resources: ["endpoints"]
+    verbs: ["get", "list", "watch"]
+
+  # Admission controller webhooks (if enabled)
+  - apiGroups: ["admissionregistration.k8s.io"]
+    resources: ["validatingwebhookconfigurations", "mutatingwebhookconfigurations"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -83,6 +136,58 @@ metadata:
 roleRef:
   kind: ClusterRole
   name: {{ include "right-sizer.fullname" . }}
+  apiGroup: rbac.authorization.k8s.io
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "right-sizer.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+
+---
+# Role for namespace-specific operations in the operator's namespace
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "right-sizer.fullname" . }}-namespace
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "right-sizer.labels" . | nindent 4 }}
+rules:
+  # ConfigMaps in operator namespace for leader election and configuration
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  # Leases for leader election (controller-runtime)
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  # Secrets in operator namespace for TLS certificates
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  # Events in operator namespace
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "patch", "update"]
+
+  # Pods in operator namespace for self-monitoring
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "right-sizer.fullname" . }}-namespace
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "right-sizer.labels" . | nindent 4 }}
+roleRef:
+  kind: Role
+  name: {{ include "right-sizer.fullname" . }}-namespace
   apiGroup: rbac.authorization.k8s.io
 subjects:
   - kind: ServiceAccount

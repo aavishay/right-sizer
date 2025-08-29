@@ -20,11 +20,11 @@ OPERATOR_NAME="right-sizer"
 NAMESPACE="default"
 IMAGE_TAG="latest"
 BUILD_LOCAL=true
-USE_HELM=false
+USE_HELM=true
 
 # Project root detection (two levels up from this script)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
@@ -179,11 +179,12 @@ if [[ "$USE_HELM" == true ]]; then
   echo -e "${GREEN}✓ Helm deployment complete${NC}"
 else
   # Deploy using kubectl manifests
-  echo -e "${YELLOW}Applying RBAC permissions...${NC}"
-  kubectl apply -f "$ROOT_DIR/deploy/kubernetes/rbac.yaml" -n ${NAMESPACE}
+  echo -e "${RED}Manual deployment not supported. Please use Helm deployment.${NC}"
+  echo -e "${YELLOW}Run with --helm flag or install Helm: https://helm.sh/docs/intro/install/${NC}"
+  exit 1
 
-  echo -e "${YELLOW}Deploying operator...${NC}"
-
+  # Legacy deployment code (kept for reference)
+  : <<'LEGACY_DEPLOYMENT'
   # Create temporary deployment manifest with correct image
   cat >/tmp/right-sizer-deployment.yaml <<EOF
 apiVersion: apps/v1
@@ -238,9 +239,7 @@ spec:
           initialDelaySeconds: 10
           periodSeconds: 10
 EOF
-
-  kubectl apply -f /tmp/right-sizer-deployment.yaml
-  rm /tmp/right-sizer-deployment.yaml
+LEGACY_DEPLOYMENT
 
   echo -e "${GREEN}✓ Manifest deployment complete${NC}"
 fi

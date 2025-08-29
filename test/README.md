@@ -220,8 +220,8 @@ minikube addons enable metrics-server
 
 ### RBAC Permissions
 ```bash
-# Apply RBAC configuration
-kubectl apply -f deploy/kubernetes/rbac.yaml
+# Apply RBAC configuration using Helm
+helm install right-sizer ./helm --namespace right-sizer-system --create-namespace
 ```
 
 ### Pod Resize Not Supported
