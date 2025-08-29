@@ -25,6 +25,7 @@ import (
 	"right-sizer/config"
 	"right-sizer/logger"
 	"right-sizer/metrics"
+	"right-sizer/validation"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -44,6 +45,7 @@ type InPlaceRightSizer struct {
 	RestConfig      *rest.Config
 	MetricsProvider metrics.Provider
 	Interval        time.Duration
+	Validator       *validation.ResourceValidator
 }
 
 // PodResizePatch represents the patch structure for the resize subresource
@@ -98,6 +100,7 @@ func (r *InPlaceRightSizer) rightSizeAllPods(ctx context.Context) {
 	resizedCount := 0
 	skippedCount := 0
 	errorCount := 0
+	nodeConstraintSkips := 0
 
 	for _, pod := range podList.Items {
 		// Skip pods that are not running
@@ -122,8 +125,12 @@ func (r *InPlaceRightSizer) rightSizeAllPods(ctx context.Context) {
 		// Try to right-size the pod
 		resized, err := r.rightSizePod(ctx, &pod)
 		if err != nil {
-			// Only count as error if it's not a expected limitation
-			if !strings.Contains(err.Error(), "resize failed") {
+			// Check if error is due to node resource constraints
+			if strings.Contains(err.Error(), "exceeds available node capacity") ||
+				strings.Contains(err.Error(), "exceeds node allocatable capacity") {
+				nodeConstraintSkips++
+				log.Printf("📍 Skipped pod %s/%s due to node resource constraints", pod.Namespace, pod.Name)
+			} else if !strings.Contains(err.Error(), "resize failed") {
 				log.Printf("❌ Error right-sizing pod %s/%s: %v", pod.Namespace, pod.Name, err)
 				errorCount++
 			}
@@ -132,7 +139,8 @@ func (r *InPlaceRightSizer) rightSizeAllPods(ctx context.Context) {
 		}
 	}
 
-	log.Printf("📊 Right-sizing complete: %d resized, %d skipped, %d errors", resizedCount, skippedCount, errorCount)
+	log.Printf("📊 Right-sizing complete: %d resized, %d skipped (%d due to node constraints), %d errors",
+		resizedCount, skippedCount, nodeConstraintSkips, errorCount)
 }
 
 // supportsInPlaceResize checks if a pod can be resized in-place
@@ -443,6 +451,52 @@ func formatMemory(q resource.Quantity) string {
 
 // applyInPlaceResize performs the actual in-place resource update using the resize subresource
 func (r *InPlaceRightSizer) applyInPlaceResize(ctx context.Context, pod *corev1.Pod, newResourcesMap map[string]corev1.ResourceRequirements) error {
+	// Validate the new resources if validator is available
+	if r.Validator != nil {
+		for containerName, newResources := range newResourcesMap {
+			validationResult := r.Validator.ValidateResourceChange(ctx, pod, newResources, containerName)
+			if !validationResult.Valid {
+				// Log validation errors and skip this pod
+				// Check if validation failed due to node resource constraints
+				hasNodeConstraint := false
+				for _, err := range validationResult.Errors {
+					if strings.Contains(err, "exceeds available node capacity") ||
+						strings.Contains(err, "exceeds node allocatable capacity") {
+						hasNodeConstraint = true
+						break
+					}
+				}
+
+				if hasNodeConstraint {
+					logger.Info("📍 Node resource constraint for pod %s/%s container %s:",
+						pod.Namespace, pod.Name, containerName)
+					for _, err := range validationResult.Errors {
+						logger.Info("  - %s", err)
+					}
+					// Return a specific error message for node constraints
+					return fmt.Errorf("exceeds available node capacity: %v", validationResult.Errors)
+				} else {
+					logger.Warn("Skipping resize for pod %s/%s container %s due to validation errors:",
+						pod.Namespace, pod.Name, containerName)
+					for _, err := range validationResult.Errors {
+						logger.Warn("  - %s", err)
+					}
+				}
+				// Return early - don't attempt resize if validation fails
+				return fmt.Errorf("validation failed: %v", validationResult.Errors)
+			}
+
+			// Log any warnings but continue
+			if len(validationResult.Warnings) > 0 {
+				logger.Warn("Validation warnings for pod %s/%s container %s:",
+					pod.Namespace, pod.Name, containerName)
+				for _, warning := range validationResult.Warnings {
+					logger.Warn("  - %s", warning)
+				}
+			}
+		}
+	}
+
 	// Create the resize patch
 	containers := make([]ContainerResourcesPatch, 0, len(newResourcesMap))
 	for containerName, resources := range newResourcesMap {
@@ -549,12 +603,21 @@ func SetupInPlaceRightSizer(mgr manager.Manager, provider metrics.Provider) erro
 		return fmt.Errorf("failed to create kubernetes clientset: %w", err)
 	}
 
+	// Create resource validator
+	validator, err := validation.NewResourceValidator(mgr.GetClient(), cfg)
+	if err != nil {
+		logger.Warn("Failed to create resource validator: %v", err)
+		// Continue without validator - will skip validation checks
+		validator = nil
+	}
+
 	rightsizer := &InPlaceRightSizer{
 		Client:          mgr.GetClient(),
 		ClientSet:       clientSet,
 		RestConfig:      restConfig,
 		MetricsProvider: provider,
 		Interval:        cfg.ResizeInterval,
+		Validator:       validator,
 	}
 
 	// Start the rightsizer in a goroutine

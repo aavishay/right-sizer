@@ -256,7 +256,48 @@ func (rv *ResourceValidator) validateSafetyThreshold(current, new corev1.Resourc
 	}
 }
 
-// validateNodeCapacity checks if the new resources fit within node capacity
+// calculateNodeAvailableResources calculates the available resources on a node
+func (rv *ResourceValidator) calculateNodeAvailableResources(ctx context.Context, node *corev1.Node, excludePod *corev1.Pod) (corev1.ResourceList, error) {
+	// Start with allocatable resources (total minus system reserved)
+	availableCPU := node.Status.Allocatable[corev1.ResourceCPU].DeepCopy()
+	availableMemory := node.Status.Allocatable[corev1.ResourceMemory].DeepCopy()
+
+	// List all pods on the node
+	podList := &corev1.PodList{}
+	if err := rv.client.List(ctx, podList, client.MatchingFields{"spec.nodeName": node.Name}); err != nil {
+		return nil, fmt.Errorf("failed to list pods on node %s: %v", node.Name, err)
+	}
+
+	// Subtract resources used by all running pods (except the pod being resized)
+	for _, p := range podList.Items {
+		// Skip the pod being resized (we'll add its new resources later)
+		if excludePod != nil && p.Namespace == excludePod.Namespace && p.Name == excludePod.Name {
+			continue
+		}
+
+		// Only count pods that are running or pending
+		if p.Status.Phase != corev1.PodRunning && p.Status.Phase != corev1.PodPending {
+			continue
+		}
+
+		// Sum up all container requests
+		for _, container := range p.Spec.Containers {
+			if cpuReq, ok := container.Resources.Requests[corev1.ResourceCPU]; ok {
+				availableCPU.Sub(cpuReq)
+			}
+			if memReq, ok := container.Resources.Requests[corev1.ResourceMemory]; ok {
+				availableMemory.Sub(memReq)
+			}
+		}
+	}
+
+	return corev1.ResourceList{
+		corev1.ResourceCPU:    availableCPU,
+		corev1.ResourceMemory: availableMemory,
+	}, nil
+}
+
+// validateNodeCapacity checks if the new resources fit within available node capacity
 func (rv *ResourceValidator) validateNodeCapacity(ctx context.Context, pod *corev1.Pod, resources corev1.ResourceRequirements, result *ValidationResult) {
 	if pod.Spec.NodeName == "" {
 		result.AddInfo("Pod not yet scheduled, skipping node capacity validation")
@@ -269,19 +310,74 @@ func (rv *ResourceValidator) validateNodeCapacity(ctx context.Context, pod *core
 		return
 	}
 
-	// Check CPU capacity
+	// Calculate available resources on the node (excluding current pod)
+	availableResources, err := rv.calculateNodeAvailableResources(ctx, node, pod)
+	if err != nil {
+		result.AddWarning(fmt.Sprintf("Could not calculate available resources on node %s: %v", pod.Spec.NodeName, err))
+		// Fall back to simple capacity check
+		rv.validateAgainstTotalCapacity(node, resources, result)
+		return
+	}
+
+	// Check if new resources fit within available capacity
 	if resources.Requests != nil {
 		if cpuRequest, ok := resources.Requests[corev1.ResourceCPU]; ok {
-			nodeCPUCapacity := node.Status.Capacity[corev1.ResourceCPU]
-			if cpuRequest.Cmp(nodeCPUCapacity) > 0 {
-				result.AddError(fmt.Sprintf("CPU request %s exceeds node capacity %s", cpuRequest.String(), nodeCPUCapacity.String()))
+			availableCPU := availableResources[corev1.ResourceCPU]
+			if cpuRequest.Cmp(availableCPU) > 0 {
+				result.AddError(fmt.Sprintf("CPU request %s exceeds available node capacity %s (allocatable: %s)",
+					cpuRequest.String(),
+					availableCPU.String(),
+					node.Status.Allocatable[corev1.ResourceCPU].String()))
 			}
 		}
 
 		if memRequest, ok := resources.Requests[corev1.ResourceMemory]; ok {
-			nodeMemCapacity := node.Status.Capacity[corev1.ResourceMemory]
+			availableMemory := availableResources[corev1.ResourceMemory]
+			if memRequest.Cmp(availableMemory) > 0 {
+				result.AddError(fmt.Sprintf("Memory request %s exceeds available node capacity %s (allocatable: %s)",
+					memRequest.String(),
+					availableMemory.String(),
+					node.Status.Allocatable[corev1.ResourceMemory].String()))
+			}
+		}
+	}
+
+	// Also validate limits against allocatable (limits can't exceed allocatable)
+	if resources.Limits != nil {
+		if cpuLimit, ok := resources.Limits[corev1.ResourceCPU]; ok {
+			allocatableCPU := node.Status.Allocatable[corev1.ResourceCPU]
+			if cpuLimit.Cmp(allocatableCPU) > 0 {
+				result.AddError(fmt.Sprintf("CPU limit %s exceeds node allocatable capacity %s",
+					cpuLimit.String(),
+					allocatableCPU.String()))
+			}
+		}
+
+		if memLimit, ok := resources.Limits[corev1.ResourceMemory]; ok {
+			allocatableMemory := node.Status.Allocatable[corev1.ResourceMemory]
+			if memLimit.Cmp(allocatableMemory) > 0 {
+				result.AddError(fmt.Sprintf("Memory limit %s exceeds node allocatable capacity %s",
+					memLimit.String(),
+					allocatableMemory.String()))
+			}
+		}
+	}
+}
+
+// validateAgainstTotalCapacity fallback validation against total capacity
+func (rv *ResourceValidator) validateAgainstTotalCapacity(node *corev1.Node, resources corev1.ResourceRequirements, result *ValidationResult) {
+	if resources.Requests != nil {
+		if cpuRequest, ok := resources.Requests[corev1.ResourceCPU]; ok {
+			nodeCPUCapacity := node.Status.Allocatable[corev1.ResourceCPU]
+			if cpuRequest.Cmp(nodeCPUCapacity) > 0 {
+				result.AddError(fmt.Sprintf("CPU request %s exceeds node allocatable capacity %s", cpuRequest.String(), nodeCPUCapacity.String()))
+			}
+		}
+
+		if memRequest, ok := resources.Requests[corev1.ResourceMemory]; ok {
+			nodeMemCapacity := node.Status.Allocatable[corev1.ResourceMemory]
 			if memRequest.Cmp(nodeMemCapacity) > 0 {
-				result.AddError(fmt.Sprintf("Memory request %s exceeds node capacity %s", memRequest.String(), nodeMemCapacity.String()))
+				result.AddError(fmt.Sprintf("Memory request %s exceeds node allocatable capacity %s", memRequest.String(), nodeMemCapacity.String()))
 			}
 		}
 	}
