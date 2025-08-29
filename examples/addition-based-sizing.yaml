@@ -1,0 +1,200 @@
+# Example: Using both multipliers and additions for resource sizing
+# This demonstrates how to combine percentage-based and fixed-amount resource allocation
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: right-sizer-config-with-additions
+  namespace: right-sizer-system
+data:
+  # Percentage-based scaling with multipliers
+  CPU_REQUEST_MULTIPLIER: "1.2"        # 20% buffer above usage
+  MEMORY_REQUEST_MULTIPLIER: "1.2"     # 20% buffer above usage
+  CPU_LIMIT_MULTIPLIER: "2.0"          # 2x the request
+  MEMORY_LIMIT_MULTIPLIER: "2.0"       # 2x the request
+
+  # Fixed additions for baseline resources
+  CPU_REQUEST_ADDITION: "100"          # Always add 100m CPU (for system processes)
+  MEMORY_REQUEST_ADDITION: "128"       # Always add 128MB (for JVM overhead, caches, etc.)
+  CPU_LIMIT_ADDITION: "200"            # Extra 200m headroom for bursts
+  MEMORY_LIMIT_ADDITION: "256"         # Extra 256MB for temporary spikes
+
+---
+# Example 1: Web Application with baseline requirements
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-app-with-additions
+  labels:
+    app: web-app
+    right-sizer/enabled: "true"
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: web-app
+  template:
+    metadata:
+      labels:
+        app: web-app
+      annotations:
+        right-sizer/mode: "optimize"  # Enable right-sizing
+    spec:
+      containers:
+      - name: web-server
+        image: nginx:latest
+        ports:
+        - containerPort: 80
+        # Initial conservative resources - will be optimized
+        resources:
+          requests:
+            cpu: 500m
+            memory: 512Mi
+          limits:
+            cpu: 1000m
+            memory: 1Gi
+
+---
+# Example 2: Java Application with JVM overhead
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: java-app-with-additions
+  labels:
+    app: java-app
+    right-sizer/enabled: "true"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: java-app
+  template:
+    metadata:
+      labels:
+        app: java-app
+      annotations:
+        right-sizer/mode: "optimize"
+        # Custom additions for this specific workload
+        right-sizer/cpu-request-addition: "200"      # Higher base CPU for JVM
+        right-sizer/memory-request-addition: "512"   # Higher base memory for heap
+    spec:
+      containers:
+      - name: java-service
+        image: openjdk:11-jre
+        env:
+        - name: JAVA_OPTS
+          value: "-Xms512m -Xmx1024m"
+        resources:
+          requests:
+            cpu: 1000m
+            memory: 1Gi
+          limits:
+            cpu: 2000m
+            memory: 2Gi
+
+---
+# Example 3: Batch Job with spike handling
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: batch-processor-with-additions
+  labels:
+    right-sizer/enabled: "true"
+spec:
+  template:
+    metadata:
+      annotations:
+        right-sizer/mode: "optimize"
+        # High additions for batch processing spikes
+        right-sizer/cpu-limit-addition: "500"        # Extra CPU for processing bursts
+        right-sizer/memory-limit-addition: "1024"    # Extra memory for data processing
+    spec:
+      containers:
+      - name: batch-processor
+        image: python:3.9
+        command: ["python", "process.py"]
+        resources:
+          requests:
+            cpu: 500m
+            memory: 512Mi
+          limits:
+            cpu: 2000m
+            memory: 2Gi
+      restartPolicy: OnFailure
+
+---
+# Example 4: Minimal microservice with guaranteed baseline
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: minimal-service-with-baseline
+  labels:
+    app: minimal-service
+    right-sizer/enabled: "true"
+spec:
+  replicas: 5
+  selector:
+    matchLabels:
+      app: minimal-service
+  template:
+    metadata:
+      labels:
+        app: minimal-service
+      annotations:
+        right-sizer/mode: "optimize"
+        # Ensures minimum resources even for low-usage services
+    spec:
+      containers:
+      - name: api-service
+        image: alpine:latest
+        command: ["sleep", "3600"]
+        resources:
+          requests:
+            cpu: 10m      # Very low initial request
+            memory: 32Mi  # Very low initial memory
+          limits:
+            cpu: 100m
+            memory: 128Mi
+
+---
+# Example calculation scenarios:
+#
+# Scenario 1: Low usage application (minimal-service)
+# - Actual CPU usage: 5m
+# - Actual Memory usage: 20MB
+# - Calculated CPU request: (5 × 1.2) + 100 = 106m (baseline ensures adequate resources)
+# - Calculated Memory request: (20 × 1.2) + 128 = 152MB
+# - Calculated CPU limit: (106 × 2.0) + 200 = 412m
+# - Calculated Memory limit: (152 × 2.0) + 256 = 560MB
+#
+# Scenario 2: Medium usage application (web-app)
+# - Actual CPU usage: 200m
+# - Actual Memory usage: 400MB
+# - Calculated CPU request: (200 × 1.2) + 100 = 340m
+# - Calculated Memory request: (400 × 1.2) + 128 = 608MB
+# - Calculated CPU limit: (340 × 2.0) + 200 = 880m
+# - Calculated Memory limit: (608 × 2.0) + 256 = 1472MB
+#
+# Scenario 3: High usage application (java-app with custom additions)
+# - Actual CPU usage: 800m
+# - Actual Memory usage: 2000MB
+# - With custom additions: CPU_REQUEST_ADDITION=200, MEMORY_REQUEST_ADDITION=512
+# - Calculated CPU request: (800 × 1.2) + 200 = 1160m
+# - Calculated Memory request: (2000 × 1.2) + 512 = 2912MB
+# - Calculated CPU limit: (1160 × 2.0) + 200 = 2520m
+# - Calculated Memory limit: (2912 × 2.0) + 256 = 6080MB
+#
+# Benefits of combining multipliers and additions:
+# 1. Multipliers provide percentage-based scaling for varying workloads
+# 2. Additions ensure minimum baseline resources for system overhead
+# 3. Prevents under-provisioning for low-usage applications
+# 4. Provides predictable overhead for runtime requirements (JVM, interpreters, etc.)
+# 5. Allows fine-tuning per workload type without code changes
+# 6. Supports both elastic scaling (multipliers) and fixed overhead (additions)
+#
+# Use Cases:
+# - JVM applications: Use memory additions for heap overhead
+# - Python/Ruby apps: Use CPU additions for interpreter overhead
+# - Databases: Use both CPU and memory additions for connection pools
+# - Web servers: Use CPU additions for request handling overhead
+# - Batch jobs: Use high limit additions for burst processing

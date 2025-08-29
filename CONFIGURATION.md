@@ -48,9 +48,43 @@ The right-sizer operator supports comprehensive configuration through environmen
 | Variable | Default | Description | Example |
 |----------|---------|-------------|---------|
 | `CPU_REQUEST_MULTIPLIER` | `1.2` | Multiplier applied to actual CPU usage to calculate CPU requests | `1.5` = 50% buffer |
+| `CPU_REQUEST_ADDITION` | `0` | Fixed CPU amount (millicores) to add to usage after multiplier for requests | `100` = add 100m to each request |
 | `MEMORY_REQUEST_MULTIPLIER` | `1.2` | Multiplier applied to actual memory usage to calculate memory requests | `1.3` = 30% buffer |
+| `MEMORY_REQUEST_ADDITION` | `0` | Fixed memory amount (MB) to add to usage after multiplier for requests | `256` = add 256MB to each request |
 | `CPU_LIMIT_MULTIPLIER` | `2.0` | Multiplier applied to CPU requests to calculate CPU limits | `3.0` = 3x burst capacity |
+| `CPU_LIMIT_ADDITION` | `0` | Fixed CPU amount (millicores) to add to requests after multiplier for limits | `500` = add 500m to each limit |
 | `MEMORY_LIMIT_MULTIPLIER` | `2.0` | Multiplier applied to memory requests to calculate memory limits | `2.5` = 2.5x burst capacity |
+| `MEMORY_LIMIT_ADDITION` | `0` | Fixed memory amount (MB) to add to requests after multiplier for limits | `512` = add 512MB to each limit |
+
+### Resource Calculation Formula
+
+The right-sizer calculates resources using both multipliers and additions for fine-grained control:
+
+**For Requests:**
+```
+CPU Request = (Actual CPU Usage × CPU_REQUEST_MULTIPLIER) + CPU_REQUEST_ADDITION
+Memory Request = (Actual Memory Usage × MEMORY_REQUEST_MULTIPLIER) + MEMORY_REQUEST_ADDITION
+```
+
+**For Limits:**
+```
+CPU Limit = (CPU Request × CPU_LIMIT_MULTIPLIER) + CPU_LIMIT_ADDITION
+Memory Limit = (Memory Request × MEMORY_LIMIT_MULTIPLIER) + MEMORY_LIMIT_ADDITION
+```
+
+**Example Calculation:**
+- Actual CPU usage: 100m
+- Actual Memory usage: 500MB
+- Settings: CPU_REQUEST_MULTIPLIER=1.2, CPU_REQUEST_ADDITION=50, CPU_LIMIT_MULTIPLIER=2.0, CPU_LIMIT_ADDITION=100
+
+Results:
+- CPU Request = (100 × 1.2) + 50 = 170m
+- CPU Limit = (170 × 2.0) + 100 = 440m
+
+This dual approach allows you to:
+- Use multipliers for percentage-based buffers (e.g., 20% overhead)
+- Use additions for fixed overhead (e.g., always add 100m CPU for background tasks)
+- Combine both for sophisticated sizing strategies
 
 ### Namespace Filtering
 
@@ -199,9 +233,13 @@ helm install right-sizer ./helm \
   --set resizeInterval=1m \
   --set logLevel=info \
   --set config.cpuRequestMultiplier=1.5 \
+  --set config.cpuRequestAddition=100 \
   --set config.memoryRequestMultiplier=1.3 \
+  --set config.memoryRequestAddition=256 \
   --set config.cpuLimitMultiplier=2.5 \
+  --set config.cpuLimitAddition=200 \
   --set config.memoryLimitMultiplier=2.0 \
+  --set config.memoryLimitAddition=512 \
   --set config.maxCpuLimit=8000 \
   --set config.maxMemoryLimit=16384
 ```
@@ -214,9 +252,13 @@ resizeInterval: 1m
 logLevel: info
 config:
   cpuRequestMultiplier: 1.5
+  cpuRequestAddition: 100      # Add 100m base CPU
   memoryRequestMultiplier: 1.3
+  memoryRequestAddition: 256    # Add 256MB base memory
   cpuLimitMultiplier: 2.5
+  cpuLimitAddition: 200         # Add 200m to limits
   memoryLimitMultiplier: 2.0
+  memoryLimitAddition: 512      # Add 512MB to limits
   maxCpuLimit: 8000
   maxMemoryLimit: 16384
   minCpuRequest: 50
@@ -235,9 +277,13 @@ High stability with generous resource allocation and comprehensive monitoring:
 ```yaml
 # Resource multipliers - generous for stability
 CPU_REQUEST_MULTIPLIER: "1.5"
+CPU_REQUEST_ADDITION: "100"      # Base 100m for system overhead
 MEMORY_REQUEST_MULTIPLIER: "1.4"
+MEMORY_REQUEST_ADDITION: "256"    # Base 256MB for runtime
 CPU_LIMIT_MULTIPLIER: "2.5"
+CPU_LIMIT_ADDITION: "200"        # Extra headroom for spikes
 MEMORY_LIMIT_MULTIPLIER: "2.0"
+MEMORY_LIMIT_ADDITION: "512"     # Extra memory buffer
 
 # Boundaries - higher minimums, reasonable maximums
 MIN_CPU_REQUEST: "50"
@@ -267,9 +313,13 @@ Minimal resource allocation for development/testing environments:
 ```yaml
 # Resource multipliers - minimal overhead
 CPU_REQUEST_MULTIPLIER: "1.1"
+CPU_REQUEST_ADDITION: "0"        # No additional CPU
 MEMORY_REQUEST_MULTIPLIER: "1.1"
+MEMORY_REQUEST_ADDITION: "0"      # No additional memory
 CPU_LIMIT_MULTIPLIER: "1.5"
+CPU_LIMIT_ADDITION: "0"          # Keep costs minimal
 MEMORY_LIMIT_MULTIPLIER: "1.5"
+MEMORY_LIMIT_ADDITION: "0"       # Keep costs minimal
 
 # Boundaries - lower caps for cost control
 MAX_CPU_LIMIT: "2000"    # 2 cores max

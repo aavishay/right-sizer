@@ -35,9 +35,17 @@ config:
   cpuRequestMultiplier: 1.2 # Multiply CPU usage by this to get request
   memoryRequestMultiplier: 1.2 # Multiply memory usage by this to get request
 
+  # Additions for calculating requests from usage
+  cpuRequestAddition: 0 # Add this fixed amount (millicores) to CPU usage for request
+  memoryRequestAddition: 0 # Add this fixed amount (MB) to memory usage for request
+
   # Multipliers for calculating limits from requests
   cpuLimitMultiplier: 2.0 # Multiply CPU request by this to get limit
   memoryLimitMultiplier: 2.0 # Multiply memory request by this to get limit
+
+  # Additions for calculating limits from requests
+  cpuLimitAddition: 0 # Add this fixed amount (millicores) to CPU request for limit
+  memoryLimitAddition: 0 # Add this fixed amount (MB) to memory request for limit
 
   # Maximum caps for resources
   maxCpuLimit: 4000 # Maximum CPU limit in millicores (4 cores)

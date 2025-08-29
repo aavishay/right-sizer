@@ -315,9 +315,9 @@ func (r *NonDisruptiveRightSizer) getResourceRecommendation(ctx context.Context,
 func (r *NonDisruptiveRightSizer) calculateOptimalResources(usage metrics.Metrics) corev1.ResourceRequirements {
 	cfg := config.Get()
 
-	// Add buffer for requests using configurable multipliers
-	cpuRequest := int64(usage.CPUMilli * cfg.CPURequestMultiplier)
-	memRequest := int64(usage.MemMB * cfg.MemoryRequestMultiplier)
+	// Add buffer for requests using configurable multipliers and additions
+	cpuRequest := int64(usage.CPUMilli*cfg.CPURequestMultiplier) + cfg.CPURequestAddition
+	memRequest := int64(usage.MemMB*cfg.MemoryRequestMultiplier) + cfg.MemoryRequestAddition
 
 	// Ensure minimum values
 	if cpuRequest < cfg.MinCPURequest {
@@ -327,11 +327,11 @@ func (r *NonDisruptiveRightSizer) calculateOptimalResources(usage metrics.Metric
 		memRequest = cfg.MinMemoryRequest
 	}
 
-	// Set limits using configurable multipliers
-	cpuLimit := int64(float64(cpuRequest) * cfg.CPULimitMultiplier)
-	memLimit := int64(float64(memRequest) * cfg.MemoryLimitMultiplier)
+	// Calculate limits based on requests with multipliers and additions
+	cpuLimit := int64(float64(cpuRequest)*cfg.CPULimitMultiplier) + cfg.CPULimitAddition
+	memLimit := int64(float64(memRequest)*cfg.MemoryLimitMultiplier) + cfg.MemoryLimitAddition
 
-	// Cap at configurable maximums
+	// Apply maximum caps
 	if cpuLimit > cfg.MaxCPULimit {
 		cpuLimit = cfg.MaxCPULimit
 	}

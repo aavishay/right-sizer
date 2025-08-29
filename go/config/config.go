@@ -30,9 +30,17 @@ type Config struct {
 	CPURequestMultiplier    float64
 	MemoryRequestMultiplier float64
 
+	// Request additions - fixed amount to add to usage for requests
+	CPURequestAddition    int64 // in millicores
+	MemoryRequestAddition int64 // in MB
+
 	// Limit multipliers - how much to multiply requests to get limits
 	CPULimitMultiplier    float64
 	MemoryLimitMultiplier float64
+
+	// Limit additions - fixed amount to add to requests for limits
+	CPULimitAddition    int64 // in millicores
+	MemoryLimitAddition int64 // in MB
 
 	// Maximum caps for resources
 	MaxCPULimit    int64 // in millicores
@@ -73,8 +81,12 @@ func Load() *Config {
 		// Default values
 		CPURequestMultiplier:    1.2,
 		MemoryRequestMultiplier: 1.2,
+		CPURequestAddition:      0,
+		MemoryRequestAddition:   0,
 		CPULimitMultiplier:      2.0,
 		MemoryLimitMultiplier:   2.0,
+		CPULimitAddition:        0,
+		MemoryLimitAddition:     0,
 		MaxCPULimit:             4000,
 		MaxMemoryLimit:          8192,
 		MinCPURequest:           10,
@@ -112,6 +124,24 @@ func Load() *Config {
 		}
 	}
 
+	if val := os.Getenv("CPU_REQUEST_ADDITION"); val != "" {
+		if i, err := strconv.ParseInt(val, 10, 64); err == nil {
+			cfg.CPURequestAddition = i
+			log.Printf("CPU_REQUEST_ADDITION set to: %d millicores", i)
+		} else {
+			log.Printf("Warning: Invalid CPU_REQUEST_ADDITION value: %s", val)
+		}
+	}
+
+	if val := os.Getenv("MEMORY_REQUEST_ADDITION"); val != "" {
+		if i, err := strconv.ParseInt(val, 10, 64); err == nil {
+			cfg.MemoryRequestAddition = i
+			log.Printf("MEMORY_REQUEST_ADDITION set to: %d MB", i)
+		} else {
+			log.Printf("Warning: Invalid MEMORY_REQUEST_ADDITION value: %s", val)
+		}
+	}
+
 	if val := os.Getenv("CPU_LIMIT_MULTIPLIER"); val != "" {
 		if f, err := strconv.ParseFloat(val, 64); err == nil {
 			cfg.CPULimitMultiplier = f
@@ -127,6 +157,24 @@ func Load() *Config {
 			log.Printf("MEMORY_LIMIT_MULTIPLIER set to: %.2f", f)
 		} else {
 			log.Printf("Warning: Invalid MEMORY_LIMIT_MULTIPLIER value: %s", val)
+		}
+	}
+
+	if val := os.Getenv("CPU_LIMIT_ADDITION"); val != "" {
+		if i, err := strconv.ParseInt(val, 10, 64); err == nil {
+			cfg.CPULimitAddition = i
+			log.Printf("CPU_LIMIT_ADDITION set to: %d millicores", i)
+		} else {
+			log.Printf("Warning: Invalid CPU_LIMIT_ADDITION value: %s", val)
+		}
+	}
+
+	if val := os.Getenv("MEMORY_LIMIT_ADDITION"); val != "" {
+		if i, err := strconv.ParseInt(val, 10, 64); err == nil {
+			cfg.MemoryLimitAddition = i
+			log.Printf("MEMORY_LIMIT_ADDITION set to: %d MB", i)
+		} else {
+			log.Printf("Warning: Invalid MEMORY_LIMIT_ADDITION value: %s", val)
 		}
 	}
 

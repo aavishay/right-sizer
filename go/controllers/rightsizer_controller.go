@@ -109,10 +109,10 @@ func getOwnerRef(pod *corev1.Pod) *metav1.OwnerReference {
 func calculateResources(usage metrics.Metrics) corev1.ResourceRequirements {
 	cfg := config.Get()
 
-	cpuRequest := int64(usage.CPUMilli * cfg.CPURequestMultiplier)
-	memRequest := int64(usage.MemMB * cfg.MemoryRequestMultiplier)
-	cpuLimit := int64(float64(cpuRequest) * cfg.CPULimitMultiplier)
-	memLimit := int64(float64(memRequest) * cfg.MemoryLimitMultiplier)
+	cpuRequest := int64(usage.CPUMilli*cfg.CPURequestMultiplier) + cfg.CPURequestAddition
+	memRequest := int64(usage.MemMB*cfg.MemoryRequestMultiplier) + cfg.MemoryRequestAddition
+	cpuLimit := int64(float64(cpuRequest)*cfg.CPULimitMultiplier) + cfg.CPULimitAddition
+	memLimit := int64(float64(memRequest)*cfg.MemoryLimitMultiplier) + cfg.MemoryLimitAddition
 
 	return corev1.ResourceRequirements{
 		Requests: corev1.ResourceList{
