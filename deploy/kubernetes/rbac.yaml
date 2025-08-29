@@ -2,72 +2,154 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: right-sizer
-  namespace: default
+  namespace: right-sizer-system
+  labels:
+    app.kubernetes.io/name: right-sizer
+    app.kubernetes.io/instance: right-sizer
+automountServiceAccountToken: true
+
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   name: right-sizer
+  labels:
+    app.kubernetes.io/name: right-sizer
+    app.kubernetes.io/instance: right-sizer
 rules:
-  # Core pod operations
-  - apiGroups: [""]
-    resources: ["pods"]
-    verbs: ["get", "list", "watch", "patch", "update"]
+# Pod operations - core functionality
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "list", "watch", "patch", "update"]
+- apiGroups: [""]
+  resources: ["pods/status"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources: ["pods/resize"]
+  verbs: ["patch", "update"]
 
-  # In-place resize subresource (Kubernetes 1.33+)
-  - apiGroups: [""]
-    resources: ["pods/resize"]
-    verbs: ["patch"]
+# Node information for capacity validation
+- apiGroups: [""]
+  resources: ["nodes"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources: ["nodes/status"]
+  verbs: ["get", "list", "watch"]
 
-  # Pod status and metrics
-  - apiGroups: [""]
-    resources: ["pods/status"]
-    verbs: ["get", "patch", "update"]
+# Resource constraints and quotas
+- apiGroups: [""]
+  resources: ["resourcequotas"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources: ["limitranges"]
+  verbs: ["get", "list", "watch"]
 
-  # Metrics API
-  - apiGroups: ["metrics.k8s.io"]
-    resources: ["pods", "nodes"]
-    verbs: ["get", "list"]
+# Events for audit logging
+- apiGroups: [""]
+  resources: ["events"]
+  verbs: ["create", "patch", "update"]
 
-  # Deployment and StatefulSet management
-  - apiGroups: ["apps"]
-    resources: ["deployments", "statefulsets", "daemonsets", "replicasets"]
-    verbs: ["get", "list", "watch", "patch", "update"]
+# ConfigMaps for policy configuration
+- apiGroups: [""]
+  resources: ["configmaps"]
+  verbs: ["get", "list", "watch"]
 
-  # Events for logging resize operations
-  - apiGroups: [""]
-    resources: ["events"]
-    verbs: ["create", "patch"]
+# Namespaces for filtering
+- apiGroups: [""]
+  resources: ["namespaces"]
+  verbs: ["get", "list", "watch"]
 
-  # ConfigMaps and Secrets for configuration
-  - apiGroups: [""]
-    resources: ["configmaps", "secrets"]
-    verbs: ["get", "list", "watch"]
+# Workload controllers for context
+- apiGroups: ["apps"]
+  resources: ["deployments", "replicasets", "statefulsets", "daemonsets"]
+  verbs: ["get", "list", "watch", "patch", "update"]
+- apiGroups: ["batch"]
+  resources: ["jobs", "cronjobs"]
+  verbs: ["get", "list", "watch"]
 
-  # Namespaces for multi-namespace support
-  - apiGroups: [""]
-    resources: ["namespaces"]
-    verbs: ["get", "list", "watch"]
+# Metrics access
+- apiGroups: ["metrics.k8s.io"]
+  resources: ["pods", "nodes"]
+  verbs: ["get", "list"]
 
-  # HorizontalPodAutoscalers to avoid conflicts
-  - apiGroups: ["autoscaling"]
-    resources: ["horizontalpodautoscalers"]
-    verbs: ["get", "list", "watch"]
+# Custom metrics (if available)
+- apiGroups: ["custom.metrics.k8s.io", "external.metrics.k8s.io"]
+  resources: ["*"]
+  verbs: ["get", "list"]
 
-  # VerticalPodAutoscalers to avoid conflicts (if VPA is installed)
-  - apiGroups: ["autoscaling.k8s.io"]
-    resources: ["verticalpodautoscalers"]
-    verbs: ["get", "list", "watch"]
+# Admission controller webhooks (if enabled)
+- apiGroups: ["admissionregistration.k8s.io"]
+  resources: ["validatingadmissionwebhooks", "mutatingadmissionwebhooks"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+# Service access for admission webhooks
+- apiGroups: [""]
+  resources: ["services"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources: ["endpoints"]
+  verbs: ["get", "list", "watch"]
+
+# Secrets for TLS certificates (admission controller)
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["get", "list", "watch"]
+
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
   name: right-sizer
+  labels:
+    app.kubernetes.io/name: right-sizer
+    app.kubernetes.io/instance: right-sizer
 roleRef:
+  apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
   name: right-sizer
-  apiGroup: rbac.authorization.k8s.io
 subjects:
-  - kind: ServiceAccount
-    name: right-sizer
-    namespace: default
+- kind: ServiceAccount
+  name: right-sizer
+  namespace: right-sizer-system
+
+---
+# Role for namespace-specific operations
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: right-sizer-namespace
+  namespace: right-sizer-system
+  labels:
+    app.kubernetes.io/name: right-sizer
+    app.kubernetes.io/instance: right-sizer
+rules:
+# ConfigMaps in operator namespace
+- apiGroups: [""]
+  resources: ["configmaps"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+# Secrets in operator namespace
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+# Events in operator namespace
+- apiGroups: [""]
+  resources: ["events"]
+  verbs: ["create", "patch", "update"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: right-sizer-namespace
+  namespace: right-sizer-system
+  labels:
+    app.kubernetes.io/name: right-sizer
+    app.kubernetes.io/instance: right-sizer
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: right-sizer-namespace
+subjects:
+- kind: ServiceAccount
+  name: right-sizer
+  namespace: right-sizer-system
