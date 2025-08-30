@@ -1,0 +1,710 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.19.0
+  name: rightsizerconfigs.rightsizer.io
+spec:
+  group: rightsizer.io
+  names:
+    kind: RightSizerConfig
+    listKind: RightSizerConfigList
+    plural: rightsizerconfigs
+    shortNames:
+    - rsc
+    singular: rightsizerconfig
+  scope: Cluster
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.enabled
+      name: Enabled
+      type: boolean
+    - jsonPath: .spec.defaultMode
+      name: Mode
+      type: string
+    - jsonPath: .spec.resizeInterval
+      name: Interval
+      type: string
+    - jsonPath: .status.phase
+      name: Status
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          RightSizerConfig is the Schema for the rightsizerconfigs API
+          This is a cluster-scoped resource that configures the global behavior of the right-sizer operator
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: RightSizerConfigSpec defines the desired state of RightSizerConfig
+            properties:
+              defaultMode:
+                default: balanced
+                description: DefaultMode sets the default sizing mode when not specified
+                  in policies
+                enum:
+                - aggressive
+                - balanced
+                - conservative
+                - custom
+                type: string
+              defaultResourceStrategy:
+                description: DefaultResourceStrategy defines default resource calculation
+                  strategy
+                properties:
+                  cpu:
+                    description: CPU default strategy
+                    properties:
+                      limitAddition:
+                        default: 0
+                        description: LimitAddition default in millicores
+                        format: int64
+                        minimum: 0
+                        type: integer
+                      limitMultiplier:
+                        default: 2
+                        description: LimitMultiplier default for CPU limits
+                        maximum: 10
+                        minimum: 0.1
+                        type: number
+                      maxLimit:
+                        default: 4000
+                        description: MaxLimit default in millicores
+                        format: int64
+                        minimum: 0
+                        type: integer
+                      minRequest:
+                        default: 10
+                        description: MinRequest default in millicores
+                        format: int64
+                        minimum: 0
+                        type: integer
+                      requestAddition:
+                        default: 0
+                        description: RequestAddition default in millicores
+                        format: int64
+                        minimum: 0
+                        type: integer
+                      requestMultiplier:
+                        default: 1.2
+                        description: RequestMultiplier default for CPU requests
+                        maximum: 10
+                        minimum: 0.1
+                        type: number
+                    type: object
+                  historyWindow:
+                    default: 7d
+                    description: HistoryWindow default for how much historical data
+                      to consider
+                    type: string
+                  memory:
+                    description: Memory default strategy
+                    properties:
+                      limitAddition:
+                        default: 0
+                        description: LimitAddition default in MB
+                        format: int64
+                        minimum: 0
+                        type: integer
+                      limitMultiplier:
+                        default: 2
+                        description: LimitMultiplier default for memory limits
+                        maximum: 10
+                        minimum: 0.1
+                        type: number
+                      maxLimit:
+                        default: 8192
+                        description: MaxLimit default in MB
+                        format: int64
+                        minimum: 0
+                        type: integer
+                      minRequest:
+                        default: 64
+                        description: MinRequest default in MB
+                        format: int64
+                        minimum: 0
+                        type: integer
+                      requestAddition:
+                        default: 0
+                        description: RequestAddition default in MB
+                        format: int64
+                        minimum: 0
+                        type: integer
+                      requestMultiplier:
+                        default: 1.2
+                        description: RequestMultiplier default for memory requests
+                        maximum: 10
+                        minimum: 0.1
+                        type: number
+                    type: object
+                  percentile:
+                    default: 95
+                    description: Percentile default to use for resource calculations
+                    enum:
+                    - 50
+                    - 90
+                    - 95
+                    - 99
+                    format: int32
+                    type: integer
+                  updateMode:
+                    default: rolling
+                    description: UpdateMode default for how updates should be applied
+                    enum:
+                    - immediate
+                    - rolling
+                    - scheduled
+                    type: string
+                type: object
+              dryRun:
+                default: false
+                description: DryRun enables global dry-run mode
+                type: boolean
+              enabled:
+                default: true
+                description: Enabled indicates if the right-sizer operator is enabled
+                  globally
+                type: boolean
+              featureGates:
+                additionalProperties:
+                  type: boolean
+                description: FeatureGates enables/disables specific features
+                type: object
+              globalConstraints:
+                description: GlobalConstraints defines global resource constraints
+                properties:
+                  cooldownPeriod:
+                    default: 5m
+                    description: CooldownPeriod global cooldown between adjustments
+                    type: string
+                  maxChangePercentage:
+                    default: 50
+                    description: MaxChangePercentage global limit for resource changes
+                    format: int32
+                    maximum: 100
+                    minimum: 0
+                    type: integer
+                  maxConcurrentResizes:
+                    default: 10
+                    description: MaxConcurrentResizes limits concurrent resize operations
+                    format: int32
+                    minimum: 1
+                    type: integer
+                  maxRestartsPerHour:
+                    default: 5
+                    description: MaxRestartsPerHour global limit for pod restarts
+                    format: int32
+                    minimum: 0
+                    type: integer
+                  minChangeThreshold:
+                    default: 5
+                    description: MinChangeThreshold global minimum change threshold
+                    format: int32
+                    maximum: 100
+                    minimum: 0
+                    type: integer
+                  respectHPA:
+                    default: true
+                    description: RespectHPA globally ensures HorizontalPodAutoscalers
+                      are not conflicted
+                    type: boolean
+                  respectPDB:
+                    default: true
+                    description: RespectPDB globally ensures PodDisruptionBudgets
+                      are respected
+                    type: boolean
+                  respectVPA:
+                    default: true
+                    description: RespectVPA globally ensures VerticalPodAutoscalers
+                      are not conflicted
+                    type: boolean
+                type: object
+              metricsConfig:
+                description: MetricsConfig configures metrics collection
+                properties:
+                  customQueries:
+                    additionalProperties:
+                      type: string
+                    description: CustomQueries for custom metrics
+                    type: object
+                  enableProfiling:
+                    default: false
+                    description: EnableProfiling enables CPU and memory profiling
+                    type: boolean
+                  metricsServerEndpoint:
+                    description: MetricsServerEndpoint for custom metrics server
+                    type: string
+                  prometheusEndpoint:
+                    description: PrometheusEndpoint for Prometheus metrics
+                    type: string
+                  provider:
+                    default: metrics-server
+                    description: Provider defines the metrics provider to use
+                    enum:
+                    - metrics-server
+                    - prometheus
+                    - custom
+                    type: string
+                  retentionPeriod:
+                    default: 30d
+                    description: RetentionPeriod for metrics history
+                    type: string
+                  scrapeInterval:
+                    default: 30s
+                    description: ScrapeInterval for metrics collection
+                    type: string
+                type: object
+              namespaceConfig:
+                description: NamespaceConfig defines global namespace inclusion/exclusion
+                properties:
+                  excludeNamespaces:
+                    description: ExcludeNamespaces to exclude from monitoring
+                    items:
+                      type: string
+                    type: array
+                  includeNamespaces:
+                    description: IncludeNamespaces to monitor (empty means all)
+                    items:
+                      type: string
+                    type: array
+                  namespaceLabels:
+                    additionalProperties:
+                      type: string
+                    description: NamespaceLabels to select namespaces by labels
+                    type: object
+                  systemNamespaces:
+                    description: SystemNamespaces that should never be modified
+                    items:
+                      type: string
+                    type: array
+                type: object
+              notificationConfig:
+                description: NotificationConfig configures notifications
+                properties:
+                  emailConfig:
+                    description: EmailConfig for email notifications
+                    properties:
+                      authSecretRef:
+                        description: AuthSecretRef for SMTP authentication
+                        properties:
+                          key:
+                            description: The key of the secret to select from.  Must
+                              be a valid secret key.
+                            type: string
+                          name:
+                            default: ""
+                            description: |-
+                              Name of the referent.
+                              This field is effectively required, but due to backwards compatibility is
+                              allowed to be empty. Instances of this type with an empty value here are
+                              almost certainly wrong.
+                              More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                            type: string
+                          optional:
+                            description: Specify whether the Secret or its key must
+                              be defined
+                            type: boolean
+                        required:
+                        - key
+                        type: object
+                        x-kubernetes-map-type: atomic
+                      from:
+                        description: From email address
+                        type: string
+                      smtpPort:
+                        default: 587
+                        description: SMTPPort for SMTP server
+                        format: int32
+                        type: integer
+                      smtpServer:
+                        description: SMTPServer address
+                        type: string
+                      to:
+                        description: To email addresses
+                        items:
+                          type: string
+                        type: array
+                      useTLS:
+                        default: true
+                        description: UseTLS for SMTP connection
+                        type: boolean
+                    required:
+                    - from
+                    - smtpServer
+                    - to
+                    type: object
+                  enableNotifications:
+                    default: false
+                    description: EnableNotifications globally enables notifications
+                    type: boolean
+                  notificationLevel:
+                    default: warning
+                    description: NotificationLevel minimum level for notifications
+                    enum:
+                    - debug
+                    - info
+                    - warning
+                    - error
+                    type: string
+                  slackConfig:
+                    description: SlackConfig for Slack notifications
+                    properties:
+                      channel:
+                        description: Channel to send notifications to
+                        type: string
+                      iconEmoji:
+                        default: ':robot_face:'
+                        description: IconEmoji for bot avatar
+                        type: string
+                      username:
+                        default: RightSizer
+                        description: Username for bot
+                        type: string
+                      webhookURL:
+                        description: WebhookURL for Slack webhook
+                        type: string
+                    required:
+                    - webhookURL
+                    type: object
+                  webhookConfigs:
+                    description: WebhookConfigs for generic webhook notifications
+                    items:
+                      description: WebhookNotificationConfig defines webhook notification
+                        settings
+                      properties:
+                        headers:
+                          additionalProperties:
+                            type: string
+                          description: Headers to include in requests
+                          type: object
+                        method:
+                          default: POST
+                          description: Method HTTP method to use
+                          enum:
+                          - GET
+                          - POST
+                          - PUT
+                          type: string
+                        name:
+                          description: Name of this webhook configuration
+                          type: string
+                        retryCount:
+                          default: 3
+                          description: RetryCount for failed requests
+                          format: int32
+                          type: integer
+                        timeout:
+                          default: 30s
+                          description: Timeout for webhook requests
+                          type: string
+                        url:
+                          description: URL of the webhook endpoint
+                          type: string
+                      required:
+                      - name
+                      - url
+                      type: object
+                    type: array
+                type: object
+              observabilityConfig:
+                description: ObservabilityConfig configures observability features
+                properties:
+                  auditLogPath:
+                    default: /var/log/right-sizer/audit.log
+                    description: AuditLogPath for audit log files
+                    type: string
+                  enableAuditLog:
+                    default: true
+                    description: EnableAuditLog enables audit logging
+                    type: boolean
+                  enableEvents:
+                    default: true
+                    description: EnableEvents enables Kubernetes event generation
+                    type: boolean
+                  enableMetricsExport:
+                    default: true
+                    description: EnableMetricsExport enables Prometheus metrics export
+                    type: boolean
+                  enableTracing:
+                    default: false
+                    description: EnableTracing enables distributed tracing
+                    type: boolean
+                  logFormat:
+                    default: json
+                    description: LogFormat for log output
+                    enum:
+                    - json
+                    - text
+                    type: string
+                  logLevel:
+                    default: info
+                    description: LogLevel for the operator
+                    enum:
+                    - debug
+                    - info
+                    - warn
+                    - error
+                    type: string
+                  metricsPort:
+                    default: 9090
+                    description: MetricsPort for Prometheus metrics
+                    format: int32
+                    type: integer
+                  tracingEndpoint:
+                    description: TracingEndpoint for tracing collector
+                    type: string
+                type: object
+              operatorConfig:
+                description: OperatorConfig configures operator behavior
+                properties:
+                  circuitBreakerThreshold:
+                    default: 5
+                    description: CircuitBreakerThreshold for circuit breaker
+                    format: int32
+                    minimum: 1
+                    type: integer
+                  enableCircuitBreaker:
+                    default: true
+                    description: EnableCircuitBreaker enables circuit breaker pattern
+                    type: boolean
+                  leaderElection:
+                    default: true
+                    description: LeaderElection enables leader election for HA
+                    type: boolean
+                  leaderElectionID:
+                    default: right-sizer-leader
+                    description: LeaderElectionID for leader election
+                    type: string
+                  leaderElectionNamespace:
+                    default: right-sizer-system
+                    description: LeaderElectionNamespace for leader election
+                    type: string
+                  maxRetries:
+                    default: 3
+                    description: MaxRetries for failed operations
+                    format: int32
+                    minimum: 0
+                    type: integer
+                  reconcileInterval:
+                    default: 10m
+                    description: ReconcileInterval for reconciliation loop
+                    type: string
+                  retryInterval:
+                    default: 5s
+                    description: RetryInterval between retry attempts
+                    type: string
+                  workerThreads:
+                    default: 5
+                    description: WorkerThreads for concurrent processing
+                    format: int32
+                    maximum: 50
+                    minimum: 1
+                    type: integer
+                type: object
+              resizeInterval:
+                default: 1m
+                description: ResizeInterval defines how often to check and resize
+                  resources globally
+                type: string
+              securityConfig:
+                description: SecurityConfig configures security features
+                properties:
+                  admissionWebhookPort:
+                    default: 8443
+                    description: AdmissionWebhookPort for admission webhook
+                    format: int32
+                    type: integer
+                  annotationKey:
+                    default: right-sizer.io/enabled
+                    description: AnnotationKey to look for when RequireAnnotation
+                      is true
+                    type: string
+                  enableAdmissionController:
+                    default: false
+                    description: EnableAdmissionController enables admission webhook
+                    type: boolean
+                  enableMutatingWebhook:
+                    default: false
+                    description: EnableMutatingWebhook enables mutating admission
+                      webhook
+                    type: boolean
+                  enableValidatingWebhook:
+                    default: true
+                    description: EnableValidatingWebhook enables validating admission
+                      webhook
+                    type: boolean
+                  requireAnnotation:
+                    default: false
+                    description: RequireAnnotation requires explicit annotation for
+                      resizing
+                    type: boolean
+                  tlsConfig:
+                    description: TLSConfig for webhook TLS configuration
+                    properties:
+                      autoGenerate:
+                        default: true
+                        description: AutoGenerate certificates if not provided
+                        type: boolean
+                      caPath:
+                        description: CAPath to CA certificate file
+                        type: string
+                      certPath:
+                        default: /etc/certs/tls.crt
+                        description: CertPath to TLS certificate file
+                        type: string
+                      certSecretName:
+                        description: CertSecretName containing TLS certificate
+                        type: string
+                      keyPath:
+                        default: /etc/certs/tls.key
+                        description: KeyPath to TLS key file
+                        type: string
+                    type: object
+                type: object
+            type: object
+          status:
+            description: RightSizerConfigStatus defines the observed state of RightSizerConfig
+            properties:
+              activePolicies:
+                description: ActivePolicies count of active policies
+                format: int32
+                type: integer
+              conditions:
+                description: Conditions represent the latest available observations
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              lastAppliedTime:
+                description: LastAppliedTime when the configuration was last applied
+                format: date-time
+                type: string
+              message:
+                description: Message provides additional status information
+                type: string
+              observedGeneration:
+                description: ObservedGeneration for tracking spec changes
+                format: int64
+                type: integer
+              operatorVersion:
+                description: OperatorVersion of the running operator
+                type: string
+              phase:
+                description: Phase of the configuration (Pending, Active, Failed)
+                type: string
+              systemHealth:
+                description: SystemHealth provides system health status
+                properties:
+                  errors:
+                    description: Errors current error count
+                    format: int32
+                    type: integer
+                  isLeader:
+                    description: IsLeader indicates if this instance is the leader
+                    type: boolean
+                  lastHealthCheck:
+                    description: LastHealthCheck timestamp
+                    format: date-time
+                    type: string
+                  leaderElectionActive:
+                    description: LeaderElectionActive indicates if leader election
+                      is active
+                    type: boolean
+                  metricsProviderHealthy:
+                    description: MetricsProviderHealthy indicates metrics provider
+                      health
+                    type: boolean
+                  warnings:
+                    description: Warnings current warning count
+                    format: int32
+                    type: integer
+                  webhookHealthy:
+                    description: WebhookHealthy indicates webhook health
+                    type: boolean
+                type: object
+              totalResourcesMonitored:
+                description: TotalResourcesMonitored being monitored
+                format: int32
+                type: integer
+              totalResourcesResized:
+                description: TotalResourcesResized that have been resized
+                format: int32
+                type: integer
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

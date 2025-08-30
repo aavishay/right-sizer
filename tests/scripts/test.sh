@@ -247,7 +247,7 @@ run_integration_tests() {
   export INTEGRATION_TESTS=true
 
   # Run integration tests
-  if go test ./test/... "${test_args[@]}"; then
+  if go test ./tests/... "${test_args[@]}"; then
     cd "$ROOT_DIR"
     log_success "Integration tests passed"
   else

@@ -17,15 +17,16 @@ package config
 
 import (
 	"fmt"
-	"log"
-	"os"
-	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
 // Config holds all configuration for resource sizing
+// This configuration is now loaded from CRDs instead of environment variables
 type Config struct {
+	mu sync.RWMutex
+
 	// Request multipliers - how much to multiply usage to get requests
 	CPURequestMultiplier    float64
 	MemoryRequestMultiplier float64
@@ -62,23 +63,36 @@ type Config struct {
 	SafetyThreshold float64       // Safety threshold for resource changes (0-1)
 
 	// Namespace filters
-	NamespaceInclude []string // Namespaces to include (from KUBE_NAMESPACE_INCLUDE)
-	NamespaceExclude []string // Namespaces to exclude (from KUBE_NAMESPACE_EXCLUDE)
+	NamespaceInclude []string // Namespaces to include
+	NamespaceExclude []string // Namespaces to exclude
 
 	// Advanced features
-	PolicyBasedSizing   bool     // Enable policy-based sizing rules
 	HistoryDays         int      // Days of history to keep for trend analysis
 	CustomMetrics       []string // Custom metrics to consider
 	AdmissionController bool     // Enable admission controller for validation
+
+	// Metrics provider configuration
+	MetricsProvider       string // "metrics-server" or "prometheus"
+	PrometheusURL         string // URL for Prometheus if used
+	MetricsServerEndpoint string // Endpoint for metrics server
+
+	// Feature flags
+	EnableInPlaceResize bool // Enable in-place pod resizing (Kubernetes 1.33+)
+
+	// Configuration source tracking
+	ConfigSource string // "default" or "crd"
 }
 
-// Global config instance
-var Global *Config
+// Global config instance with thread-safe access
+var (
+	Global     *Config
+	globalLock sync.RWMutex
+)
 
-// Load initializes the configuration from environment variables
-func Load() *Config {
-	cfg := &Config{
-		// Default values
+// GetDefaults returns a new Config with default values
+func GetDefaults() *Config {
+	return &Config{
+		// Default resource sizing values
 		CPURequestMultiplier:    1.2,
 		MemoryRequestMultiplier: 1.2,
 		CPURequestAddition:      0,
@@ -91,266 +105,181 @@ func Load() *Config {
 		MaxMemoryLimit:          8192,
 		MinCPURequest:           10,
 		MinMemoryRequest:        64,
-		ResizeInterval:          30 * time.Second,
-		LogLevel:                "info",
-		MaxRetries:              3,
-		RetryInterval:           5 * time.Second,
-		MetricsEnabled:          true,
-		MetricsPort:             9090,
-		AuditEnabled:            true,
-		DryRun:                  false,
-		SafetyThreshold:         0.5, // 50% change threshold
-		PolicyBasedSizing:       false,
-		HistoryDays:             7,
-		AdmissionController:     false,
-	}
 
-	// Load from environment variables with defaults
-	if val := os.Getenv("CPU_REQUEST_MULTIPLIER"); val != "" {
-		if f, err := strconv.ParseFloat(val, 64); err == nil {
-			cfg.CPURequestMultiplier = f
-			log.Printf("CPU_REQUEST_MULTIPLIER set to: %.2f", f)
-		} else {
-			log.Printf("Warning: Invalid CPU_REQUEST_MULTIPLIER value: %s", val)
-		}
-	}
+		// Default operational settings
+		ResizeInterval:  30 * time.Second,
+		LogLevel:        "info",
+		MaxRetries:      3,
+		RetryInterval:   5 * time.Second,
+		MetricsEnabled:  true,
+		MetricsPort:     9090,
+		AuditEnabled:    true,
+		DryRun:          false,
+		SafetyThreshold: 0.5, // 50% change threshold
 
-	if val := os.Getenv("MEMORY_REQUEST_MULTIPLIER"); val != "" {
-		if f, err := strconv.ParseFloat(val, 64); err == nil {
-			cfg.MemoryRequestMultiplier = f
-			log.Printf("MEMORY_REQUEST_MULTIPLIER set to: %.2f", f)
-		} else {
-			log.Printf("Warning: Invalid MEMORY_REQUEST_MULTIPLIER value: %s", val)
-		}
-	}
+		// Default advanced features
+		HistoryDays:         7,
+		AdmissionController: false,
 
-	if val := os.Getenv("CPU_REQUEST_ADDITION"); val != "" {
-		if i, err := strconv.ParseInt(val, 10, 64); err == nil {
-			cfg.CPURequestAddition = i
-			log.Printf("CPU_REQUEST_ADDITION set to: %d millicores", i)
-		} else {
-			log.Printf("Warning: Invalid CPU_REQUEST_ADDITION value: %s", val)
-		}
-	}
+		// Default metrics configuration
+		MetricsProvider:       "metrics-server",
+		MetricsServerEndpoint: "",
+		PrometheusURL:         "http://prometheus:9090",
 
-	if val := os.Getenv("MEMORY_REQUEST_ADDITION"); val != "" {
-		if i, err := strconv.ParseInt(val, 10, 64); err == nil {
-			cfg.MemoryRequestAddition = i
-			log.Printf("MEMORY_REQUEST_ADDITION set to: %d MB", i)
-		} else {
-			log.Printf("Warning: Invalid MEMORY_REQUEST_ADDITION value: %s", val)
-		}
-	}
+		// Default feature flags
+		EnableInPlaceResize: false,
 
-	if val := os.Getenv("CPU_LIMIT_MULTIPLIER"); val != "" {
-		if f, err := strconv.ParseFloat(val, 64); err == nil {
-			cfg.CPULimitMultiplier = f
-			log.Printf("CPU_LIMIT_MULTIPLIER set to: %.2f", f)
-		} else {
-			log.Printf("Warning: Invalid CPU_LIMIT_MULTIPLIER value: %s", val)
-		}
+		// Mark as default configuration
+		ConfigSource: "default",
 	}
-
-	if val := os.Getenv("MEMORY_LIMIT_MULTIPLIER"); val != "" {
-		if f, err := strconv.ParseFloat(val, 64); err == nil {
-			cfg.MemoryLimitMultiplier = f
-			log.Printf("MEMORY_LIMIT_MULTIPLIER set to: %.2f", f)
-		} else {
-			log.Printf("Warning: Invalid MEMORY_LIMIT_MULTIPLIER value: %s", val)
-		}
-	}
-
-	if val := os.Getenv("CPU_LIMIT_ADDITION"); val != "" {
-		if i, err := strconv.ParseInt(val, 10, 64); err == nil {
-			cfg.CPULimitAddition = i
-			log.Printf("CPU_LIMIT_ADDITION set to: %d millicores", i)
-		} else {
-			log.Printf("Warning: Invalid CPU_LIMIT_ADDITION value: %s", val)
-		}
-	}
-
-	if val := os.Getenv("MEMORY_LIMIT_ADDITION"); val != "" {
-		if i, err := strconv.ParseInt(val, 10, 64); err == nil {
-			cfg.MemoryLimitAddition = i
-			log.Printf("MEMORY_LIMIT_ADDITION set to: %d MB", i)
-		} else {
-			log.Printf("Warning: Invalid MEMORY_LIMIT_ADDITION value: %s", val)
-		}
-	}
-
-	if val := os.Getenv("MAX_CPU_LIMIT"); val != "" {
-		if i, err := strconv.ParseInt(val, 10, 64); err == nil {
-			cfg.MaxCPULimit = i
-			log.Printf("MAX_CPU_LIMIT set to: %d millicores", i)
-		} else {
-			log.Printf("Warning: Invalid MAX_CPU_LIMIT value: %s", val)
-		}
-	}
-
-	if val := os.Getenv("MAX_MEMORY_LIMIT"); val != "" {
-		if i, err := strconv.ParseInt(val, 10, 64); err == nil {
-			cfg.MaxMemoryLimit = i
-			log.Printf("MAX_MEMORY_LIMIT set to: %d MB", i)
-		} else {
-			log.Printf("Warning: Invalid MAX_MEMORY_LIMIT value: %s", val)
-		}
-	}
-
-	if val := os.Getenv("MIN_CPU_REQUEST"); val != "" {
-		if i, err := strconv.ParseInt(val, 10, 64); err == nil {
-			cfg.MinCPURequest = i
-			log.Printf("MIN_CPU_REQUEST set to: %d millicores", i)
-		} else {
-			log.Printf("Warning: Invalid MIN_CPU_REQUEST value: %s", val)
-		}
-	}
-
-	if val := os.Getenv("MIN_MEMORY_REQUEST"); val != "" {
-		if i, err := strconv.ParseInt(val, 10, 64); err == nil {
-			cfg.MinMemoryRequest = i
-			log.Printf("MIN_MEMORY_REQUEST set to: %d MB", i)
-		} else {
-			log.Printf("Warning: Invalid MIN_MEMORY_REQUEST value: %s", val)
-		}
-	}
-
-	// Load RESIZE_INTERVAL
-	if val := os.Getenv("RESIZE_INTERVAL"); val != "" {
-		if duration, err := time.ParseDuration(val); err == nil {
-			cfg.ResizeInterval = duration
-			log.Printf("RESIZE_INTERVAL set to: %v", duration)
-		} else {
-			// Try parsing as seconds if duration parsing fails
-			if seconds, err := strconv.Atoi(val); err == nil {
-				cfg.ResizeInterval = time.Duration(seconds) * time.Second
-				log.Printf("RESIZE_INTERVAL set to: %v", cfg.ResizeInterval)
-			} else {
-				log.Printf("Warning: Invalid RESIZE_INTERVAL value: %s (use format like '30s', '5m', '1h')", val)
-			}
-		}
-	}
-
-	// Load LOG_LEVEL
-	if val := os.Getenv("LOG_LEVEL"); val != "" {
-		validLevels := map[string]bool{
-			"debug": true,
-			"info":  true,
-			"warn":  true,
-			"error": true,
-		}
-		if validLevels[val] {
-			cfg.LogLevel = val
-		}
-	}
-
-	// Load KUBE_NAMESPACE_INCLUDE (CSV)
-	if val := os.Getenv("KUBE_NAMESPACE_INCLUDE"); val != "" {
-		cfg.NamespaceInclude = parseCSV(val)
-		log.Printf("KUBE_NAMESPACE_INCLUDE set to: %v", cfg.NamespaceInclude)
-	}
-
-	// Load KUBE_NAMESPACE_EXCLUDE (CSV)
-	if val := os.Getenv("KUBE_NAMESPACE_EXCLUDE"); val != "" {
-		cfg.NamespaceExclude = parseCSV(val)
-		log.Printf("KUBE_NAMESPACE_EXCLUDE set to: %v", cfg.NamespaceExclude)
-	}
-
-	// Load MAX_RETRIES
-	if val := os.Getenv("MAX_RETRIES"); val != "" {
-		if i, err := strconv.Atoi(val); err == nil && i > 0 {
-			cfg.MaxRetries = i
-			log.Printf("MAX_RETRIES set to: %d", i)
-		}
-	}
-
-	// Load RETRY_INTERVAL
-	if val := os.Getenv("RETRY_INTERVAL"); val != "" {
-		if duration, err := time.ParseDuration(val); err == nil {
-			cfg.RetryInterval = duration
-			log.Printf("RETRY_INTERVAL set to: %v", duration)
-		}
-	}
-
-	// Load METRICS_ENABLED
-	if val := os.Getenv("METRICS_ENABLED"); val != "" {
-		cfg.MetricsEnabled = strings.ToLower(val) == "true"
-		log.Printf("METRICS_ENABLED set to: %v", cfg.MetricsEnabled)
-	}
-
-	// Load METRICS_PORT
-	if val := os.Getenv("METRICS_PORT"); val != "" {
-		if i, err := strconv.Atoi(val); err == nil && i > 0 && i < 65536 {
-			cfg.MetricsPort = i
-			log.Printf("METRICS_PORT set to: %d", i)
-		}
-	}
-
-	// Load AUDIT_ENABLED
-	if val := os.Getenv("AUDIT_ENABLED"); val != "" {
-		cfg.AuditEnabled = strings.ToLower(val) == "true"
-		log.Printf("AUDIT_ENABLED set to: %v", cfg.AuditEnabled)
-	}
-
-	// Load DRY_RUN
-	if val := os.Getenv("DRY_RUN"); val != "" {
-		cfg.DryRun = strings.ToLower(val) == "true"
-		log.Printf("DRY_RUN set to: %v", cfg.DryRun)
-	}
-
-	// Load SAFETY_THRESHOLD
-	if val := os.Getenv("SAFETY_THRESHOLD"); val != "" {
-		if f, err := strconv.ParseFloat(val, 64); err == nil && f >= 0 && f <= 1 {
-			cfg.SafetyThreshold = f
-			log.Printf("SAFETY_THRESHOLD set to: %.2f", f)
-		}
-	}
-
-	// Load POLICY_BASED_SIZING
-	if val := os.Getenv("POLICY_BASED_SIZING"); val != "" {
-		cfg.PolicyBasedSizing = strings.ToLower(val) == "true"
-		log.Printf("POLICY_BASED_SIZING set to: %v", cfg.PolicyBasedSizing)
-	}
-
-	// Load HISTORY_DAYS
-	if val := os.Getenv("HISTORY_DAYS"); val != "" {
-		if i, err := strconv.Atoi(val); err == nil && i > 0 {
-			cfg.HistoryDays = i
-			log.Printf("HISTORY_DAYS set to: %d", i)
-		}
-	}
-
-	// Load CUSTOM_METRICS (CSV)
-	if val := os.Getenv("CUSTOM_METRICS"); val != "" {
-		cfg.CustomMetrics = parseCSV(val)
-		log.Printf("CUSTOM_METRICS set to: %v", cfg.CustomMetrics)
-	}
-
-	// Load ADMISSION_CONTROLLER
-	if val := os.Getenv("ADMISSION_CONTROLLER"); val != "" {
-		cfg.AdmissionController = strings.ToLower(val) == "true"
-		log.Printf("ADMISSION_CONTROLLER set to: %v", cfg.AdmissionController)
-	}
-
-	// Validate configuration
-	if err := cfg.Validate(); err != nil {
-		log.Printf("⚠️  Configuration validation failed: %v", err)
-		log.Printf("⚠️  Continuing with potentially invalid configuration...")
-	}
-
-	Global = cfg
-	return cfg
 }
 
-// Get returns the global config instance, loading it if necessary
-func Get() *Config {
+// Load initializes the configuration with defaults
+// CRD-based configuration will override these defaults when applied
+func Load() *Config {
+	globalLock.Lock()
+	defer globalLock.Unlock()
+
 	if Global == nil {
-		return Load()
+		Global = GetDefaults()
 	}
 	return Global
 }
 
+// Get returns the global config instance, loading it if necessary
+func Get() *Config {
+	globalLock.RLock()
+	defer globalLock.RUnlock()
+
+	if Global == nil {
+		globalLock.RUnlock()
+		globalLock.Lock()
+		defer globalLock.Unlock()
+		if Global == nil {
+			Global = GetDefaults()
+		}
+		globalLock.RLock()
+	}
+	return Global
+}
+
+// UpdateFromCRD updates the configuration from a CRD specification
+// This is called by the RightSizerConfig controller when a CRD is created or updated
+func (c *Config) UpdateFromCRD(
+	cpuRequestMultiplier, memoryRequestMultiplier float64,
+	cpuRequestAddition, memoryRequestAddition int64,
+	cpuLimitMultiplier, memoryLimitMultiplier float64,
+	cpuLimitAddition, memoryLimitAddition int64,
+	minCPURequest, minMemoryRequest int64,
+	maxCPULimit, maxMemoryLimit int64,
+	resizeInterval time.Duration,
+	dryRun bool,
+	namespaceInclude, namespaceExclude []string,
+	logLevel string,
+	metricsEnabled bool,
+	metricsPort int,
+	auditEnabled bool,
+	maxRetries int,
+	retryInterval time.Duration,
+	metricsProvider, prometheusURL string,
+	enableInPlaceResize bool,
+) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// Update resource configuration
+	if cpuRequestMultiplier > 0 {
+		c.CPURequestMultiplier = cpuRequestMultiplier
+	}
+	if memoryRequestMultiplier > 0 {
+		c.MemoryRequestMultiplier = memoryRequestMultiplier
+	}
+	c.CPURequestAddition = cpuRequestAddition
+	c.MemoryRequestAddition = memoryRequestAddition
+
+	if cpuLimitMultiplier > 0 {
+		c.CPULimitMultiplier = cpuLimitMultiplier
+	}
+	if memoryLimitMultiplier > 0 {
+		c.MemoryLimitMultiplier = memoryLimitMultiplier
+	}
+	c.CPULimitAddition = cpuLimitAddition
+	c.MemoryLimitAddition = memoryLimitAddition
+
+	if minCPURequest > 0 {
+		c.MinCPURequest = minCPURequest
+	}
+	if minMemoryRequest > 0 {
+		c.MinMemoryRequest = minMemoryRequest
+	}
+	if maxCPULimit > 0 {
+		c.MaxCPULimit = maxCPULimit
+	}
+	if maxMemoryLimit > 0 {
+		c.MaxMemoryLimit = maxMemoryLimit
+	}
+
+	// Update operational configuration
+	if resizeInterval > 0 {
+		c.ResizeInterval = resizeInterval
+	}
+	c.DryRun = dryRun
+
+	// Update namespace filters
+	if len(namespaceInclude) > 0 {
+		c.NamespaceInclude = namespaceInclude
+	}
+	if len(namespaceExclude) > 0 {
+		c.NamespaceExclude = namespaceExclude
+	}
+
+	// Update observability settings
+	if logLevel != "" {
+		c.LogLevel = logLevel
+	}
+	c.MetricsEnabled = metricsEnabled
+	if metricsPort > 0 {
+		c.MetricsPort = metricsPort
+	}
+	c.AuditEnabled = auditEnabled
+
+	// Update retry configuration
+	if maxRetries > 0 {
+		c.MaxRetries = maxRetries
+	}
+	if retryInterval > 0 {
+		c.RetryInterval = retryInterval
+	}
+
+	// Update metrics provider configuration
+	if metricsProvider != "" {
+		c.MetricsProvider = metricsProvider
+	}
+	if prometheusURL != "" {
+		c.PrometheusURL = prometheusURL
+	}
+
+	// Update feature flags
+	c.EnableInPlaceResize = enableInPlaceResize
+
+	// Mark configuration as coming from CRD
+	c.ConfigSource = "crd"
+}
+
+// ResetToDefaults resets the configuration to default values
+func (c *Config) ResetToDefaults() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	defaults := GetDefaults()
+	*c = *defaults
+}
+
 // Validate checks the configuration for consistency and validity
 func (c *Config) Validate() error {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
 	var errors []string
 
 	// Validate multipliers
@@ -411,6 +340,14 @@ func (c *Config) Validate() error {
 		errors = append(errors, fmt.Sprintf("invalid log level: %s (must be debug, info, warn, or error)", c.LogLevel))
 	}
 
+	// Validate metrics provider
+	validProviders := map[string]bool{
+		"metrics-server": true, "prometheus": true,
+	}
+	if !validProviders[c.MetricsProvider] {
+		errors = append(errors, fmt.Sprintf("invalid metrics provider: %s (must be metrics-server or prometheus)", c.MetricsProvider))
+	}
+
 	if len(errors) > 0 {
 		return fmt.Errorf("configuration validation errors: %s", strings.Join(errors, "; "))
 	}
@@ -420,6 +357,9 @@ func (c *Config) Validate() error {
 
 // IsNamespaceIncluded checks if a namespace should be processed based on include/exclude filters
 func (c *Config) IsNamespaceIncluded(namespace string) bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
 	// If include list is specified, namespace must be in it
 	if len(c.NamespaceInclude) > 0 {
 		found := false
@@ -448,11 +388,16 @@ func (c *Config) IsNamespaceIncluded(namespace string) bool {
 
 // GetRetryConfig returns retry configuration for operations
 func (c *Config) GetRetryConfig() (maxRetries int, interval time.Duration) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 	return c.MaxRetries, c.RetryInterval
 }
 
 // IsChangeWithinSafetyThreshold checks if a resource change is within safe limits
 func (c *Config) IsChangeWithinSafetyThreshold(current, new int64) bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
 	if current == 0 {
 		return true // No existing resource, any change is allowed
 	}
@@ -465,41 +410,62 @@ func (c *Config) IsChangeWithinSafetyThreshold(current, new int64) bool {
 	return change <= c.SafetyThreshold
 }
 
-// parseCSV splits a comma-separated string into a slice, trimming spaces
-func parseCSV(s string) []string {
-	var out []string
-	for _, v := range splitAndTrim(s, ',') {
-		if v != "" {
-			out = append(out, v)
-		}
+// Clone creates a deep copy of the configuration
+func (c *Config) Clone() *Config {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	clone := &Config{
+		CPURequestMultiplier:    c.CPURequestMultiplier,
+		MemoryRequestMultiplier: c.MemoryRequestMultiplier,
+		CPURequestAddition:      c.CPURequestAddition,
+		MemoryRequestAddition:   c.MemoryRequestAddition,
+		CPULimitMultiplier:      c.CPULimitMultiplier,
+		MemoryLimitMultiplier:   c.MemoryLimitMultiplier,
+		CPULimitAddition:        c.CPULimitAddition,
+		MemoryLimitAddition:     c.MemoryLimitAddition,
+		MaxCPULimit:             c.MaxCPULimit,
+		MaxMemoryLimit:          c.MaxMemoryLimit,
+		MinCPURequest:           c.MinCPURequest,
+		MinMemoryRequest:        c.MinMemoryRequest,
+		ResizeInterval:          c.ResizeInterval,
+		LogLevel:                c.LogLevel,
+		MaxRetries:              c.MaxRetries,
+		RetryInterval:           c.RetryInterval,
+		MetricsEnabled:          c.MetricsEnabled,
+		MetricsPort:             c.MetricsPort,
+		AuditEnabled:            c.AuditEnabled,
+		DryRun:                  c.DryRun,
+		SafetyThreshold:         c.SafetyThreshold,
+		HistoryDays:             c.HistoryDays,
+		AdmissionController:     c.AdmissionController,
+		MetricsProvider:         c.MetricsProvider,
+		PrometheusURL:           c.PrometheusURL,
+		MetricsServerEndpoint:   c.MetricsServerEndpoint,
+		EnableInPlaceResize:     c.EnableInPlaceResize,
+		ConfigSource:            c.ConfigSource,
 	}
-	return out
+
+	// Deep copy slices
+	if len(c.NamespaceInclude) > 0 {
+		clone.NamespaceInclude = make([]string, len(c.NamespaceInclude))
+		copy(clone.NamespaceInclude, c.NamespaceInclude)
+	}
+	if len(c.NamespaceExclude) > 0 {
+		clone.NamespaceExclude = make([]string, len(c.NamespaceExclude))
+		copy(clone.NamespaceExclude, c.NamespaceExclude)
+	}
+	if len(c.CustomMetrics) > 0 {
+		clone.CustomMetrics = make([]string, len(c.CustomMetrics))
+		copy(clone.CustomMetrics, c.CustomMetrics)
+	}
+
+	return clone
 }
 
-// splitAndTrim splits by sep and trims spaces
-func splitAndTrim(s string, sep rune) []string {
-	var res []string
-	field := ""
-	for _, c := range s {
-		if c == sep {
-			res = append(res, trimSpace(field))
-			field = ""
-		} else {
-			field += string(c)
-		}
-	}
-	res = append(res, trimSpace(field))
-	return res
-}
-
-// trimSpace trims leading/trailing spaces
-func trimSpace(s string) string {
-	i, j := 0, len(s)-1
-	for i <= j && (s[i] == ' ' || s[i] == '\t') {
-		i++
-	}
-	for j >= i && (s[j] == ' ' || s[j] == '\t') {
-		j--
-	}
-	return s[i : j+1]
+// GetSafeValue safely retrieves a configuration value with read lock
+func (c *Config) GetSafeValue(getter func(*Config) interface{}) interface{} {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return getter(c)
 }

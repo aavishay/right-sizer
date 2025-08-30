@@ -52,15 +52,25 @@ rules:
     resources: ["nodes/status"]
     verbs: ["get", "list", "watch"]
 
-  # Metrics API for resource usage data
+  # Metrics API for resource usage data (v1 - current version)
   - apiGroups: ["metrics.k8s.io"]
     resources: ["pods", "nodes"]
-    verbs: ["get", "list"]
+    verbs: ["get", "list", "watch"]
+
+  # Metrics API v1beta1 (for backward compatibility)
+  - apiGroups: ["metrics.k8s.io"]
+    resources: ["pods", "nodes"]
+    verbs: ["get", "list", "watch"]
+
+  # PodMetrics and NodeMetrics resources explicitly
+  - apiGroups: ["metrics.k8s.io"]
+    resources: ["podmetrics", "nodemetrics"]
+    verbs: ["get", "list", "watch"]
 
   # Custom and external metrics (if available)
   - apiGroups: ["custom.metrics.k8s.io", "external.metrics.k8s.io"]
     resources: ["*"]
-    verbs: ["get", "list"]
+    verbs: ["get", "list", "watch"]
 
   # Workload controllers management
   - apiGroups: ["apps"]
@@ -71,6 +81,11 @@ rules:
   - apiGroups: ["apps"]
     resources: ["deployments/status", "statefulsets/status", "daemonsets/status", "replicasets/status"]
     verbs: ["get", "list", "watch"]
+
+  # Scale subresource for workload controllers
+  - apiGroups: ["apps"]
+    resources: ["deployments/scale", "statefulsets/scale", "replicasets/scale"]
+    verbs: ["get", "patch", "update"]
 
   # Batch jobs
   - apiGroups: ["batch"]
@@ -122,6 +137,31 @@ rules:
     resources: ["limitranges"]
     verbs: ["get", "list", "watch"]
 
+  # PersistentVolumeClaims for storage resource validation
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims"]
+    verbs: ["get", "list", "watch"]
+
+  # PersistentVolumes for cluster-wide storage information
+  - apiGroups: [""]
+    resources: ["persistentvolumes"]
+    verbs: ["get", "list", "watch"]
+
+  # StorageClasses for storage provisioning information
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["storageclasses"]
+    verbs: ["get", "list", "watch"]
+
+  # PriorityClasses for pod scheduling priority information
+  - apiGroups: ["scheduling.k8s.io"]
+    resources: ["priorityclasses"]
+    verbs: ["get", "list", "watch"]
+
+  # NetworkPolicies for network segmentation validation
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["networkpolicies"]
+    verbs: ["get", "list", "watch"]
+
   # Services for admission webhook support
   - apiGroups: [""]
     resources: ["services"]
@@ -163,7 +203,7 @@ metadata:
   labels:
     {{- include "right-sizer.labels" . | nindent 4 }}
 rules:
-  # ConfigMaps in operator namespace for leader election and configuration
+  # ConfigMaps in operator namespace for leader election only
   - apiGroups: [""]
     resources: ["configmaps"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]

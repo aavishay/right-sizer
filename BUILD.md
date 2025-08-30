@@ -36,8 +36,12 @@ right-sizer/
 │   ├── controllers/       # Kubernetes controllers
 │   ├── metrics/          # Metrics providers
 │   ├── config/           # Configuration
-│   ├── logger/           # Logging utilities
-│   └── test/             # Integration tests
+│   └── logger/           # Logging utilities
+├── tests/                # All test files
+│   ├── unit/            # Unit tests
+│   ├── integration/     # Integration tests
+│   ├── rbac/           # RBAC tests
+│   └── fixtures/       # Test fixtures
 ├── helm/                 # Helm chart
 ├── scripts/             # Build and development scripts
 ├── examples/            # Example configurations
@@ -176,5 +180,7 @@ helm test right-sizer
 - `Dockerfile` - Container image definition (builds from go/)
 - `helm/` - Helm chart
 - `go/` - Go source code and modules
-- `go/test/` - Integration tests
-- `go/*_test.go` - Unit tests
+- `tests/unit/` - Unit tests
+- `tests/integration/` - Integration tests
+- `tests/rbac/` - RBAC-specific tests
+- `tests/fixtures/` - Test fixtures and sample resources

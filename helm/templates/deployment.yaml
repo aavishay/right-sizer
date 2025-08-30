@@ -28,57 +28,32 @@ spec:
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           env:
+            # Only essential environment variables that cannot be configured via CRDs
             - name: OPERATOR_NAMESPACE
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.namespace
-            - name: PROMETHEUS_URL
-              value: "{{ .Values.prometheusUrl }}"
-            - name: METRICS_PROVIDER
-              value: "{{ .Values.metricsProvider }}"
-            - name: ENABLE_INPLACE_RESIZE
-              value: "{{ .Values.enableInPlaceResize }}"
-            - name: RESIZE_INTERVAL
-              value: "{{ .Values.resizeInterval }}"
-            - name: LOG_LEVEL
-              value: "{{ .Values.logLevel }}"
-            - name: KUBE_NAMESPACE_INCLUDE
-              value: "{{ .Values.namespaceInclude }}"
-            - name: KUBE_NAMESPACE_EXCLUDE
-              value: "{{ .Values.namespaceExclude }}"
-            # Resource sizing configuration
-            - name: CPU_REQUEST_MULTIPLIER
-              value: "{{ .Values.config.cpuRequestMultiplier }}"
-            - name: CPU_REQUEST_ADDITION
-              value: "{{ .Values.config.cpuRequestAddition }}"
-            - name: MEMORY_REQUEST_MULTIPLIER
-              value: "{{ .Values.config.memoryRequestMultiplier }}"
-            - name: MEMORY_REQUEST_ADDITION
-              value: "{{ .Values.config.memoryRequestAddition }}"
-            - name: CPU_LIMIT_MULTIPLIER
-              value: "{{ .Values.config.cpuLimitMultiplier }}"
-            - name: CPU_LIMIT_ADDITION
-              value: "{{ .Values.config.cpuLimitAddition }}"
-            - name: MEMORY_LIMIT_MULTIPLIER
-              value: "{{ .Values.config.memoryLimitMultiplier }}"
-            - name: MEMORY_LIMIT_ADDITION
-              value: "{{ .Values.config.memoryLimitAddition }}"
-            - name: MAX_CPU_LIMIT
-              value: "{{ .Values.config.maxCpuLimit }}"
-            - name: MAX_MEMORY_LIMIT
-              value: "{{ .Values.config.maxMemoryLimit }}"
-            - name: MIN_CPU_REQUEST
-              value: "{{ .Values.config.minCpuRequest }}"
-            - name: MIN_MEMORY_REQUEST
-              value: "{{ .Values.config.minMemoryRequest }}"
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            # All configuration is now handled through CRDs
+            # No configuration environment variables needed
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           ports:
-            - containerPort: 8080
+            - containerPort: 9090
               name: metrics
               protocol: TCP
             - containerPort: 8081
               name: health
+              protocol: TCP
+            - containerPort: 8443
+              name: webhook
               protocol: TCP
           livenessProbe:
             httpGet:
@@ -92,6 +67,15 @@ spec:
               port: 8081
             initialDelaySeconds: 5
             periodSeconds: 10
+          volumeMounts:
+            - name: webhook-certs
+              mountPath: /tmp/k8s-webhook-server/serving-certs
+              readOnly: true
+      volumes:
+        - name: webhook-certs
+          secret:
+            secretName: {{ include "right-sizer.fullname" . }}-webhook-certs
+            optional: true
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

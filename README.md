@@ -21,7 +21,7 @@ A Kubernetes operator for automatic pod resource right-sizing with comprehensive
 ### Enterprise Security
 - **Admission Controllers**: Validate and optionally mutate resource requests before pod creation
 - **Comprehensive Audit Logging**: Track all resource changes with detailed audit trails
-- **RBAC Integration**: Fine-grained permissions with least-privilege access
+- **RBAC Integration**: Fine-grained permissions with least-privilege access ([detailed guide](docs/RBAC.md))
 - **Network Policies**: Secure network communication with predefined policies
 
 ### Observability & Reliability
@@ -123,17 +123,23 @@ The operator automatically detects if your cluster supports this feature and wil
 The right-sizer operator supports sophisticated policy-based resource allocation using configurable rules:
 
 ### Policy Features
+- **CRD-Based Configuration**: Policies are defined as Kubernetes Custom Resources, not ConfigMaps
 - **Priority-Based Rules**: Higher priority rules override lower priority ones
 - **Complex Selectors**: Match pods by namespace, labels, annotations, regex patterns, QoS class, and workload type
 - **Flexible Actions**: Set multipliers, fixed values, or min/max constraints
 - **Scheduling Support**: Time-based and day-of-week rule activation
 - **Skip Conditions**: Exclude specific pods from processing
 
-### Example Policy Rule
+### Example Policy Rule (CRD)
 ```yaml
-- name: high-priority-production
-  description: Enhanced resources for high priority production workloads
+apiVersion: rightsizer.io/v1alpha1
+kind: RightSizerPolicy
+metadata:
+  name: high-priority-production
+spec:
   priority: 150
+  enabled: true
+  description: Enhanced resources for high priority production workloads
   selectors:
     namespaces: ["production"]
     labels:
@@ -146,7 +152,7 @@ The right-sizer operator supports sophisticated policy-based resource allocation
     maxMemory: "16Gi"
 ```
 
-See [examples/policy-rules-example.yaml](examples/policy-rules-example.yaml) for comprehensive policy configurations.
+See [examples/policy-rules-example.yaml](examples/policy-rules-example.yaml) for comprehensive CRD-based policy configurations.
 
 ## Security & Compliance
 
@@ -164,7 +170,19 @@ Track all operator decisions and changes:
 - **Security Events**: Admission controller decisions and user actions
 
 ### RBAC Integration
-Minimal required permissions with fine-grained access control:
+Minimal required permissions with fine-grained access control. For comprehensive RBAC documentation, see [docs/RBAC.md](docs/RBAC.md).
+
+#### Quick RBAC Fix
+If you encounter permission errors:
+```bash
+# Apply RBAC fixes automatically
+./scripts/rbac/apply-rbac-fix.sh
+
+# Verify all permissions
+./scripts/rbac/verify-permissions.sh
+```
+
+#### Example RBAC Configuration:
 ```yaml
 rules:
 - apiGroups: [""]
@@ -239,6 +257,8 @@ The right-sizer operator can be configured using environment variables to custom
 | `RESIZE_INTERVAL` | `30s` | How often to check and resize resources |
 | `LOG_LEVEL` | `info` | Logging verbosity: `debug`, `info`, `warn`, `error` |
 
+**Note**: These environment variables can also be configured via the `RightSizerConfig` CRD for more flexible management.
+
 ### Enhanced Features
 
 | Environment Variable | Default | Description |
@@ -276,6 +296,7 @@ For detailed configuration options, see [CONFIGURATION.md](CONFIGURATION.md).
 - Docker
 - Kubernetes 1.33+ (for in-place resize feature)
 - Minikube (for local development)
+- kubectl with CRD support
 
 ### Local Development
 
@@ -286,6 +307,9 @@ For detailed configuration options, see [CONFIGURATION.md](CONFIGURATION.md).
 ```bash
 # Start Minikube with Kubernetes 1.33+ for in-place resize support
 minikube start --kubernetes-version=v1.33.1
+
+# Install CRDs (required for policy-based configuration)
+./scripts/install-crds.sh
 
 # Optional: Use development helper script
 ./scripts/dev.sh setup
@@ -300,7 +324,7 @@ minikube start --kubernetes-version=v1.33.1
 # Build Docker image in Minikube's registry
 ./make minikube-build
 
-# Deploy using Helm
+# Deploy using Helm (CRDs must be installed first)
 ./make helm-deploy
 ```
 
@@ -349,13 +373,15 @@ helm install right-sizer ./helm \
 
 ### Policy-Based Configuration
 ```bash
-# Create policy rules
+# Install CRDs first
+./scripts/install-crds.sh
+
+# Create policy rules and configuration
 kubectl apply -f examples/policy-rules-example.yaml
 
-# Enable policy-based sizing
+# Enable policy-based sizing (enabled by default when CRDs are installed)
 helm upgrade right-sizer ./helm \
-  --set config.policyBasedSizing=true \
-  --set policyEngine.configMapName=right-sizer-policies
+  --set config.policyBasedSizing=true
 ```
 
 ### High Availability Setup

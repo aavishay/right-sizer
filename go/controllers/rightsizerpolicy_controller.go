@@ -18,7 +18,6 @@ package controllers
 import (
 	"context"
 	"fmt"
-	"sort"
 	"time"
 
 	"right-sizer/api/v1alpha1"
@@ -761,31 +760,105 @@ func (r *RightSizerPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 
 	// Watch RightSizerPolicy resources
-	err = c.Watch(&source.Kind{Type: &v1alpha1.RightSizerPolicy{}}, &handler.EnqueueRequestForObject{})
+	err = c.Watch(source.Kind(mgr.GetCache(), &v1alpha1.RightSizerPolicy{}, &handler.TypedEnqueueRequestForObject[*v1alpha1.RightSizerPolicy]{}))
 	if err != nil {
 		return err
 	}
 
 	// Watch target resources and enqueue policies that target them
 	// Watch Deployments
-	err = c.Watch(&source.Kind{Type: &appsv1.Deployment{}}, &handler.EnqueueRequestsFromMapFunc{
-		ToRequests: handler.ToRequestsFunc(func(obj client.Object) []reconcile.Request {
+	err = c.Watch(source.Kind(mgr.GetCache(), &appsv1.Deployment{},
+		handler.TypedEnqueueRequestsFromMapFunc(func(ctx context.Context, obj *appsv1.Deployment) []reconcile.Request {
 			return r.findPoliciesForResource(obj)
-		}),
-	})
+		})))
 	if err != nil {
 		return err
 	}
 
 	// Watch StatefulSets
-	err = c.Watch(&source.Kind{Type: &appsv1.StatefulSet{}}, &handler.EnqueueRequestsFromMapFunc{
-		ToRequests: handler.ToRequestsFunc(func(obj client.Object) []reconcile.Request {
+	err = c.Watch(source.Kind(mgr.GetCache(), &appsv1.StatefulSet{},
+		handler.TypedEnqueueRequestsFromMapFunc(func(ctx context.Context, obj *appsv1.StatefulSet) []reconcile.Request {
 			return r.findPoliciesForResource(obj)
-		}),
-	})
+		})))
 	if err != nil {
 		return err
 	}
 
 	// Watch DaemonSets
-	err = c.
+	err = c.Watch(source.Kind(mgr.GetCache(), &appsv1.DaemonSet{},
+		handler.TypedEnqueueRequestsFromMapFunc(func(ctx context.Context, obj *appsv1.DaemonSet) []reconcile.Request {
+			return r.findPoliciesForResource(obj)
+		})))
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// findPoliciesForResource finds all policies that target the given resource
+func (r *RightSizerPolicyReconciler) findPoliciesForResource(obj client.Object) []reconcile.Request {
+	var policies v1alpha1.RightSizerPolicyList
+	ctx := context.Background()
+
+	// List all policies
+	if err := r.List(ctx, &policies); err != nil {
+		logger.Error("Failed to list policies: %v", err)
+		return []reconcile.Request{}
+	}
+
+	var requests []reconcile.Request
+
+	// Check each policy to see if it targets this resource
+	for _, policy := range policies.Items {
+		// Check if the resource type matches
+		gvk := obj.GetObjectKind().GroupVersionKind()
+		if policy.Spec.TargetRef.Kind == "" || policy.Spec.TargetRef.Kind == gvk.Kind {
+			// Check if namespace matches
+			namespaceMatch := false
+			if len(policy.Spec.TargetRef.Namespaces) == 0 {
+				// No namespace filter means all namespaces
+				namespaceMatch = true
+			} else {
+				// Check if object's namespace is in the list
+				for _, ns := range policy.Spec.TargetRef.Namespaces {
+					if ns == obj.GetNamespace() {
+						namespaceMatch = true
+						break
+					}
+				}
+			}
+
+			// Check if namespace is excluded
+			if namespaceMatch {
+				for _, excludedNs := range policy.Spec.TargetRef.ExcludeNamespaces {
+					if excludedNs == obj.GetNamespace() {
+						namespaceMatch = false
+						break
+					}
+				}
+			}
+
+			// Check label selector if present
+			labelMatch := true
+			if policy.Spec.TargetRef.LabelSelector != nil {
+				selector, err := metav1.LabelSelectorAsSelector(policy.Spec.TargetRef.LabelSelector)
+				if err == nil {
+					labelMatch = selector.Matches(labels.Set(obj.GetLabels()))
+				}
+			}
+
+			if namespaceMatch && labelMatch {
+				// This policy targets this resource, enqueue it
+				requests = append(requests, reconcile.Request{
+					NamespacedName: types.NamespacedName{
+						Name:      policy.Name,
+						Namespace: policy.Namespace,
+					},
+				})
+			}
+		}
+	}
+
+	return requests
+}

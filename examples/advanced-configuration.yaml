@@ -25,10 +25,10 @@ data:
   MEMORY_LIMIT_MULTIPLIER: "2.0"
 
   # Resource boundaries
-  MAX_CPU_LIMIT: "16000"     # 16 cores in millicores
-  MAX_MEMORY_LIMIT: "32768"  # 32GB in MB
-  MIN_CPU_REQUEST: "5"       # 5 millicores
-  MIN_MEMORY_REQUEST: "32"   # 32 MB
+  MAX_CPU_LIMIT: "16000" # 16 cores in millicores
+  MAX_MEMORY_LIMIT: "32768" # 32GB in MB
+  MIN_CPU_REQUEST: "5" # 5 millicores
+  MIN_MEMORY_REQUEST: "32" # 32 MB
 
   # Operational configuration
   RESIZE_INTERVAL: "45s"
@@ -43,7 +43,7 @@ data:
   RETRY_INTERVAL: "3s"
 
   # Safety and validation settings
-  SAFETY_THRESHOLD: "0.4"  # 40% change threshold
+  SAFETY_THRESHOLD: "0.4" # 40% change threshold
 
   # Advanced features
   POLICY_BASED_SIZING: "true"
@@ -80,45 +80,153 @@ metadata:
   labels:
     app: right-sizer
 rules:
-# Core pod operations
-- apiGroups: [""]
-  resources: ["pods", "pods/status", "pods/resize"]
-  verbs: ["get", "list", "watch", "patch", "update"]
-# Node and cluster resource information
-- apiGroups: [""]
-  resources: ["nodes", "nodes/status", "nodes/metrics"]
-  verbs: ["get", "list", "watch"]
-# Resource constraints
-- apiGroups: [""]
-  resources: ["resourcequotas", "limitranges"]
-  verbs: ["get", "list", "watch"]
-# Events for audit trail
-- apiGroups: [""]
-  resources: ["events"]
-  verbs: ["create", "patch"]
-# ConfigMaps for policies
-- apiGroups: [""]
-  resources: ["configmaps"]
-  verbs: ["get", "list", "watch"]
-# Metrics access
-- apiGroups: ["metrics.k8s.io"]
-  resources: ["pods", "nodes", "containers"]
-  verbs: ["get", "list"]
-# Custom metrics (if available)
-- apiGroups: ["custom.metrics.k8s.io", "external.metrics.k8s.io"]
-  resources: ["*"]
-  verbs: ["get", "list"]
-# Workload controllers for context
-- apiGroups: ["apps"]
-  resources: ["deployments", "replicasets", "statefulsets", "daemonsets"]
-  verbs: ["get", "list", "watch"]
-- apiGroups: ["batch"]
-  resources: ["jobs", "cronjobs"]
-  verbs: ["get", "list", "watch"]
-# Admission controller webhooks
-- apiGroups: ["admissionregistration.k8s.io"]
-  resources: ["validatingadmissionwebhooks", "mutatingadmissionwebhooks"]
-  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # Custom Resource Definitions
+  - apiGroups: ["rightsizer.io"]
+    resources: ["rightsizerpolicies", "rightsizerconfigs"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["rightsizer.io"]
+    resources: ["rightsizerpolicies/status", "rightsizerconfigs/status"]
+    verbs: ["get", "update", "patch"]
+  - apiGroups: ["rightsizer.io"]
+    resources: ["rightsizerpolicies/finalizers", "rightsizerconfigs/finalizers"]
+    verbs: ["update"]
+
+  # Core pod operations
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch", "patch", "update"]
+  - apiGroups: [""]
+    resources: ["pods/status"]
+    verbs: ["get", "list", "watch", "patch", "update"]
+  - apiGroups: [""]
+    resources: ["pods/resize"]
+    verbs: ["patch", "update"]
+
+  # Node information for capacity validation
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["nodes/status"]
+    verbs: ["get", "list", "watch"]
+
+  # Metrics API for resource usage data
+  - apiGroups: ["metrics.k8s.io"]
+    resources: ["pods", "nodes", "podmetrics", "nodemetrics"]
+    verbs: ["get", "list", "watch"]
+
+  # Custom and external metrics
+  - apiGroups: ["custom.metrics.k8s.io", "external.metrics.k8s.io"]
+    resources: ["*"]
+    verbs: ["get", "list", "watch"]
+
+  # Workload controllers management
+  - apiGroups: ["apps"]
+    resources: ["deployments", "statefulsets", "daemonsets", "replicasets"]
+    verbs: ["get", "list", "watch", "patch", "update"]
+  - apiGroups: ["apps"]
+    resources:
+      [
+        "deployments/status",
+        "statefulsets/status",
+        "daemonsets/status",
+        "replicasets/status",
+      ]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments/scale", "statefulsets/scale", "replicasets/scale"]
+    verbs: ["get", "patch", "update"]
+
+  # Batch jobs
+  - apiGroups: ["batch"]
+    resources: ["jobs", "cronjobs"]
+    verbs: ["get", "list", "watch"]
+
+  # Events for logging resize operations
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "patch", "update"]
+
+  # ConfigMaps for configuration
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch"]
+
+  # Secrets for sensitive configuration
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list", "watch"]
+
+  # Namespaces for multi-namespace support
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list", "watch"]
+
+  # HorizontalPodAutoscalers to avoid conflicts
+  - apiGroups: ["autoscaling"]
+    resources: ["horizontalpodautoscalers"]
+    verbs: ["get", "list", "watch"]
+
+  # VerticalPodAutoscalers to avoid conflicts (if VPA is installed)
+  - apiGroups: ["autoscaling.k8s.io"]
+    resources: ["verticalpodautoscalers"]
+    verbs: ["get", "list", "watch"]
+
+  # PodDisruptionBudgets for safe operations
+  - apiGroups: ["policy"]
+    resources: ["poddisruptionbudgets"]
+    verbs: ["get", "list", "watch"]
+
+  # ResourceQuotas to respect namespace limits
+  - apiGroups: [""]
+    resources: ["resourcequotas"]
+    verbs: ["get", "list", "watch"]
+
+  # LimitRanges to respect namespace constraints
+  - apiGroups: [""]
+    resources: ["limitranges"]
+    verbs: ["get", "list", "watch"]
+
+  # PersistentVolumeClaims for storage resource validation
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims"]
+    verbs: ["get", "list", "watch"]
+
+  # PersistentVolumes for cluster-wide storage information
+  - apiGroups: [""]
+    resources: ["persistentvolumes"]
+    verbs: ["get", "list", "watch"]
+
+  # StorageClasses for storage provisioning information
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["storageclasses"]
+    verbs: ["get", "list", "watch"]
+
+  # PriorityClasses for pod scheduling priority information
+  - apiGroups: ["scheduling.k8s.io"]
+    resources: ["priorityclasses"]
+    verbs: ["get", "list", "watch"]
+
+  # NetworkPolicies for network segmentation validation
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["networkpolicies"]
+    verbs: ["get", "list", "watch"]
+
+  # Services for admission webhook support
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+
+  # Endpoints for service discovery
+  - apiGroups: [""]
+    resources: ["endpoints"]
+    verbs: ["get", "list", "watch"]
+
+  # Admission controller webhooks (if enabled)
+  - apiGroups: ["admissionregistration.k8s.io"]
+    resources:
+      ["validatingwebhookconfigurations", "mutatingwebhookconfigurations"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -132,9 +240,9 @@ roleRef:
   kind: ClusterRole
   name: right-sizer-operator
 subjects:
-- kind: ServiceAccount
-  name: right-sizer-operator
-  namespace: right-sizer-system
+  - kind: ServiceAccount
+    name: right-sizer-operator
+    namespace: right-sizer-system
 
 ---
 # PersistentVolumeClaim for audit logs
@@ -182,7 +290,7 @@ metadata:
     component: operator
     version: v1.0.0
 spec:
-  replicas: 2  # High availability
+  replicas: 2 # High availability
   strategy:
     type: RollingUpdate
     rollingUpdate:
@@ -211,121 +319,121 @@ spec:
         runAsGroup: 1000
         fsGroup: 1000
       containers:
-      - name: operator
-        image: right-sizer:latest
-        imagePullPolicy: Always
-        ports:
-        - name: http-metrics
-          containerPort: 9090
-          protocol: TCP
-        - name: health
-          containerPort: 8081
-          protocol: TCP
-        - name: admission
-          containerPort: 8443
-          protocol: TCP
-        env:
-        - name: GOMAXPROCS
-          value: "2"
-        - name: GOGC
-          value: "100"
-        - name: POD_NAME
-          valueFrom:
-            fieldRef:
-              fieldPath: metadata.name
-        - name: POD_NAMESPACE
-          valueFrom:
-            fieldRef:
-              fieldPath: metadata.namespace
-        - name: NODE_NAME
-          valueFrom:
-            fieldRef:
-              fieldPath: spec.nodeName
-        envFrom:
-        - configMapRef:
-            name: right-sizer-config
-        resources:
-          requests:
-            cpu: 200m
-            memory: 256Mi
-            ephemeral-storage: 1Gi
-          limits:
-            cpu: 1000m
-            memory: 1Gi
-            ephemeral-storage: 5Gi
-        livenessProbe:
-          httpGet:
-            path: /healthz
-            port: health
-          initialDelaySeconds: 30
-          periodSeconds: 10
-          timeoutSeconds: 5
-          failureThreshold: 3
-        readinessProbe:
-          httpGet:
-            path: /readyz
-            port: health
-          initialDelaySeconds: 10
-          periodSeconds: 5
-          timeoutSeconds: 3
-          failureThreshold: 3
-        securityContext:
-          allowPrivilegeEscalation: false
-          readOnlyRootFilesystem: true
-          capabilities:
-            drop:
-            - ALL
-          seccompProfile:
-            type: RuntimeDefault
-        volumeMounts:
-        - name: audit-logs
-          mountPath: /var/log/right-sizer
-        - name: admission-certs
-          mountPath: /etc/certs
-          readOnly: true
-        - name: tmp
-          mountPath: /tmp
-        - name: cache
-          mountPath: /var/cache/right-sizer
+        - name: operator
+          image: right-sizer:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http-metrics
+              containerPort: 9090
+              protocol: TCP
+            - name: health
+              containerPort: 8081
+              protocol: TCP
+            - name: admission
+              containerPort: 8443
+              protocol: TCP
+          env:
+            - name: GOMAXPROCS
+              value: "2"
+            - name: GOGC
+              value: "100"
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          envFrom:
+            - configMapRef:
+                name: right-sizer-config
+          resources:
+            requests:
+              cpu: 200m
+              memory: 256Mi
+              ephemeral-storage: 1Gi
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+              ephemeral-storage: 5Gi
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: health
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: health
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            - name: audit-logs
+              mountPath: /var/log/right-sizer
+            - name: admission-certs
+              mountPath: /etc/certs
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+            - name: cache
+              mountPath: /var/cache/right-sizer
       volumes:
-      - name: audit-logs
-        persistentVolumeClaim:
-          claimName: right-sizer-audit-logs
-      - name: admission-certs
-        secret:
-          secretName: right-sizer-admission-certs
-          defaultMode: 0400
-      - name: tmp
-        emptyDir:
-          sizeLimit: 1Gi
-      - name: cache
-        emptyDir:
-          sizeLimit: 2Gi
+        - name: audit-logs
+          persistentVolumeClaim:
+            claimName: right-sizer-audit-logs
+        - name: admission-certs
+          secret:
+            secretName: right-sizer-admission-certs
+            defaultMode: 0400
+        - name: tmp
+          emptyDir:
+            sizeLimit: 1Gi
+        - name: cache
+          emptyDir:
+            sizeLimit: 2Gi
       affinity:
         podAntiAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:
-          - weight: 100
-            podAffinityTerm:
-              labelSelector:
-                matchLabels:
-                  app: right-sizer
-                  component: operator
-              topologyKey: kubernetes.io/hostname
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: right-sizer
+                    component: operator
+                topologyKey: kubernetes.io/hostname
       nodeSelector:
         kubernetes.io/os: linux
         node-role.kubernetes.io/control-plane: ""
       tolerations:
-      - key: node-role.kubernetes.io/control-plane
-        operator: Exists
-        effect: NoSchedule
-      - key: node.kubernetes.io/not-ready
-        operator: Exists
-        effect: NoExecute
-        tolerationSeconds: 300
-      - key: node.kubernetes.io/unreachable
-        operator: Exists
-        effect: NoExecute
-        tolerationSeconds: 300
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+        - key: node.kubernetes.io/not-ready
+          operator: Exists
+          effect: NoExecute
+          tolerationSeconds: 300
+        - key: node.kubernetes.io/unreachable
+          operator: Exists
+          effect: NoExecute
+          tolerationSeconds: 300
 
 ---
 # Service for metrics and health checks
@@ -344,14 +452,14 @@ metadata:
 spec:
   type: ClusterIP
   ports:
-  - name: http-metrics
-    port: 9090
-    targetPort: http-metrics
-    protocol: TCP
-  - name: health
-    port: 8081
-    targetPort: health
-    protocol: TCP
+    - name: http-metrics
+      port: 9090
+      targetPort: http-metrics
+      protocol: TCP
+    - name: health
+      port: 8081
+      targetPort: health
+      protocol: TCP
   selector:
     app: right-sizer
     component: operator
@@ -369,10 +477,10 @@ metadata:
 spec:
   type: ClusterIP
   ports:
-  - name: https-webhook
-    port: 443
-    targetPort: admission
-    protocol: TCP
+    - name: https-webhook
+      port: 443
+      targetPort: admission
+      protocol: TCP
   selector:
     app: right-sizer
     component: operator
@@ -387,29 +495,29 @@ metadata:
     app: right-sizer
     component: admission-webhook
 webhooks:
-- name: validate.rightsizer.io
-  clientConfig:
-    service:
-      name: right-sizer-admission-webhook
-      namespace: right-sizer-system
-      path: /validate
-  rules:
-  - operations: ["CREATE", "UPDATE"]
-    apiGroups: [""]
-    apiVersions: ["v1"]
-    resources: ["pods"]
-  - operations: ["UPDATE"]
-    apiGroups: [""]
-    apiVersions: ["v1"]
-    resources: ["pods/resize"]
-  admissionReviewVersions: ["v1", "v1beta1"]
-  sideEffects: None
-  failurePolicy: Fail
-  namespaceSelector:
-    matchExpressions:
-    - key: name
-      operator: NotIn
-      values: ["kube-system", "kube-public", "right-sizer-system"]
+  - name: validate.rightsizer.io
+    clientConfig:
+      service:
+        name: right-sizer-admission-webhook
+        namespace: right-sizer-system
+        path: /validate
+    rules:
+      - operations: ["CREATE", "UPDATE"]
+        apiGroups: [""]
+        apiVersions: ["v1"]
+        resources: ["pods"]
+      - operations: ["UPDATE"]
+        apiGroups: [""]
+        apiVersions: ["v1"]
+        resources: ["pods/resize"]
+    admissionReviewVersions: ["v1", "v1beta1"]
+    sideEffects: None
+    failurePolicy: Fail
+    namespaceSelector:
+      matchExpressions:
+        - key: name
+          operator: NotIn
+          values: ["kube-system", "kube-public", "right-sizer-system"]
 
 ---
 # ServiceMonitor for Prometheus metrics scraping
@@ -427,15 +535,15 @@ spec:
       app: right-sizer
       component: operator
   endpoints:
-  - port: http-metrics
-    path: /metrics
-    interval: 30s
-    scrapeTimeout: 10s
-    honorLabels: true
-    metricRelabelings:
-    - sourceLabels: [__name__]
-      regex: 'rightsizer_.*'
-      action: keep
+    - port: http-metrics
+      path: /metrics
+      interval: 30s
+      scrapeTimeout: 10s
+      honorLabels: true
+      metricRelabelings:
+        - sourceLabels: [__name__]
+          regex: "rightsizer_.*"
+          action: keep
 
 ---
 # NetworkPolicy for security
@@ -453,22 +561,22 @@ spec:
       app: right-sizer
       component: operator
   policyTypes:
-  - Ingress
-  - Egress
+    - Ingress
+    - Egress
   ingress:
-  - from:
-    - namespaceSelector:
-        matchLabels:
-          name: monitoring
-    ports:
-    - protocol: TCP
-      port: 9090
-  - from: []  # Allow admission webhook from anywhere
-    ports:
-    - protocol: TCP
-      port: 8443
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: monitoring
+      ports:
+        - protocol: TCP
+          port: 9090
+    - from: [] # Allow admission webhook from anywhere
+      ports:
+        - protocol: TCP
+          port: 8443
   egress:
-  - to: []  # Allow all outbound (for Kubernetes API, metrics, etc.)
+    - to: [] # Allow all outbound (for Kubernetes API, metrics, etc.)
 
 ---
 # PodDisruptionBudget for high availability
@@ -505,34 +613,34 @@ spec:
   minReplicas: 2
   maxReplicas: 5
   metrics:
-  - type: Resource
-    resource:
-      name: cpu
-      target:
-        type: Utilization
-        averageUtilization: 70
-  - type: Resource
-    resource:
-      name: memory
-      target:
-        type: Utilization
-        averageUtilization: 80
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
   behavior:
     scaleDown:
       stabilizationWindowSeconds: 300
       policies:
-      - type: Percent
-        value: 50
-        periodSeconds: 60
+        - type: Percent
+          value: 50
+          periodSeconds: 60
     scaleUp:
       stabilizationWindowSeconds: 60
       policies:
-      - type: Percent
-        value: 100
-        periodSeconds: 15
-      - type: Pods
-        value: 2
-        periodSeconds: 60
+        - type: Percent
+          value: 100
+          periodSeconds: 15
+        - type: Pods
+          value: 2
+          periodSeconds: 60
 
 ---
 # Example test deployment to validate right-sizer functionality
@@ -562,18 +670,18 @@ spec:
         rightsizer.io/memory-multiplier: "1.3"
     spec:
       containers:
-      - name: web-server
-        image: nginx:alpine
-        resources:
-          requests:
-            cpu: 50m
-            memory: 64Mi
-          limits:
-            cpu: 200m
-            memory: 256Mi
-        ports:
-        - containerPort: 80
-          name: http
+        - name: web-server
+          image: nginx:alpine
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
+          ports:
+            - containerPort: 80
+              name: http
 
 ---
 # Example high-priority workload
@@ -604,17 +712,17 @@ spec:
         rightsizer.io/safety-threshold: "0.3"
     spec:
       containers:
-      - name: backend
-        image: myapp/backend:v1.0.0
-        resources:
-          requests:
-            cpu: 100m
-            memory: 128Mi
-          limits:
-            cpu: 500m
-            memory: 512Mi
-        env:
-        - name: ENVIRONMENT
-          value: production
-        - name: LOG_LEVEL
-          value: info
+        - name: backend
+          image: myapp/backend:v1.0.0
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          env:
+            - name: ENVIRONMENT
+              value: production
+            - name: LOG_LEVEL
+              value: info

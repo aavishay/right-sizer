@@ -20,27 +20,29 @@ import (
 	"fmt"
 	"time"
 
+	"right-sizer/admission"
 	"right-sizer/api/v1alpha1"
+	"right-sizer/audit"
 	"right-sizer/config"
 	"right-sizer/logger"
+	"right-sizer/metrics"
 
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
-	"sigs.k8s.io/controller-runtime/pkg/handler"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
 // RightSizerConfigReconciler reconciles a RightSizerConfig object
 type RightSizerConfigReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
-	Config *config.Config
+	Scheme          *runtime.Scheme
+	Config          *config.Config
+	MetricsProvider *metrics.Provider
+	AuditLogger     *audit.AuditLogger
+	WebhookManager  *admission.WebhookManager
 }
 
 // +kubebuilder:rbac:groups=rightsizer.io,resources=rightsizerconfigs,verbs=get;list;watch;create;update;patch;delete
@@ -53,7 +55,7 @@ type RightSizerConfigReconciler struct {
 // Reconcile is part of the main kubernetes reconciliation loop
 func (r *RightSizerConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := logger.GetLogger()
-	log.Info("Reconciling RightSizerConfig", "name", req.Name)
+	log.Info("Reconciling RightSizerConfig", "name", req.Name, "namespace", req.Namespace)
 
 	// Fetch the RightSizerConfig instance
 	rsc := &v1alpha1.RightSizerConfig{}
@@ -87,191 +89,279 @@ func (r *RightSizerConfigReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return r.updateConfigStatus(ctx, rsc, "Failed", fmt.Sprintf("Error: %v", err))
 	}
 
-	// Update metrics about the system
+	// Update metrics provider if needed
+	if err := r.updateMetricsProvider(ctx, rsc); err != nil {
+		log.Error("Failed to update metrics provider: %v", err)
+		return r.updateConfigStatus(ctx, rsc, "Failed", fmt.Sprintf("Metrics provider error: %v", err))
+	}
+
+	// Update feature components based on configuration
+	if err := r.updateFeatureComponents(ctx, rsc); err != nil {
+		log.Warn("Failed to update feature components: %v", err)
+		// Don't fail the reconciliation, just log the warning
+	}
+
+	// Update system metrics
 	if err := r.updateSystemMetrics(ctx, rsc); err != nil {
 		log.Warn("Failed to update system metrics: %v", err)
 	}
 
-	// Update status
+	// Update status to Active
 	rsc.Status.Phase = "Active"
 	rsc.Status.LastAppliedTime = &metav1.Time{Time: time.Now()}
 	rsc.Status.ObservedGeneration = rsc.Generation
 	rsc.Status.Message = "Configuration successfully applied"
 
-	// Update system health
+	// Update system health status
 	rsc.Status.SystemHealth = r.getSystemHealth(ctx)
 
 	if err := r.Status().Update(ctx, rsc); err != nil {
-		log.Error("Failed to update config status: %v", err)
+		log.Error("Failed to update status: %v", err)
 		return ctrl.Result{}, err
 	}
 
-	log.Info("Successfully reconciled RightSizerConfig", "name", rsc.Name)
+	// Requeue after the configured resize interval to refresh status
+	requeueAfter := 60 * time.Second
+	if rsc.Spec.ResizeInterval != "" {
+		if duration, err := time.ParseDuration(rsc.Spec.ResizeInterval); err == nil {
+			requeueAfter = duration
+		}
+	}
 
-	// Requeue after 5 minutes to refresh status
-	return ctrl.Result{RequeueAfter: 5 * time.Minute}, nil
+	log.Info("Successfully reconciled RightSizerConfig", "name", req.Name, "requeueAfter", requeueAfter)
+	return ctrl.Result{RequeueAfter: requeueAfter}, nil
 }
 
 // applyConfiguration applies the configuration from the CRD to the global config
 func (r *RightSizerConfigReconciler) applyConfiguration(ctx context.Context, rsc *v1alpha1.RightSizerConfig) error {
-	spec := rsc.Spec
+	log := logger.GetLogger()
+	log.Info("Applying configuration from RightSizerConfig CRD")
 
-	// Check if operator is enabled
-	if !spec.Enabled {
-		logger.Info("RightSizer operator is disabled globally")
-		r.Config.DryRun = true // Effectively disable by setting dry-run
-		return nil
-	}
-
-	// Apply resize interval
-	if spec.ResizeInterval != "" {
-		duration, err := time.ParseDuration(spec.ResizeInterval)
-		if err != nil {
-			return fmt.Errorf("invalid resize interval: %v", err)
-		}
-		r.Config.ResizeInterval = duration
-	}
-
-	// Apply dry-run setting
-	r.Config.DryRun = spec.DryRun
-
-	// Apply default resource strategy
-	if spec.DefaultResourceStrategy.CPU.RequestMultiplier != 0 {
-		r.Config.CPURequestMultiplier = spec.DefaultResourceStrategy.CPU.RequestMultiplier
-	}
-	if spec.DefaultResourceStrategy.CPU.RequestAddition != 0 {
-		r.Config.CPURequestAddition = spec.DefaultResourceStrategy.CPU.RequestAddition
-	}
-	if spec.DefaultResourceStrategy.CPU.LimitMultiplier != 0 {
-		r.Config.CPULimitMultiplier = spec.DefaultResourceStrategy.CPU.LimitMultiplier
-	}
-	if spec.DefaultResourceStrategy.CPU.LimitAddition != 0 {
-		r.Config.CPULimitAddition = spec.DefaultResourceStrategy.CPU.LimitAddition
-	}
-	if spec.DefaultResourceStrategy.CPU.MinRequest != 0 {
-		r.Config.MinCPURequest = spec.DefaultResourceStrategy.CPU.MinRequest
-	}
-	if spec.DefaultResourceStrategy.CPU.MaxLimit != 0 {
-		r.Config.MaxCPULimit = spec.DefaultResourceStrategy.CPU.MaxLimit
-	}
-
-	// Apply memory strategy
-	if spec.DefaultResourceStrategy.Memory.RequestMultiplier != 0 {
-		r.Config.MemoryRequestMultiplier = spec.DefaultResourceStrategy.Memory.RequestMultiplier
-	}
-	if spec.DefaultResourceStrategy.Memory.RequestAddition != 0 {
-		r.Config.MemoryRequestAddition = spec.DefaultResourceStrategy.Memory.RequestAddition
-	}
-	if spec.DefaultResourceStrategy.Memory.LimitMultiplier != 0 {
-		r.Config.MemoryLimitMultiplier = spec.DefaultResourceStrategy.Memory.LimitMultiplier
-	}
-	if spec.DefaultResourceStrategy.Memory.LimitAddition != 0 {
-		r.Config.MemoryLimitAddition = spec.DefaultResourceStrategy.Memory.LimitAddition
-	}
-	if spec.DefaultResourceStrategy.Memory.MinRequest != 0 {
-		r.Config.MinMemoryRequest = spec.DefaultResourceStrategy.Memory.MinRequest
-	}
-	if spec.DefaultResourceStrategy.Memory.MaxLimit != 0 {
-		r.Config.MaxMemoryLimit = spec.DefaultResourceStrategy.Memory.MaxLimit
-	}
-
-	// Apply global constraints
-	if spec.GlobalConstraints.MaxChangePercentage > 0 {
-		r.Config.SafetyThreshold = float64(spec.GlobalConstraints.MaxChangePercentage) / 100.0
-	}
-
-	// Apply observability configuration
-	if spec.ObservabilityConfig.LogLevel != "" {
-		r.Config.LogLevel = spec.ObservabilityConfig.LogLevel
-		logger.Init(spec.ObservabilityConfig.LogLevel)
-	}
-	r.Config.AuditEnabled = spec.ObservabilityConfig.EnableAuditLog
-	r.Config.MetricsEnabled = spec.ObservabilityConfig.EnableMetricsExport
-	if spec.ObservabilityConfig.MetricsPort > 0 {
-		r.Config.MetricsPort = int(spec.ObservabilityConfig.MetricsPort)
-	}
-
-	// Apply security configuration
-	r.Config.AdmissionController = spec.SecurityConfig.EnableAdmissionController
-
-	// Apply operator configuration
-	if spec.OperatorConfig.MaxRetries > 0 {
-		r.Config.MaxRetries = int(spec.OperatorConfig.MaxRetries)
-	}
-	if spec.OperatorConfig.RetryInterval != "" {
-		duration, err := time.ParseDuration(spec.OperatorConfig.RetryInterval)
-		if err == nil {
-			r.Config.RetryInterval = duration
+	// Parse resize interval
+	resizeInterval := 30 * time.Second
+	if rsc.Spec.ResizeInterval != "" {
+		if duration, err := time.ParseDuration(rsc.Spec.ResizeInterval); err == nil {
+			resizeInterval = duration
 		}
 	}
 
-	// Apply namespace configuration
-	// Always apply include namespaces (empty means all)
-	r.Config.NamespaceInclude = spec.NamespaceConfig.IncludeNamespaces
-
-	// Combine exclude namespaces with system namespaces
-	excludeSet := make(map[string]bool)
-	for _, ns := range spec.NamespaceConfig.ExcludeNamespaces {
-		excludeSet[ns] = true
-	}
-	// Always exclude system namespaces
-	for _, ns := range spec.NamespaceConfig.SystemNamespaces {
-		excludeSet[ns] = true
+	// Parse retry interval
+	retryInterval := 5 * time.Second
+	if rsc.Spec.OperatorConfig.RetryInterval != "" {
+		if duration, err := time.ParseDuration(rsc.Spec.OperatorConfig.RetryInterval); err == nil {
+			retryInterval = duration
+		}
 	}
 
-	// Convert back to slice
-	r.Config.NamespaceExclude = []string{}
-	for ns := range excludeSet {
-		r.Config.NamespaceExclude = append(r.Config.NamespaceExclude, ns)
+	// Extract values with safe defaults
+	cpuRequestMultiplier := 1.2
+	if rsc.Spec.DefaultResourceStrategy.CPU.RequestMultiplier != 0 {
+		cpuRequestMultiplier = rsc.Spec.DefaultResourceStrategy.CPU.RequestMultiplier
 	}
 
-	// Log namespace configuration
-	if len(r.Config.NamespaceInclude) > 0 {
-		logger.Info("Namespace include filter applied: %v", r.Config.NamespaceInclude)
-	} else {
-		logger.Info("No namespace include filter - monitoring all namespaces")
-	}
-	logger.Info("Namespace exclude filter applied: %v", r.Config.NamespaceExclude)
-
-	// Validate namespace configuration
-	if err := r.validateNamespaceConfig(ctx); err != nil {
-		logger.Warn("Namespace configuration validation warning: %v", err)
+	memoryRequestMultiplier := 1.2
+	if rsc.Spec.DefaultResourceStrategy.Memory.RequestMultiplier != 0 {
+		memoryRequestMultiplier = rsc.Spec.DefaultResourceStrategy.Memory.RequestMultiplier
 	}
 
-	// Store the configuration globally
-	config.Global = r.Config
+	cpuRequestAddition := rsc.Spec.DefaultResourceStrategy.CPU.RequestAddition
 
-	logger.Info("Applied configuration from RightSizerConfig CRD")
+	memoryRequestAddition := rsc.Spec.DefaultResourceStrategy.Memory.RequestAddition
+
+	cpuLimitMultiplier := 2.0
+	if rsc.Spec.DefaultResourceStrategy.CPU.LimitMultiplier != 0 {
+		cpuLimitMultiplier = rsc.Spec.DefaultResourceStrategy.CPU.LimitMultiplier
+	}
+
+	memoryLimitMultiplier := 2.0
+	if rsc.Spec.DefaultResourceStrategy.Memory.LimitMultiplier != 0 {
+		memoryLimitMultiplier = rsc.Spec.DefaultResourceStrategy.Memory.LimitMultiplier
+	}
+
+	cpuLimitAddition := rsc.Spec.DefaultResourceStrategy.CPU.LimitAddition
+
+	memoryLimitAddition := rsc.Spec.DefaultResourceStrategy.Memory.LimitAddition
+
+	minCPURequest := int64(10)
+	if rsc.Spec.DefaultResourceStrategy.CPU.MinRequest != 0 {
+		minCPURequest = rsc.Spec.DefaultResourceStrategy.CPU.MinRequest
+	}
+
+	minMemoryRequest := int64(64)
+	if rsc.Spec.DefaultResourceStrategy.Memory.MinRequest != 0 {
+		minMemoryRequest = rsc.Spec.DefaultResourceStrategy.Memory.MinRequest
+	}
+
+	maxCPULimit := int64(4000)
+	if rsc.Spec.DefaultResourceStrategy.CPU.MaxLimit != 0 {
+		maxCPULimit = rsc.Spec.DefaultResourceStrategy.CPU.MaxLimit
+	}
+
+	maxMemoryLimit := int64(8192)
+	if rsc.Spec.DefaultResourceStrategy.Memory.MaxLimit != 0 {
+		maxMemoryLimit = rsc.Spec.DefaultResourceStrategy.Memory.MaxLimit
+	}
+
+	// Extract metrics provider configuration
+	metricsProvider := "metrics-server"
+	if rsc.Spec.MetricsConfig.Provider != "" {
+		metricsProvider = rsc.Spec.MetricsConfig.Provider
+	}
+
+	prometheusURL := ""
+	if rsc.Spec.MetricsConfig.PrometheusEndpoint != "" {
+		prometheusURL = rsc.Spec.MetricsConfig.PrometheusEndpoint
+	}
+
+	// Extract feature flags
+	enableInPlaceResize := false
+	if rsc.Spec.FeatureGates != nil {
+		enableInPlaceResize = rsc.Spec.FeatureGates["EnableInPlaceResize"]
+	}
+
+	// Update the global configuration
+	r.Config.UpdateFromCRD(
+		cpuRequestMultiplier,
+		memoryRequestMultiplier,
+		cpuRequestAddition,
+		memoryRequestAddition,
+		cpuLimitMultiplier,
+		memoryLimitMultiplier,
+		cpuLimitAddition,
+		memoryLimitAddition,
+		minCPURequest,
+		minMemoryRequest,
+		maxCPULimit,
+		maxMemoryLimit,
+		resizeInterval,
+		rsc.Spec.DryRun,
+		rsc.Spec.NamespaceConfig.IncludeNamespaces,
+		rsc.Spec.NamespaceConfig.ExcludeNamespaces,
+		rsc.Spec.ObservabilityConfig.LogLevel,
+		rsc.Spec.ObservabilityConfig.EnableMetricsExport,
+		int(rsc.Spec.ObservabilityConfig.MetricsPort),
+		rsc.Spec.ObservabilityConfig.EnableAuditLog,
+		int(rsc.Spec.OperatorConfig.MaxRetries),
+		retryInterval,
+		metricsProvider,
+		prometheusURL,
+		enableInPlaceResize,
+	)
+
+	// Update logger level if changed
+	if rsc.Spec.ObservabilityConfig.LogLevel != "" {
+		logger.Init(rsc.Spec.ObservabilityConfig.LogLevel)
+	}
+
+	log.Info("Configuration applied successfully from CRD")
 	return nil
 }
 
-// resetToDefaultConfig resets to default configuration when CRD is deleted
-func (r *RightSizerConfigReconciler) resetToDefaultConfig() {
-	r.Config = config.Load()
-	config.Global = r.Config
-	logger.Info("Reset to default configuration")
+// updateMetricsProvider updates the metrics provider based on configuration
+func (r *RightSizerConfigReconciler) updateMetricsProvider(ctx context.Context, rsc *v1alpha1.RightSizerConfig) error {
+	log := logger.GetLogger()
+
+	if r.MetricsProvider == nil {
+		log.Warn("MetricsProvider reference is nil, skipping update")
+		return nil
+	}
+
+	desiredProvider := rsc.Spec.MetricsConfig.Provider
+	if desiredProvider == "" {
+		desiredProvider = "metrics-server"
+	}
+
+	// Check if we need to switch providers
+	currentProviderType := "unknown"
+	if _, ok := (*r.MetricsProvider).(*metrics.MetricsServerProvider); ok {
+		currentProviderType = "metrics-server"
+	} else if _, ok := (*r.MetricsProvider).(*metrics.PrometheusProvider); ok {
+		currentProviderType = "prometheus"
+	}
+
+	if currentProviderType != desiredProvider {
+		log.Info("Switching metrics provider", "from", currentProviderType, "to", desiredProvider)
+
+		var newProvider metrics.Provider
+		if desiredProvider == "prometheus" && rsc.Spec.MetricsConfig.PrometheusEndpoint != "" {
+			newProvider = metrics.NewPrometheusProvider(rsc.Spec.MetricsConfig.PrometheusEndpoint)
+			log.Info("Switched to Prometheus metrics provider", "endpoint", rsc.Spec.MetricsConfig.PrometheusEndpoint)
+		} else {
+			newProvider = metrics.NewMetricsServerProvider(r.Client)
+			log.Info("Switched to metrics-server provider")
+		}
+
+		*r.MetricsProvider = newProvider
+	}
+
+	return nil
 }
 
-// updateSystemMetrics updates system-wide metrics in the status
+// updateFeatureComponents updates feature components based on configuration
+func (r *RightSizerConfigReconciler) updateFeatureComponents(ctx context.Context, rsc *v1alpha1.RightSizerConfig) error {
+	log := logger.GetLogger()
+
+	// Update audit logger
+	if r.AuditLogger != nil {
+		if rsc.Spec.ObservabilityConfig.EnableAuditLog {
+			log.Info("Audit logging is enabled")
+		} else {
+			log.Info("Audit logging is disabled")
+		}
+	}
+
+	// Update admission webhook
+	if r.WebhookManager != nil {
+		if rsc.Spec.SecurityConfig.EnableAdmissionController {
+			log.Info("Admission controller is enabled")
+			// The webhook manager will be started in main.go based on config
+		} else {
+			log.Info("Admission controller is disabled")
+		}
+	}
+
+	// Update metrics export
+	if rsc.Spec.ObservabilityConfig.EnableMetricsExport {
+		log.Info("Metrics export enabled on port", "port", rsc.Spec.ObservabilityConfig.MetricsPort)
+		// Metrics server will be started in main.go based on config
+	} else {
+		log.Info("Metrics export disabled")
+	}
+
+	return nil
+}
+
+// updateSystemMetrics updates system-wide metrics
 func (r *RightSizerConfigReconciler) updateSystemMetrics(ctx context.Context, rsc *v1alpha1.RightSizerConfig) error {
+	log := logger.GetLogger()
+
 	// Count active policies
 	policies := &v1alpha1.RightSizerPolicyList{}
 	if err := r.List(ctx, policies); err != nil {
+		log.Warn("Failed to list policies for metrics: %v", err)
 		return err
 	}
 
-	activePolicies := int32(0)
+	activePolicies := 0
 	for _, policy := range policies.Items {
 		if policy.Spec.Enabled {
 			activePolicies++
 		}
 	}
-	rsc.Status.ActivePolicies = activePolicies
+	rsc.Status.ActivePolicies = int32(activePolicies)
 
-	// Count monitored resources (simplified - you'd want to count actual workloads)
-	// This is a placeholder - implement actual counting logic
-	rsc.Status.TotalResourcesMonitored = 0
-	rsc.Status.TotalResourcesResized = 0
+	// Count monitored resources
+	// This is a simplified count - in production you'd count actual workloads
+	deployments := 0
+	statefulsets := 0
+	daemonsets := 0
+
+	// Update status counts
+	rsc.Status.TotalResourcesMonitored = int32(deployments + statefulsets + daemonsets)
+
+	log.Info("System metrics updated",
+		"activePolicies", activePolicies,
+		"resourcesMonitored", rsc.Status.TotalResourcesMonitored)
 
 	return nil
 }
@@ -279,95 +369,78 @@ func (r *RightSizerConfigReconciler) updateSystemMetrics(ctx context.Context, rs
 // getSystemHealth returns the current system health status
 func (r *RightSizerConfigReconciler) getSystemHealth(ctx context.Context) *v1alpha1.SystemHealthStatus {
 	health := &v1alpha1.SystemHealthStatus{
-		LastHealthCheck: &metav1.Time{Time: time.Now()},
-		Errors:          0,
-		Warnings:        0,
+		MetricsProviderHealthy: true,  // Simplified - you'd actually check the provider
+		WebhookHealthy:         true,  // Simplified - you'd actually check the webhook
+		LeaderElectionActive:   false, // Not implemented in this example
+		IsLeader:               true,  // Assuming single instance
+		LastHealthCheck:        &metav1.Time{Time: time.Now()},
+		Errors:                 0,
+		Warnings:               0,
 	}
 
-	// Check metrics provider health (simplified)
-	health.MetricsProviderHealthy = true
-
-	// Check webhook health (if enabled)
-	if r.Config.AdmissionController {
-		health.WebhookHealthy = true // You'd implement actual health check
+	// Check metrics provider health
+	if r.MetricsProvider != nil && *r.MetricsProvider != nil {
+		// In production, you'd actually test the provider
+		health.MetricsProviderHealthy = true
 	}
 
-	// Check leader election status (if enabled)
-	// This would require integration with leader election
-	health.LeaderElectionActive = false
-	health.IsLeader = false
+	// Check webhook health
+	if r.WebhookManager != nil && r.Config.AdmissionController {
+		// In production, you'd actually test the webhook
+		health.WebhookHealthy = true
+	}
 
 	return health
 }
 
-// updateConfigStatus updates the config status
-func (r *RightSizerConfigReconciler) updateConfigStatus(ctx context.Context, rsc *v1alpha1.RightSizerConfig, phase, message string) (ctrl.Result, error) {
+// resetToDefaultConfig resets the configuration to defaults when CRD is deleted
+func (r *RightSizerConfigReconciler) resetToDefaultConfig() {
+	log := logger.GetLogger()
+	log.Info("Resetting configuration to defaults")
+
+	r.Config.ResetToDefaults()
+
+	// Reset metrics provider to default
+	if r.MetricsProvider != nil {
+		*r.MetricsProvider = metrics.NewMetricsServerProvider(r.Client)
+	}
+
+	log.Info("Configuration reset to defaults")
+}
+
+// updateConfigStatus updates the status of the RightSizerConfig
+func (r *RightSizerConfigReconciler) updateConfigStatus(ctx context.Context, rsc *v1alpha1.RightSizerConfig, phase string, message string) (ctrl.Result, error) {
 	rsc.Status.Phase = phase
 	rsc.Status.Message = message
 	rsc.Status.ObservedGeneration = rsc.Generation
 
+	if phase == "Failed" {
+		// Add to errors in system health
+		if rsc.Status.SystemHealth == nil {
+			rsc.Status.SystemHealth = &v1alpha1.SystemHealthStatus{}
+		}
+		rsc.Status.SystemHealth.Errors++
+	}
+
 	if err := r.Status().Update(ctx, rsc); err != nil {
+		logger.Error("Failed to update status: %v", err)
 		return ctrl.Result{}, err
 	}
 
-	// Requeue after 1 minute
-	return ctrl.Result{RequeueAfter: time.Minute}, nil
+	// Requeue after a delay for failed states
+	if phase == "Failed" {
+		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+	}
+
+	return ctrl.Result{}, nil
 }
 
-// SetupWithManager sets up the controller with the Manager
+// SetupWithManager sets up the controller with the Manager.
 func (r *RightSizerConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	// Create controller
-	c, err := controller.New("rightsizerconfig-controller", mgr, controller.Options{
-		Reconciler: r,
-		// Only one RightSizerConfig should exist, so we can limit concurrency
-		MaxConcurrentReconciles: 1,
-	})
-	if err != nil {
-		return err
-	}
-
-	// Watch RightSizerConfig resources
-	err = c.Watch(&source.Kind{Type: &v1alpha1.RightSizerConfig{}}, &handler.EnqueueRequestForObject{})
-	if err != nil {
-		return err
-	}
-
-	logger.Info("RightSizerConfig controller setup complete")
-	return nil
-}
-
-// validateNamespaceConfig validates that namespace configuration is valid
-func (r *RightSizerConfigReconciler) validateNamespaceConfig(ctx context.Context) error {
-	// Check for conflicts between include and exclude
-	if len(r.Config.NamespaceInclude) > 0 && len(r.Config.NamespaceExclude) > 0 {
-		includeSet := make(map[string]bool)
-		for _, ns := range r.Config.NamespaceInclude {
-			includeSet[ns] = true
-		}
-
-		conflicts := []string{}
-		for _, ns := range r.Config.NamespaceExclude {
-			if includeSet[ns] {
-				conflicts = append(conflicts, ns)
-			}
-		}
-
-		if len(conflicts) > 0 {
-			return fmt.Errorf("namespaces %v are in both include and exclude lists", conflicts)
-		}
-	}
-
-	// Verify that included namespaces exist
-	if len(r.Config.NamespaceInclude) > 0 {
-		for _, ns := range r.Config.NamespaceInclude {
-			namespace := &corev1.Namespace{}
-			if err := r.Get(ctx, types.NamespacedName{Name: ns}, namespace); err != nil {
-				if errors.IsNotFound(err) {
-					logger.Warn("Included namespace %s does not exist", ns)
-				}
-			}
-		}
-	}
-
-	return nil
+	return ctrl.NewControllerManagedBy(mgr).
+		For(&v1alpha1.RightSizerConfig{}).
+		WithOptions(controller.Options{
+			MaxConcurrentReconciles: 1, // Only one config should be processed at a time
+		}).
+		Complete(r)
 }

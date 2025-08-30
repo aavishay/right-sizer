@@ -23,7 +23,7 @@ SKIPPED_TESTS=0
 # Configuration
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 GO_DIR="$PROJECT_ROOT/go"
-TEST_DIR="$PROJECT_ROOT/test"
+TEST_DIR="$PROJECT_ROOT/tests"
 COVERAGE_OUT="$PROJECT_ROOT/coverage.out"
 COVERAGE_HTML="$PROJECT_ROOT/coverage.html"
 
@@ -116,23 +116,56 @@ run_unit_tests() {
 
   print_header "Running Unit Tests"
 
-  cd "$GO_DIR"
+  # Run tests from both go directory and tests/unit directory
+  local test_failed=false
 
+  # Run tests in go directory (if any remain)
+  cd "$GO_DIR"
   local test_cmd="go test ./..."
   if [ "$VERBOSE" = "true" ]; then
     test_cmd="$test_cmd -v"
   fi
   if [ "$COVERAGE" = "true" ]; then
-    test_cmd="$test_cmd -cover -coverprofile=$COVERAGE_OUT"
+    test_cmd="$test_cmd -cover -coverprofile=$COVERAGE_OUT.go"
   fi
 
-  if $test_cmd; then
+  if ! $test_cmd; then
+    test_failed=true
+  fi
+
+  # Run tests in tests/unit directory
+  cd "$TEST_DIR/unit"
+  test_cmd="go test ./..."
+  if [ "$VERBOSE" = "true" ]; then
+    test_cmd="$test_cmd -v"
+  fi
+  if [ "$COVERAGE" = "true" ]; then
+    test_cmd="$test_cmd -cover -coverprofile=$COVERAGE_OUT.unit"
+  fi
+
+  if ! $test_cmd; then
+    test_failed=true
+  fi
+
+  if [ "$test_failed" = "false" ]; then
     print_test_result "Unit Tests" "0"
 
-    if [ "$COVERAGE" = "true" ] && [ -f "$COVERAGE_OUT" ]; then
+    if [ "$COVERAGE" = "true" ]; then
       print_color "$BLUE" "Generating coverage report..."
-      go tool cover -html="$COVERAGE_OUT" -o "$COVERAGE_HTML"
-      print_color "$GREEN" "Coverage report saved to: $COVERAGE_HTML"
+      # Merge coverage files if both exist
+      if [ -f "$COVERAGE_OUT.go" ] && [ -f "$COVERAGE_OUT.unit" ]; then
+        go run golang.org/x/tools/cmd/gocovmerge@latest "$COVERAGE_OUT.go" "$COVERAGE_OUT.unit" >"$COVERAGE_OUT"
+        rm "$COVERAGE_OUT.go" "$COVERAGE_OUT.unit"
+      elif [ -f "$COVERAGE_OUT.go" ]; then
+        mv "$COVERAGE_OUT.go" "$COVERAGE_OUT"
+      elif [ -f "$COVERAGE_OUT.unit" ]; then
+        mv "$COVERAGE_OUT.unit" "$COVERAGE_OUT"
+      fi
+
+      if [ -f "$COVERAGE_OUT" ]; then
+        go tool cover -html="$COVERAGE_OUT" -o "$COVERAGE_HTML"
+        print_color "$GREEN" "Coverage report saved to: $COVERAGE_HTML"
+      fi
     fi
   else
     print_test_result "Unit Tests" "1"
@@ -181,7 +214,7 @@ run_smoke_tests() {
   # Deploy a test pod and verify basic functionality
   print_color "$BLUE" "Deploying test resources..."
 
-  if kubectl apply -f "$TEST_DIR/fixtures/test-deployment.yaml" &>/dev/null; then
+  if kubectl apply -f "$TEST_DIR/fixtures/root-test-deployment.yaml" &>/dev/null; then
     sleep 5
 
     # Check if pods are running
@@ -189,11 +222,11 @@ run_smoke_tests() {
       print_color "$GREEN" "✓ Test pods are running"
 
       # Clean up
-      kubectl delete -f "$TEST_DIR/fixtures/test-deployment.yaml" &>/dev/null
+      kubectl delete -f "$TEST_DIR/fixtures/root-test-deployment.yaml" &>/dev/null
       print_test_result "Smoke Tests" "0"
     else
       print_color "$RED" "Test pods failed to start"
-      kubectl delete -f "$TEST_DIR/fixtures/test-deployment.yaml" &>/dev/null
+      kubectl delete -f "$TEST_DIR/fixtures/root-test-deployment.yaml" &>/dev/null
       print_test_result "Smoke Tests" "1"
     fi
   else

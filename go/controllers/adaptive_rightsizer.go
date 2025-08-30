@@ -622,7 +622,7 @@ func (r *AdaptiveRightSizer) logUpdate(update ResourceUpdate, dryRun bool) {
 		memReq.String(),
 		update.Method,
 	)
-	return false
+	return
 }
 
 // shouldProcessNamespace checks if a namespace should be processed based on include/exclude lists

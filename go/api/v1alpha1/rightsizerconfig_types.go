@@ -389,11 +389,9 @@ type NamespaceConfigSpec struct {
 	IncludeNamespaces []string `json:"includeNamespaces,omitempty"`
 
 	// ExcludeNamespaces to exclude from monitoring
-	// +kubebuilder:default=["kube-system","kube-public","kube-node-lease"]
 	ExcludeNamespaces []string `json:"excludeNamespaces,omitempty"`
 
 	// SystemNamespaces that should never be modified
-	// +kubebuilder:default=["kube-system","kube-public","kube-node-lease","right-sizer-system"]
 	SystemNamespaces []string `json:"systemNamespaces,omitempty"`
 
 	// NamespaceLabels to select namespaces by labels

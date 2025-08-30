@@ -206,3 +206,20 @@ func Success(format string, args ...interface{}) {
 		log.Printf("[SUCCESS] "+format, args...)
 	}
 }
+
+// New creates a new logger with the specified level
+func New(level LogLevel) *Logger {
+	return &Logger{
+		level:  level,
+		prefix: "",
+		logger: log.New(os.Stdout, "", 0),
+	}
+}
+
+// GetLogger returns the global logger instance, creating it if necessary
+func GetLogger() *Logger {
+	if Global == nil {
+		Global = New(INFO)
+	}
+	return Global
+}

@@ -28,7 +28,6 @@ import (
 	"right-sizer/controllers"
 	"right-sizer/logger"
 	"right-sizer/metrics"
-	"right-sizer/policy"
 	"right-sizer/retry"
 	"right-sizer/validation"
 	"runtime"
@@ -72,10 +71,11 @@ func main() {
 	fmt.Println("🚀 Right-Sizer Operator Starting...")
 	fmt.Println("========================================")
 
-	// Load configuration from environment variables
+	// Initialize configuration with defaults
+	// Configuration will be updated from CRDs once they are loaded
 	cfg := config.Load()
 
-	// Initialize logger with configured level
+	// Initialize logger with default level
 	logger.Init(cfg.LogLevel)
 
 	// Initialize controller-runtime logger to prevent warnings
@@ -87,21 +87,9 @@ func main() {
 	ctrllog.SetLogger(zapr.NewLogger(zapLog))
 
 	fmt.Println("----------------------------------------")
-	logger.Info("📋 Configuration Loaded:")
-	logger.Info("   CPU Request Multiplier: %.2f", cfg.CPURequestMultiplier)
-	logger.Info("   CPU Request Addition: %d millicores", cfg.CPURequestAddition)
-	logger.Info("   Memory Request Multiplier: %.2f", cfg.MemoryRequestMultiplier)
-	logger.Info("   Memory Request Addition: %d MB", cfg.MemoryRequestAddition)
-	logger.Info("   CPU Limit Multiplier: %.2f", cfg.CPULimitMultiplier)
-	logger.Info("   CPU Limit Addition: %d millicores", cfg.CPULimitAddition)
-	logger.Info("   Memory Limit Multiplier: %.2f", cfg.MemoryLimitMultiplier)
-	logger.Info("   Memory Limit Addition: %d MB", cfg.MemoryLimitAddition)
-	logger.Info("   Max CPU Limit: %d millicores", cfg.MaxCPULimit)
-	logger.Info("   Max Memory Limit: %d MB", cfg.MaxMemoryLimit)
-	logger.Info("   Min CPU Request: %d millicores", cfg.MinCPURequest)
-	logger.Info("   Min Memory Request: %d MB", cfg.MinMemoryRequest)
-	logger.Info("   Resize Interval: %v", cfg.ResizeInterval)
-	logger.Info("   Log Level: %s", cfg.LogLevel)
+	logger.Info("📋 Using Default Configuration")
+	logger.Info("   Waiting for RightSizerConfig CRD to override defaults...")
+	logger.Info("   Configuration Source: %s", cfg.ConfigSource)
 	fmt.Println("----------------------------------------")
 
 	// Print build information
@@ -115,16 +103,7 @@ func main() {
 	// Initialize enhanced components
 	operatorMetrics := metrics.NewOperatorMetrics()
 
-	// Start metrics server if enabled
-	if cfg.MetricsEnabled {
-		go func() {
-			logger.Info("🔍 Starting metrics server on port %d", cfg.MetricsPort)
-			if err := metrics.StartMetricsServer(cfg.MetricsPort); err != nil {
-				logger.Error("Metrics server error: %v", err)
-			}
-		}()
-	}
-
+	// Start health server
 	StartHealthServer()
 
 	// Get Kubernetes config
@@ -230,68 +209,36 @@ func main() {
 		logger.Warn("Failed to refresh resource validator caches: %v", err)
 	}
 
-	// Initialize policy engine if enabled
-	if cfg.PolicyBasedSizing {
-		policyEngine := policy.NewPolicyEngine(mgr.GetClient(), cfg, operatorMetrics)
-		logger.Info("🏛️  Policy engine initialized")
-
-		// Load default policies or from ConfigMap
-		// In production, you would load from a ConfigMap
-		// For now, using built-in default rules
-		logger.Info("Loading default policy rules...")
-
-		// Use policyEngine to avoid unused variable error
-		_ = policyEngine
-	}
-
-	// Initialize audit logger if enabled
+	// Initialize audit logger (will be enabled/disabled based on CRD config)
 	var auditLogger *audit.AuditLogger
-	if cfg.AuditEnabled {
-		auditConfig := audit.DefaultAuditConfig()
-		auditLogger, err = audit.NewAuditLogger(mgr.GetClient(), cfg, operatorMetrics, auditConfig)
-		if err != nil {
-			logger.Warn("Failed to initialize audit logger: %v", err)
-		} else {
-			logger.Info("📋 Audit logging initialized")
-		}
+	auditConfig := audit.DefaultAuditConfig()
+	auditLogger, err = audit.NewAuditLogger(mgr.GetClient(), cfg, operatorMetrics, auditConfig)
+	if err != nil {
+		logger.Warn("Failed to initialize audit logger: %v", err)
 	}
 
-	// Initialize admission webhook if enabled
+	// Initialize admission webhook (will be enabled/disabled based on CRD config)
 	var webhookManager *admission.WebhookManager
-	if cfg.AdmissionController {
-		webhookConfig := admission.WebhookConfig{
-			Port:              8443,
-			EnableValidation:  true,
-			EnableMutation:    false,
-			DryRun:            cfg.DryRun,
-			RequireAnnotation: false,
-		}
-		webhookManager = admission.NewWebhookManager(
-			mgr.GetClient(),
-			clientset,
-			resourceValidator,
-			cfg,
-			operatorMetrics,
-			webhookConfig,
-		)
-		logger.Info("🛡️  Admission webhook initialized")
+	webhookConfig := admission.WebhookConfig{
+		Port:              8443,
+		EnableValidation:  true,
+		EnableMutation:    false,
+		DryRun:            cfg.DryRun,
+		RequireAnnotation: false,
 	}
+	webhookManager = admission.NewWebhookManager(
+		mgr.GetClient(),
+		clientset,
+		resourceValidator,
+		cfg,
+		operatorMetrics,
+		webhookConfig,
+	)
 
-	// Initialize metrics provider
-	metricsProvider := os.Getenv("METRICS_PROVIDER")
+	// Initialize metrics provider (default to metrics-server, will be updated from CRD)
 	var provider metrics.Provider
-
-	if metricsProvider == "prometheus" {
-		prometheusURL := os.Getenv("PROMETHEUS_URL")
-		if prometheusURL == "" {
-			prometheusURL = "http://prometheus:9090"
-		}
-		logger.Info("Using Prometheus metrics provider at %s", prometheusURL)
-		provider = metrics.NewPrometheusProvider(prometheusURL)
-	} else {
-		logger.Info("Using Kubernetes metrics-server provider")
-		provider = metrics.NewMetricsServerProvider(mgr.GetClient())
-	}
+	logger.Info("Using default metrics-server provider (can be changed via RightSizerConfig CRD)")
+	provider = metrics.NewMetricsServerProvider(mgr.GetClient())
 
 	// Initialize retry configuration
 	retryConfig := retry.Config{
@@ -319,40 +266,17 @@ func main() {
 	signalChan := make(chan os.Signal, 1)
 	signal.Notify(signalChan, syscall.SIGINT, syscall.SIGTERM)
 
-	// Check if ENABLE_INPLACE_RESIZE is set
-	enableInPlace := os.Getenv("ENABLE_INPLACE_RESIZE")
-
-	if enableInPlace == "true" {
-		// Use the InPlaceRightSizer for Kubernetes 1.33+ with resize subresource support
-		logger.Info("🚀 Using InPlaceRightSizer for Kubernetes 1.33+ in-place pod resizing")
-
-		// Use existing setup function for now
-		if err := controllers.SetupInPlaceRightSizer(mgr, provider); err != nil {
-			logger.Error("unable to setup InPlaceRightSizer: %v", err)
-			os.Exit(1)
-		}
-	} else {
-		// Fall back to adaptive rightsizer for older Kubernetes versions
-		logger.Info("Using Enhanced AdaptiveRightSizer (traditional resizing with potential pod restarts)")
-
-		if cfg.DryRun {
-			logger.Warn("⚠️  DRY RUN MODE - Changes will be logged but not applied")
-		}
-
-		if err := controllers.SetupAdaptiveRightSizer(mgr, provider, cfg.DryRun); err != nil {
-			logger.Error("unable to setup AdaptiveRightSizer: %v", err)
-			os.Exit(1)
-		}
-	}
-
 	// Setup CRD controllers
 	logger.Info("Setting up CRD controllers...")
 
-	// Setup RightSizerConfig controller (should be initialized first)
+	// Setup RightSizerConfig controller (this will manage configuration)
 	configController := &controllers.RightSizerConfigReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-		Config: cfg,
+		Client:          mgr.GetClient(),
+		Scheme:          mgr.GetScheme(),
+		Config:          cfg,
+		MetricsProvider: &provider,
+		AuditLogger:     auditLogger,
+		WebhookManager:  webhookManager,
 	}
 	if err := configController.SetupWithManager(mgr); err != nil {
 		logger.Error("unable to setup RightSizerConfig controller: %v", err)
@@ -373,22 +297,53 @@ func main() {
 	}
 	logger.Info("✅ RightSizerPolicy controller initialized")
 
-	// Start admission webhook if enabled
-	if webhookManager != nil {
-		go func() {
+	// Setup the main rightsizer controller
+	// The controller will use configuration from CRDs
+	logger.Info("Setting up main RightSizer controller...")
+
+	// Use AdaptiveRightSizer as the default implementation
+	// It will check for in-place resize capability based on CRD configuration
+	if err := controllers.SetupAdaptiveRightSizer(mgr, provider, cfg.DryRun); err != nil {
+		logger.Error("unable to setup AdaptiveRightSizer: %v", err)
+		os.Exit(1)
+	}
+	logger.Info("✅ AdaptiveRightSizer controller initialized")
+
+	// Start metrics server (will be enabled/disabled based on CRD config)
+	go func() {
+		// Wait for configuration to be loaded from CRD
+		time.Sleep(5 * time.Second)
+
+		if cfg.MetricsEnabled {
+			logger.Info("🔍 Starting metrics server on port %d", cfg.MetricsPort)
+			if err := metrics.StartMetricsServer(cfg.MetricsPort); err != nil {
+				logger.Error("Metrics server error: %v", err)
+			}
+		}
+	}()
+
+	// Start admission webhook (will be enabled/disabled based on CRD config)
+	go func() {
+		// Wait for configuration to be loaded from CRD
+		time.Sleep(5 * time.Second)
+
+		if cfg.AdmissionController && webhookManager != nil {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
+			logger.Info("🛡️  Starting admission webhook...")
 			if err := webhookManager.Start(ctx); err != nil {
 				logger.Error("admission webhook error: %v", err)
 			}
-		}()
-	}
+		}
+	}()
 
 	// Start manager in a goroutine
 	managerDone := make(chan error, 1)
 	go func() {
 		logger.Info("🚀 Starting right-sizer operator manager...")
+		logger.Info("📋 Configuration will be loaded from RightSizerConfig CRDs")
+		logger.Info("📋 Policies will be loaded from RightSizerPolicy CRDs")
 		managerDone <- mgr.Start(ctrl.SetupSignalHandler())
 	}()
 
@@ -427,6 +382,7 @@ func main() {
 	// Print shutdown summary
 	fmt.Println("========================================")
 	fmt.Println("🎯 Right-Sizer Operator Summary:")
+	fmt.Printf("   Configuration Source: %s\n", cfg.ConfigSource)
 	fmt.Printf("   Circuit Breaker State: %s\n", retryHandler.GetCircuitBreakerState())
 	if operatorMetrics != nil {
 		fmt.Println("   Metrics available at /metrics endpoint")

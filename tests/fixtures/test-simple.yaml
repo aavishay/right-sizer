@@ -1,0 +1,123 @@
+---
+# Test namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: test-rightsizer
+  labels:
+    rightsizer: enabled
+
+---
+# Test deployment with intentionally oversized resources
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: test-app
+  namespace: test-rightsizer
+  labels:
+    app: test-app
+    environment: test
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: test-app
+  template:
+    metadata:
+      labels:
+        app: test-app
+        environment: test
+      annotations:
+        rightsizer.io/enabled: "true"
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:alpine
+        ports:
+        - containerPort: 80
+        resources:
+          requests:
+            cpu: 500m      # Oversized for nginx
+            memory: 512Mi  # Oversized for nginx
+          limits:
+            cpu: 1000m
+            memory: 1Gi
+
+---
+# Simple RightSizerPolicy
+apiVersion: rightsizer.io/v1alpha1
+kind: RightSizerPolicy
+metadata:
+  name: test-policy
+  namespace: test-rightsizer
+spec:
+  enabled: true
+  priority: 100
+  mode: balanced
+  dryRun: false
+
+  targetRef:
+    kind: Deployment
+    apiVersion: apps/v1
+    namespaces:
+    - test-rightsizer
+    labelSelector:
+      matchLabels:
+        environment: test
+
+  resourceStrategy:
+    cpu:
+      requestMultiplier: 1.2
+      limitMultiplier: 2.0
+      minRequest: "10m"
+      maxLimit: "2000m"
+    memory:
+      requestMultiplier: 1.3
+      limitMultiplier: 1.8
+      minRequest: "64Mi"
+      maxLimit: "2Gi"
+
+  constraints:
+    maxCPURequest: "1000m"
+    maxMemoryRequest: "1Gi"
+    maxCPULimit: "2000m"
+    maxMemoryLimit: "2Gi"
+    minCPURequest: "10m"
+    minMemoryRequest: "32Mi"
+    allowInPlaceResize: true
+    enforceMinimums: true
+    enforceMaximums: true
+
+---
+# Simple RightSizerConfig
+apiVersion: rightsizer.io/v1alpha1
+kind: RightSizerConfig
+metadata:
+  name: default-config
+  namespace: test-rightsizer
+spec:
+  enabled: true
+
+  namespaceConfig:
+    includeNamespaces:
+    - test-rightsizer
+    excludeNamespaces:
+    - kube-system
+    - kube-public
+    - kube-node-lease
+
+---
+# Service to expose test-app
+apiVersion: v1
+kind: Service
+metadata:
+  name: test-app-service
+  namespace: test-rightsizer
+spec:
+  selector:
+    app: test-app
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 80
+  type: ClusterIP

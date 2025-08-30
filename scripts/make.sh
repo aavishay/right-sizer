@@ -96,8 +96,8 @@ cmd_clean() {
 
 cmd_test() {
   print_header "Running tests..."
-  if [ -f "${ROOT_DIR}/test/run-all-tests.sh" ]; then
-    "${ROOT_DIR}/test/run-all-tests.sh"
+  if [ -f "${ROOT_DIR}/tests/run-all-tests.sh" ]; then
+    "${ROOT_DIR}/tests/run-all-tests.sh"
   else
     # Fallback to direct go test if new test runner doesn't exist
     cd "${ROOT_DIR}/go"
@@ -109,8 +109,8 @@ cmd_test() {
 
 cmd_test_coverage() {
   print_header "Running tests with coverage..."
-  if [ -f "${ROOT_DIR}/test/run-all-tests.sh" ]; then
-    COVERAGE=true "${ROOT_DIR}/test/run-all-tests.sh"
+  if [ -f "${ROOT_DIR}/tests/run-all-tests.sh" ]; then
+    COVERAGE=true "${ROOT_DIR}/tests/run-all-tests.sh"
     print_success "Coverage report generated: coverage.html"
     print_info "Open coverage.html in your browser to view the report"
   else

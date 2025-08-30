@@ -1,221 +1,300 @@
 # Default values for right-sizer.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+# Deployment configuration
 replicaCount: 1
 
 image:
-  repository: right-sizer
-  tag: latest
-  pullPolicy: Always
+  repository: ghcr.io/right-sizer/right-sizer
+  pullPolicy: IfNotPresent
+  # Overrides the image tag whose default is the chart appVersion.
+  tag: "latest"
 
+imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
 
-# Service account
+# Service account configuration
 serviceAccount:
+  # Specifies whether a service account should be created
   create: true
-  name: right-sizer
+  # Annotations to add to the service account
+  annotations: {}
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: "right-sizer"
 
-# Prometheus configuration
-prometheusUrl: "http://prometheus:9090"
-
-# Metrics provider (kubernetes or prometheus)
-metricsProvider: "kubernetes"
-
-# Enable in-place resize for Kubernetes 1.33+
-enableInPlaceResize: "true"
-
-# How often to check and resize resources (e.g., 30s, 1m, 5m, 1h)
-resizeInterval: "30s"
-
-# Log level (debug, info, warn, error)
-logLevel: "info"
-
-# Resource sizing configuration
-config:
-  # Multipliers for calculating requests from usage
-  cpuRequestMultiplier: 1.2 # Multiply CPU usage by this to get request
-  memoryRequestMultiplier: 1.2 # Multiply memory usage by this to get request
-
-  # Additions for calculating requests from usage
-  cpuRequestAddition: 0 # Add this fixed amount (millicores) to CPU usage for request
-  memoryRequestAddition: 0 # Add this fixed amount (MB) to memory usage for request
-
-  # Multipliers for calculating limits from requests
-  cpuLimitMultiplier: 2.0 # Multiply CPU request by this to get limit
-  memoryLimitMultiplier: 2.0 # Multiply memory request by this to get limit
-
-  # Additions for calculating limits from requests
-  cpuLimitAddition: 0 # Add this fixed amount (millicores) to CPU request for limit
-  memoryLimitAddition: 0 # Add this fixed amount (MB) to memory request for limit
-
-  # Maximum caps for resources
-  maxCpuLimit: 4000 # Maximum CPU limit in millicores (4 cores)
-  maxMemoryLimit: 8192 # Maximum memory limit in MB (8GB)
-
-  # Minimum values for resources
-  minCpuRequest: 10 # Minimum CPU request in millicores
-  minMemoryRequest: 64 # Minimum memory request in MB
-
-  # Retry configuration
-  maxRetries: 3 # Maximum retry attempts for operations
-  retryInterval: "5s" # Interval between retries
-
-  # Safety and validation
-  safetyThreshold: 0.5 # Safety threshold for resource changes (0-1)
-
-  # Advanced features
-  policyBasedSizing: false # Enable policy-based sizing rules
-  historyDays: 7 # Days of history to keep for trend analysis
-  customMetrics: [] # Custom metrics to consider (CSV)
-  admissionController: false # Enable admission controller for validation
-
-# Observability configuration
-observability:
-  # Metrics configuration
-  metricsEnabled: true # Enable Prometheus metrics
-  metricsPort: 9090 # Port for metrics endpoint
-
-  # Audit configuration
-  auditEnabled: true # Enable audit logging for resource changes
-  auditConfig:
-    logPath: "/var/log/right-sizer/audit.log"
-    maxFileSize: 104857600 # 100MB
-    maxFiles: 10
-    bufferSize: 1000
-    flushInterval: "5s"
-    enableFileLog: true
-    enableEventLog: true
-    enableMetrics: true
-    retentionDays: 30
-
-# Security configuration
-security:
-  # Admission webhook configuration
-  admissionWebhook:
-    enabled: false # Enable admission webhook
-    port: 8443
-    certPath: "/etc/certs/tls.crt"
-    keyPath: "/etc/certs/tls.key"
-    enableValidation: true
-    enableMutation: false
-    requireAnnotation: false
-
-  # RBAC configuration
-  rbac:
-    create: true
-    rules:
-      - apiGroups: [""]
-        resources: ["pods", "pods/resize", "events"]
-        verbs: ["get", "list", "watch", "patch", "update", "create"]
-      - apiGroups: [""]
-        resources: ["nodes", "resourcequotas", "limitranges"]
-        verbs: ["get", "list", "watch"]
-      - apiGroups: ["metrics.k8s.io"]
-        resources: ["pods", "nodes"]
-        verbs: ["get", "list"]
-
-# Policy engine configuration
-policyEngine:
-  enabled: false # Enable policy-based sizing
-  configMapName: "right-sizer-policies"
-  rules: [] # Policy rules (can be defined here or in ConfigMap)
-
-# Circuit breaker configuration
-circuitBreaker:
-  enabled: true
-  failureThreshold: 5
-  recoveryTimeout: "30s"
-  successThreshold: 3
-
-# Operator resource limits
-resources:
-  requests:
-    cpu: 100m
-    memory: 128Mi
-  limits:
-    cpu: 500m
-    memory: 512Mi
-
-# Node selector
-nodeSelector: {}
-
-# Tolerations
-tolerations: []
-
-# Affinity
-affinity: {}
-
-# Security context
-securityContext: {}
-
-# Pod security context
-podSecurityContext: {}
-
-namespaceInclude: "default" # Comma-separated list of namespaces to include (e.g., "default,kube-system")
-namespaceExclude: "kube-system" # Comma-separated list of namespaces to exclude (e.g., "test,dev")
-
-# Volume mounts for audit logs and certificates
-volumes:
-  auditLogs:
-    enabled: true
-    hostPath: "/var/log/right-sizer"
-    mountPath: "/var/log/right-sizer"
-
-  certificates:
-    enabled: false # Enable if using admission webhook with TLS
-    secretName: "right-sizer-certs"
-    mountPath: "/etc/certs"
-
-# Persistent Volume Claims
-persistentVolume:
-  auditLogs:
-    enabled: false
-    storageClass: ""
-    size: "10Gi"
-    accessMode: "ReadWriteOnce"
-
-# Network policies
-networkPolicy:
-  enabled: false
-  ingress: []
-  egress: []
+# Pod annotations
+podAnnotations: {}
 
 # Pod security context
 podSecurityContext:
   runAsNonRoot: true
-  runAsUser: 1000
-  runAsGroup: 1000
-  fsGroup: 1000
+  runAsUser: 65532
+  fsGroup: 65532
 
 # Container security context
-containerSecurityContext:
+securityContext:
   allowPrivilegeEscalation: false
-  readOnlyRootFilesystem: true
   capabilities:
     drop:
       - ALL
-  seccompProfile:
-    type: RuntimeDefault
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 65532
 
-# Environment variables
-env:
-  - name: GOMAXPROCS
-    value: "2"
-  - name: GOGC
-    value: "100"
-
-# Additional labels and annotations
-additionalLabels: {}
-additionalAnnotations: {}
-
-# Service monitor for Prometheus
-serviceMonitor:
-  enabled: false
-  namespace: ""
-  labels: {}
-  interval: "30s"
-  path: "/metrics"
-
-# Service
+# Service configuration
 service:
   type: ClusterIP
-  port: 8080
+  port: 9090
+  annotations: {}
+
+# Resources for the right-sizer operator pod itself
+resources:
+  limits:
+    cpu: 500m
+    memory: 256Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+# Autoscaling configuration for the operator
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 3
+  targetCPUUtilizationPercentage: 80
+  targetMemoryUtilizationPercentage: 80
+
+# Node selector for operator pod placement
+nodeSelector: {}
+
+# Tolerations for operator pod assignment
+tolerations: []
+
+# Affinity rules for operator pod assignment
+affinity: {}
+
+# RBAC configuration
+rbac:
+  # Create RBAC resources
+  create: true
+
+# Webhook configuration
+webhook:
+  # Enable webhook server
+  enabled: true
+  # Certificate configuration
+  certManager:
+    enabled: false
+    issuerRef:
+      name: ""
+      kind: ""
+
+# Monitoring configuration
+monitoring:
+  # Create ServiceMonitor for Prometheus Operator
+  serviceMonitor:
+    enabled: false
+    interval: 30s
+    scrapeTimeout: 10s
+    labels: {}
+    annotations: {}
+
+# CRD installation
+crds:
+  # Install CRDs as part of the Helm release
+  install: true
+  # Keep CRDs on chart uninstall
+  keep: true
+
+# Default RightSizerConfig CRD instance
+# Set to true to create a default configuration
+createDefaultConfig: true
+
+# Default configuration values for the RightSizerConfig CRD
+# These will only be used if createDefaultConfig is true
+defaultConfig:
+  name: "default"
+  enabled: true
+  mode: "balanced"
+  resizeInterval: "30s"
+  dryRun: false
+
+  # Default resource strategy
+  resourceStrategy:
+    cpu:
+      requestMultiplier: 1.2
+      requestAddition: 0
+      limitMultiplier: 2.0
+      limitAddition: 0
+      minRequest: 10
+      maxLimit: 4000
+    memory:
+      requestMultiplier: 1.2
+      requestAddition: 0
+      limitMultiplier: 2.0
+      limitAddition: 0
+      minRequest: 64
+      maxLimit: 8192
+
+  # Global constraints
+  constraints:
+    maxChangePercentage: 50
+    minChangeThreshold: 5
+    cooldownPeriod: "5m"
+    maxConcurrentResizes: 10
+    maxRestartsPerHour: 3
+    respectPDB: true
+    respectHPA: true
+    respectVPA: true
+
+  # Metrics configuration
+  metrics:
+    provider: "metrics-server"
+    prometheusEndpoint: ""
+    scrapeInterval: "30s"
+    retentionPeriod: "7d"
+
+  # Observability configuration
+  observability:
+    logLevel: "info"
+    logFormat: "json"
+    enableAuditLog: true
+    auditLogPath: "/var/log/right-sizer/audit.log"
+    enableMetricsExport: true
+    metricsPort: 9090
+    enableTracing: false
+    tracingEndpoint: ""
+    enableEvents: true
+
+  # Security configuration
+  security:
+    enableAdmissionController: false
+    admissionWebhookPort: 8443
+    requireAnnotation: false
+    annotationKey: "rightsizer.io/enable"
+    enableMutatingWebhook: false
+    enableValidatingWebhook: true
+
+  # Operator configuration
+  operator:
+    leaderElection: false
+    leaderElectionNamespace: ""
+    leaderElectionID: "right-sizer-leader"
+    maxRetries: 3
+    retryInterval: "5s"
+    enableCircuitBreaker: true
+    circuitBreakerThreshold: 5
+    reconcileInterval: "1m"
+    workerThreads: 10
+
+  # Namespace configuration
+  namespaces:
+    # Include specific namespaces (empty means all)
+    include: []
+    # Exclude specific namespaces
+    exclude:
+      - kube-system
+      - kube-public
+      - kube-node-lease
+    # System namespaces to always exclude
+    systemNamespaces:
+      - kube-system
+      - kube-public
+      - kube-node-lease
+      - right-sizer-system
+
+  # Feature gates
+  featureGates:
+    EnableInPlaceResize: false
+    EnablePredictiveScaling: false
+    EnableCostOptimization: false
+
+# Example RightSizerPolicy CRDs
+# Set to true to create example policies
+createExamplePolicies: false
+
+# Example policies configuration
+examplePolicies:
+  - name: "aggressive-policy"
+    enabled: false
+    priority: 100
+    mode: "aggressive"
+    targetRef:
+      kind: "Deployment"
+      namespaces: ["default"]
+      labelSelector:
+        matchLabels:
+          environment: "development"
+    resourceStrategy:
+      cpu:
+        requestMultiplier: 1.1
+        limitMultiplier: 1.5
+        targetUtilization: 80
+      memory:
+        requestMultiplier: 1.1
+        limitMultiplier: 1.5
+        targetUtilization: 85
+    schedule:
+      interval: "5m"
+    constraints:
+      maxChangePercentage: 30
+      cooldownPeriod: "10m"
+      respectPDB: true
+      respectHPA: true
+
+  - name: "conservative-policy"
+    enabled: false
+    priority: 50
+    mode: "conservative"
+    targetRef:
+      kind: "StatefulSet"
+      namespaces: ["production"]
+      labelSelector:
+        matchLabels:
+          tier: "database"
+    resourceStrategy:
+      cpu:
+        requestMultiplier: 1.5
+        limitMultiplier: 2.5
+        targetUtilization: 60
+      memory:
+        requestMultiplier: 1.5
+        limitMultiplier: 2.0
+        targetUtilization: 70
+    schedule:
+      interval: "30m"
+    constraints:
+      maxChangePercentage: 20
+      cooldownPeriod: "30m"
+      respectPDB: true
+      respectHPA: true
+      maxRestartsPerHour: 1
+
+  - name: "business-hours-policy"
+    enabled: false
+    priority: 200
+    mode: "custom"
+    targetRef:
+      kind: "Deployment"
+      namespaces: ["default"]
+      annotationSelector:
+        rightsizer.io/business-hours: "true"
+    resourceStrategy:
+      cpu:
+        requestMultiplier: 1.3
+        limitMultiplier: 2.0
+      memory:
+        requestMultiplier: 1.3
+        limitMultiplier: 2.0
+    schedule:
+      timeWindows:
+        - start: "08:00"
+          end: "18:00"
+          daysOfWeek: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
+          timezone: "America/New_York"
+    constraints:
+      maxChangePercentage: 25
+      cooldownPeriod: "15m"
