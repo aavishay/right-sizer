@@ -7,13 +7,14 @@ A Kubernetes operator for automatic pod resource right-sizing with comprehensive
 ## Key Features
 
 ### Core Functionality
-- **In-Place Pod Resizing (Kubernetes 1.33+)**: Dynamically adjust pod resources without restarts using the new resize subresource
-- **Multiple Strategies**: Adaptive, non-disruptive, and in-place resizing strategies
+- **In-Place Pod Resizing (Kubernetes 1.33+)**: Dynamically adjust pod resources without restarts using the resize subresource
+- **Multiple Sizing Strategies**: Adaptive, non-disruptive, and in-place resizing strategies
 - **Multi-Source Metrics**: Supports both Kubernetes metrics-server and Prometheus for data collection
 - **Comprehensive Validation**: Resource validation against node capacity, quotas, and limit ranges
 
 ### Policy & Intelligence
-- **Policy-Based Sizing**: Rule-based resource allocation with priority, scheduling, and complex selectors
+- **CRD-Based Configuration**: Policy rules and configuration managed through Kubernetes Custom Resources
+- **Priority-Based Policies**: Rule-based resource allocation with complex selectors and priorities
 - **Historical Trend Analysis**: Track resource usage patterns over time for intelligent predictions
 - **Custom Metrics Support**: Integrate custom metrics beyond CPU and memory for sizing decisions
 - **Safety Thresholds**: Configurable limits to prevent excessive resource changes
@@ -32,63 +33,46 @@ A Kubernetes operator for automatic pod resource right-sizing with comprehensive
 
 ---
 
-## Helm Chart Usage
+## Quick Start
 
-You can deploy the right-sizer operator using the provided Helm chart.
+### Prerequisites
 
-### Install
+- Kubernetes 1.33+ (required for in-place resize feature)
+- Helm 3.0+
+- Metrics Server or Prometheus
+- kubectl configured for your cluster
 
-```sh
-helm install right-sizer ./helm
-```
+### Installation
 
-### Upgrade
+```bash
+# Install using Helm (CRDs are automatically installed)
+helm repo add right-sizer https://right-sizer.github.io/charts
+helm install right-sizer right-sizer/right-sizer \
+  --namespace right-sizer \
+  --create-namespace
 
-```sh
-helm upgrade right-sizer ./helm
-```
-
-### Uninstall
-
-```sh
-helm uninstall right-sizer
-```
-
-### Configuration
-
-You can override values in `values.yaml` using `--set` or by editing the file.
-
-Example:
-
-```sh
+# Or install from local chart (includes CRDs)
 helm install right-sizer ./helm \
-  --set image.repository=myrepo/right-sizer \
-  --set image.tag=v1.2.3 \
-  --set prometheusUrl=http://prometheus.mynamespace.svc:9090
+  --namespace right-sizer \
+  --create-namespace
 ```
 
-### Helm Values
+> **Note**: CRDs are automatically installed as part of the Helm chart. The `crds.install` value is set to `true` by default.
 
-| Name                | Description                       | Default                                  |
-|---------------------|-----------------------------------|------------------------------------------|
-| `image.repository`  | Docker image repository           | `right-sizer`                            |
-| `image.tag`         | Docker image tag                  | `latest`                                 |
-| `image.pullPolicy`  | Image pull policy                 | `Always`                                 |
-| `prometheusUrl`     | Prometheus endpoint for metrics   | `http://prometheus:9090`                 |
-| `namespaceInclude`  | Comma-separated list of namespaces to include (e.g., `"default,kube-system"`) | `default` |
-| `namespaceExclude`  | Comma-separated list of namespaces to exclude (e.g., `"test,dev"`) | `kube-system` |
-| `resources.requests.cpu`    | Pod CPU request            | `100m`                                   |
-| `resources.requests.memory` | Pod memory request         | `128Mi`                                  |
-| `resources.limits.cpu`      | Pod CPU limit              | `500m`                                   |
-| `resources.limits.memory`   | Pod memory limit           | `512Mi`                                  |
+### Verify Installation
 
----
+```bash
+# Check operator status
+kubectl get pods -n right-sizer
+kubectl logs -l app=right-sizer -n right-sizer -f
 
-#### Namespace Filtering
+# Check CRDs
+kubectl get crds | grep rightsizer
 
-- `namespaceInclude`: Only pods in these namespaces will be monitored. Example: `"default,kube-system"`
-- `namespaceExclude`: Pods in these namespaces will be excluded from monitoring. Example: `"test,dev"`
-- If both are set, only namespaces in the include list are monitored, except those in the exclude list.
+# View default configuration
+kubectl get rightsizerconfigs -n right-sizer
+kubectl get rightsizerpolicies -n right-sizer
+```
 
 ---
 
@@ -103,8 +87,8 @@ Starting with Kubernetes 1.33, the operator uses the native resize subresource t
 ### Requirements
 
 - Kubernetes 1.33 or later
-- kubectl 1.33+ for manual operations
-- In-place resize feature gate enabled (enabled by default in 1.33+)
+- InPlacePodVerticalScaling feature gate enabled (enabled by default in 1.33+)
+- Pods must not have restart policy constraints for resources
 
 ### How It Works
 
@@ -116,58 +100,276 @@ kubectl patch pod <pod-name> --subresource resize --patch '{"spec": {"containers
 
 The operator automatically detects if your cluster supports this feature and will use it when available, falling back to traditional methods on older clusters.
 
+### Example In-Place Resize
+
+```yaml
+apiVersion: rightsizer.io/v1alpha1
+kind: RightSizerConfig
+metadata:
+  name: default
+spec:
+  featureGates:
+    EnableInPlaceResize: true
+  strategies:
+    inplace:
+      enabled: true
+      interval: "30s"
+```
+
 ---
 
-## Policy-Based Resource Sizing
+## CRD-Based Configuration
 
-The right-sizer operator supports sophisticated policy-based resource allocation using configurable rules:
+The right-sizer operator uses Custom Resource Definitions (CRDs) for configuration management:
 
-### Policy Features
-- **CRD-Based Configuration**: Policies are defined as Kubernetes Custom Resources, not ConfigMaps
-- **Priority-Based Rules**: Higher priority rules override lower priority ones
-- **Complex Selectors**: Match pods by namespace, labels, annotations, regex patterns, QoS class, and workload type
-- **Flexible Actions**: Set multipliers, fixed values, or min/max constraints
-- **Scheduling Support**: Time-based and day-of-week rule activation
-- **Skip Conditions**: Exclude specific pods from processing
+### RightSizerConfig CRD
 
-### Example Policy Rule (CRD)
+The global configuration for the operator:
+
+```yaml
+apiVersion: rightsizer.io/v1alpha1
+kind: RightSizerConfig
+metadata:
+  name: default
+spec:
+  enabled: true
+  defaultMode: balanced
+  resizeInterval: 30s
+  dryRun: false
+  
+  resourceStrategy:
+    cpu:
+      requestMultiplier: 1.2
+      limitMultiplier: 2.0
+      minRequest: 10
+      maxLimit: 4000
+    memory:
+      requestMultiplier: 1.2
+      limitMultiplier: 2.0
+      minRequest: 64
+      maxLimit: 8192
+      
+  constraints:
+    maxChangePercentage: 50
+    cooldownPeriod: 5m
+    respectPDB: true
+    respectHPA: true
+    
+  observability:
+    logLevel: info
+    enableAuditLog: true
+    enableMetricsExport: true
+    
+  security:
+    enableAdmissionController: true
+    enableValidatingWebhook: true
+    enableMutatingWebhook: false
+```
+
+### RightSizerPolicy CRD
+
+Define specific policies for different workloads:
+
 ```yaml
 apiVersion: rightsizer.io/v1alpha1
 kind: RightSizerPolicy
 metadata:
-  name: high-priority-production
+  name: production-policy
 spec:
-  priority: 150
   enabled: true
-  description: Enhanced resources for high priority production workloads
-  selectors:
+  priority: 100
+  mode: conservative
+  
+  targetRef:
+    kind: Deployment
     namespaces: ["production"]
-    labels:
-      priority: high
-      environment: production
-  actions:
-    cpuMultiplier: 1.8
-    memoryMultiplier: 1.6
-    minCPU: "100m"
-    maxMemory: "16Gi"
+    labelSelector:
+      matchLabels:
+        tier: critical
+        
+  resourceStrategy:
+    cpu:
+      requestMultiplier: 1.5
+      limitMultiplier: 2.5
+      targetUtilization: 60
+    memory:
+      requestMultiplier: 1.4
+      limitMultiplier: 2.0
+      targetUtilization: 70
+      
+  schedule:
+    interval: 15m
+    timeWindows:
+      - start: "08:00"
+        end: "20:00"
+        daysOfWeek: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
+        
+  constraints:
+    maxChangePercentage: 20
+    cooldownPeriod: 30m
+    maxRestartsPerHour: 1
 ```
 
-See [examples/policy-rules-example.yaml](examples/policy-rules-example.yaml) for comprehensive CRD-based policy configurations.
+See [examples/](examples/) for more comprehensive CRD configurations.
+
+---
+
+## Helm Chart Configuration
+
+### Core Values
+
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `replicaCount` | Number of operator replicas | `1` |
+| `image.repository` | Operator image repository | `ghcr.io/right-sizer/right-sizer` |
+| `image.tag` | Operator image tag | `latest` |
+| `image.pullPolicy` | Image pull policy | `IfNotPresent` |
+| `resources.requests.cpu` | CPU request for operator | `100m` |
+| `resources.requests.memory` | Memory request for operator | `128Mi` |
+| `resources.limits.cpu` | CPU limit for operator | `500m` |
+| `resources.limits.memory` | Memory limit for operator | `256Mi` |
+
+### Feature Configuration
+
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `createDefaultConfig` | Create default RightSizerConfig CRD instance after CRDs are installed | `true` |
+| `createExamplePolicies` | Create example RightSizerPolicy CRD instances | `false` |
+| `crds.install` | Automatically install CRDs during Helm installation | `true` |
+| `crds.keep` | Retain CRDs when Helm chart is uninstalled (prevents data loss) | `true` |
+| `webhook.enabled` | Enable admission webhooks | `true` |
+| `webhook.certManager.enabled` | Use cert-manager for webhook certificates | `false` |
+| `monitoring.serviceMonitor.enabled` | Create ServiceMonitor for Prometheus | `false` |
+
+> **Note**: The CRDs (`RightSizerConfig` and `RightSizerPolicy`) are automatically installed by the Helm chart when `crds.install` is `true` (default). No separate CRD installation is required.
+
+### Security Configuration
+
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `rbac.create` | Create RBAC resources | `true` |
+| `serviceAccount.create` | Create service account | `true` |
+| `serviceAccount.name` | Service account name | `right-sizer` |
+| `podSecurityContext.runAsNonRoot` | Run as non-root user | `true` |
+| `podSecurityContext.runAsUser` | User ID | `65532` |
+| `securityContext.readOnlyRootFilesystem` | Read-only root filesystem | `true` |
+
+### Advanced Installation Examples
+
+```bash
+# Production deployment with HA and monitoring
+helm install right-sizer ./helm \
+  --set replicaCount=3 \
+  --set monitoring.serviceMonitor.enabled=true \
+  --set webhook.certManager.enabled=true \
+  --set defaultConfig.observability.logLevel=debug \
+  --set defaultConfig.security.enableAdmissionController=true
+
+# Development deployment with example policies
+helm install right-sizer ./helm \
+  --set createExamplePolicies=true \
+  --set defaultConfig.dryRun=true \
+  --set defaultConfig.observability.logLevel=debug
+```
+
+---
+
+## Admission Webhooks
+
+The operator includes both validating and mutating admission webhooks:
+
+### Validating Webhook
+- Validates resource changes against cluster constraints
+- Checks quota compliance
+- Ensures changes don't exceed safety thresholds
+- Validates against node capacity
+
+### Mutating Webhook
+- Applies default resource requests/limits
+- Corrects invalid resource specifications
+- Adds required annotations and labels
+
+### Configuration
+
+```yaml
+apiVersion: rightsizer.io/v1alpha1
+kind: RightSizerConfig
+metadata:
+  name: default
+spec:
+  security:
+    enableAdmissionController: true
+    admissionWebhookPort: 8443
+    enableValidatingWebhook: true
+    enableMutatingWebhook: false
+    requireAnnotation: false
+    annotationKey: "rightsizer.io/enable"
+```
+
+---
+
+## Policy-Based Resource Sizing
+
+The operator supports sophisticated policy-based resource allocation using CRDs:
+
+### Policy Features
+- **Priority-Based Rules**: Higher priority rules override lower priority ones
+- **Complex Selectors**: Match pods by namespace, labels, annotations, and workload type
+- **Flexible Actions**: Set multipliers, fixed values, or min/max constraints
+- **Scheduling Support**: Time-based and day-of-week rule activation
+- **Skip Conditions**: Exclude specific pods from processing
+
+### Example Policies
+
+#### Aggressive Policy for Development
+```yaml
+apiVersion: rightsizer.io/v1alpha1
+kind: RightSizerPolicy
+metadata:
+  name: dev-aggressive
+spec:
+  priority: 50
+  mode: aggressive
+  targetRef:
+    namespaces: ["development"]
+  resourceStrategy:
+    cpu:
+      requestMultiplier: 1.1
+      targetUtilization: 80
+    memory:
+      requestMultiplier: 1.1
+      targetUtilization: 85
+```
+
+#### Conservative Policy for Production
+```yaml
+apiVersion: rightsizer.io/v1alpha1
+kind: RightSizerPolicy
+metadata:
+  name: prod-conservative
+spec:
+  priority: 150
+  mode: conservative
+  targetRef:
+    namespaces: ["production"]
+    labelSelector:
+      matchLabels:
+        tier: critical
+  resourceStrategy:
+    cpu:
+      requestMultiplier: 1.5
+      targetUtilization: 60
+    memory:
+      requestMultiplier: 1.4
+      targetUtilization: 70
+  constraints:
+    maxChangePercentage: 20
+    maxRestartsPerHour: 1
+```
+
+---
 
 ## Security & Compliance
-
-### Admission Controller
-Optional admission webhook for validating and mutating pod resource requests:
-- **Validation**: Ensure resource changes comply with cluster policies
-- **Mutation**: Automatically apply default resources or corrections
-- **Security Events**: Audit all admission decisions
-
-### Comprehensive Audit Logging
-Track all operator decisions and changes:
-- **Resource Changes**: Before/after values with detailed context
-- **Policy Applications**: Which rules were applied and why
-- **Validation Results**: Success/failure with error details
-- **Security Events**: Admission controller decisions and user actions
 
 ### RBAC Integration
 Minimal required permissions with fine-grained access control. For comprehensive RBAC documentation, see [docs/RBAC.md](docs/RBAC.md).
@@ -182,264 +384,268 @@ If you encounter permission errors:
 ./scripts/rbac/verify-permissions.sh
 ```
 
-#### Example RBAC Configuration:
+### Audit Logging
+Track all operator decisions and changes:
+- Resource change events with before/after values
+- Policy application decisions
+- Validation results and errors
+- Security events from admission controllers
+
+### Network Policies
+Example network policy for the operator:
 ```yaml
-rules:
-- apiGroups: [""]
-  resources: ["pods", "pods/resize", "events"]
-  verbs: ["get", "list", "watch", "patch", "update", "create"]
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: right-sizer-network-policy
+  namespace: right-sizer
+spec:
+  podSelector:
+    matchLabels:
+      app: right-sizer
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - namespaceSelector: {}
+    ports:
+    - protocol: TCP
+      port: 8443  # Webhook port
+  egress:
+  - to:
+    - namespaceSelector: {}
+    ports:
+    - protocol: TCP
+      port: 443  # Kubernetes API
 ```
+
+---
 
 ## Observability & Monitoring
 
 ### Prometheus Metrics
-Comprehensive metrics for monitoring operator performance:
+The operator exposes comprehensive metrics on port 9090:
+
 - `rightsizer_pods_processed_total`: Total pods processed
 - `rightsizer_pods_resized_total`: Successful resource adjustments
 - `rightsizer_resource_change_percentage`: Distribution of change sizes
 - `rightsizer_safety_threshold_violations_total`: Safety violations
 - `rightsizer_processing_duration_seconds`: Operation timing
+- `rightsizer_admission_requests_total`: Admission webhook requests
+- `rightsizer_policy_evaluations_total`: Policy evaluation count
 
-### Circuit Breakers & Retry Logic
-Automatic failure handling with configurable parameters:
-- **Exponential Backoff**: Intelligent retry timing
-- **Circuit Breaker Pattern**: Fail fast during outages
-- **Configurable Thresholds**: Customize failure handling
+### Grafana Dashboard
+Import the provided dashboard for visualization:
+```bash
+kubectl create configmap rightsizer-dashboard \
+  --from-file=dashboards/rightsizer.json \
+  -n monitoring
+```
 
-## Agent Mode
-
-The right-sizer operator runs continuously, monitoring pods and adjusting resources based on usage patterns and policy rules. The operator supports multiple operational modes:
-
-### Standard Agent Mode
-- Continuous monitoring with configurable intervals
-- Automatic resource adjustments based on metrics
-- Policy-driven decision making
-
-### High Availability Mode
-- Multi-replica deployment with leader election
-- Pod disruption budgets for zero-downtime updates
-- Health checks and automatic recovery
+### Health Endpoints
+- `/healthz`: Liveness probe endpoint
+- `/readyz`: Readiness probe endpoint
+- `/metrics`: Prometheus metrics endpoint
 
 ---
 
-## Configuration
+## Operational Modes
 
-The right-sizer operator can be configured using environment variables to customize resource sizing behavior:
-
-### Resource Multipliers
-
-### Resource Multipliers
-
-| Environment Variable | Default | Description |
-|---------------------|---------|-------------|
-| `CPU_REQUEST_MULTIPLIER` | `1.2` | Multiplier applied to CPU usage to calculate CPU requests |
-| `MEMORY_REQUEST_MULTIPLIER` | `1.2` | Multiplier applied to memory usage to calculate memory requests |
-| `CPU_LIMIT_MULTIPLIER` | `2.0` | Multiplier applied to CPU requests to calculate CPU limits |
-| `MEMORY_LIMIT_MULTIPLIER` | `2.0` | Multiplier applied to memory requests to calculate memory limits |
-
-### Resource Boundaries
-
-| Environment Variable | Default | Description |
-|---------------------|---------|-------------|
-| `MAX_CPU_LIMIT` | `4000` | Maximum CPU limit in millicores (4000 = 4 cores) |
-| `MAX_MEMORY_LIMIT` | `8192` | Maximum memory limit in MB (8192 = 8GB) |
-| `MIN_CPU_REQUEST` | `10` | Minimum CPU request in millicores |
-| `MIN_MEMORY_REQUEST` | `64` | Minimum memory request in MB |
-
-### Operational Configuration
-
-| Environment Variable | Default | Description |
-|---------------------|---------|-------------|
-| `METRICS_PROVIDER` | `kubernetes` | Metrics source: `kubernetes` (metrics-server) or `prometheus` |
-| `PROMETHEUS_URL` | `http://prometheus:9090` | Prometheus URL (when using Prometheus provider) |
-| `ENABLE_INPLACE_RESIZE` | `true` | Enable in-place pod resizing for Kubernetes 1.33+ |
-| `DRY_RUN` | `false` | If `true`, only log recommendations without applying changes |
-| `RESIZE_INTERVAL` | `30s` | How often to check and resize resources |
-| `LOG_LEVEL` | `info` | Logging verbosity: `debug`, `info`, `warn`, `error` |
-
-**Note**: These environment variables can also be configured via the `RightSizerConfig` CRD for more flexible management.
-
-### Enhanced Features
-
-| Environment Variable | Default | Description |
-|---------------------|---------|-------------|
-| `MAX_RETRIES` | `3` | Maximum retry attempts for failed operations |
-| `RETRY_INTERVAL` | `5s` | Interval between retry attempts |
-| `SAFETY_THRESHOLD` | `0.5` | Maximum allowed resource change percentage (0-1) |
-| `POLICY_BASED_SIZING` | `false` | Enable policy-based resource sizing rules |
-| `HISTORY_DAYS` | `7` | Number of days to retain historical data |
-| `CUSTOM_METRICS` | `""` | Comma-separated list of custom metrics to consider |
-| `ADMISSION_CONTROLLER` | `false` | Enable admission controller for validation |
-
-### Observability
-
-| Environment Variable | Default | Description |
-|---------------------|---------|-------------|
-| `METRICS_ENABLED` | `true` | Enable Prometheus metrics export |
-| `METRICS_PORT` | `9090` | Port for metrics endpoint |
-| `AUDIT_ENABLED` | `true` | Enable comprehensive audit logging |
-
-### Namespace Filtering
-
-| Environment Variable | Default | Description |
-|---------------------|---------|-------------|
-| `KUBE_NAMESPACE_INCLUDE` | `default` | Only monitor pods in these namespaces (CSV) |
-| `KUBE_NAMESPACE_EXCLUDE` | `kube-system` | Exclude pods in these namespaces (CSV) |
-
-For detailed configuration options, see [CONFIGURATION.md](CONFIGURATION.md).
-
-## Quick Start
-
-### Prerequisites
-
-- Go 1.22+
-- Docker
-- Kubernetes 1.33+ (for in-place resize feature)
-- Minikube (for local development)
-- kubectl with CRD support
-
-### Local Development
-
-**Note**: All Go source code is located in the `go/` directory.
-
-#### 1. Setup Environment
-
-```bash
-# Start Minikube with Kubernetes 1.33+ for in-place resize support
-minikube start --kubernetes-version=v1.33.1
-
-# Install CRDs (required for policy-based configuration)
-./scripts/install-crds.sh
-
-# Optional: Use development helper script
-./scripts/dev.sh setup
+### Adaptive Strategy
+Continuously adjusts resources based on usage patterns:
+```yaml
+apiVersion: rightsizer.io/v1alpha1
+kind: RightSizerConfig
+metadata:
+  name: default
+spec:
+  strategies:
+    adaptive:
+      enabled: true
+      learningPeriod: "7d"
+      adjustmentInterval: "1h"
 ```
 
-#### 2. Build and Deploy
-
-```bash
-# Build the operator binary (builds from go/ directory)
-./make build
-
-# Build Docker image in Minikube's registry
-./make minikube-build
-
-# Deploy using Helm (CRDs must be installed first)
-./make helm-deploy
+### Non-Disruptive Strategy
+Minimizes pod restarts by batching changes:
+```yaml
+apiVersion: rightsizer.io/v1alpha1
+kind: RightSizerConfig
+metadata:
+  name: default
+spec:
+  strategies:
+    nonDisruptive:
+      enabled: true
+      batchWindow: "6h"
+      maxRestartsPerWindow: 2
 ```
 
-#### 3. Verify Deployment
-
-```bash
-# Check operator status
-kubectl get pods -l app=right-sizer
-kubectl logs -l app=right-sizer -f
-
-# Test with sample workload
-kubectl apply -f examples/sample-deployment.yaml
-
-# Watch resize operations
-kubectl get events --sort-by='.lastTimestamp' | grep resize
+### In-Place Strategy
+Uses Kubernetes 1.33+ resize subresource:
+```yaml
+apiVersion: rightsizer.io/v1alpha1
+kind: RightSizerConfig
+metadata:
+  name: default
+spec:
+  strategies:
+    inplace:
+      enabled: true
+      interval: "30s"
+  featureGates:
+    EnableInPlaceResize: true
 ```
 
-#### 4. Development Workflow
-
-```bash
-# Auto-rebuild on changes
-./scripts/dev.sh watch
-
-# Run tests
-./make test
-
-# Clean rebuild
-./make clean && ./make build
-```
-
-For detailed build instructions, see [BUILD.md](BUILD.md).
-
-**Project Structure**: Go source code is organized in the `go/` directory, with build scripts operating from the project root.
-
-## Advanced Examples
-
-### Production Deployment with All Features
-```bash
-# Deploy with policy engine, admission controller, and audit logging
-helm install right-sizer ./helm \
-  --set policyEngine.enabled=true \
-  --set security.admissionWebhook.enabled=true \
-  --set observability.auditEnabled=true \
-  --set config.safetyThreshold=0.3
-```
-
-### Policy-Based Configuration
-```bash
-# Install CRDs first
-./scripts/install-crds.sh
-
-# Create policy rules and configuration
-kubectl apply -f examples/policy-rules-example.yaml
-
-# Enable policy-based sizing (enabled by default when CRDs are installed)
-helm upgrade right-sizer ./helm \
-  --set config.policyBasedSizing=true
-```
-
-### High Availability Setup
-```bash
-# Deploy with HA configuration
-helm install right-sizer ./helm \
-  --set replicaCount=3 \
-  --set resources.requests.cpu=200m \
-  --set resources.requests.memory=256Mi \
-  --set circuitBreaker.enabled=true
-```
+---
 
 ## Troubleshooting
 
 ### Common Issues
 
-1. **Pod Not Being Resized**
-   - Check if namespace is included in filtering rules
-   - Verify pod doesn't have skip annotations (`rightsizer.io/disable: "true"`)
-   - Review policy rules that might be skipping the pod
+#### 1. Pod Not Being Resized
+- Check if namespace is included in configuration
+- Verify pod doesn't have skip annotations
+- Review policy rules and priorities
+- Check operator logs for errors
 
-2. **Safety Threshold Violations**
-   - Adjust `SAFETY_THRESHOLD` environment variable
-   - Review policy rules for conflicting multipliers
-   - Check audit logs for detailed violation reasons
+#### 2. Permission Errors
+```bash
+# Quick fix for RBAC issues
+./scripts/rbac/apply-rbac-fix.sh
 
-3. **Admission Webhook Failures**
-   - Verify TLS certificates are valid and not expired
-   - Check webhook service is accessible from API server
-   - Review admission webhook logs for detailed errors
+# Verify permissions
+./scripts/rbac/verify-permissions.sh
+```
+
+#### 3. Webhook Certificate Issues
+```bash
+# Check webhook configuration
+kubectl get validatingwebhookconfigurations
+kubectl get mutatingwebhookconfigurations
+
+# Verify certificates
+kubectl get secrets -n right-sizer | grep tls
+```
 
 ### Diagnostic Commands
 
 ```bash
 # Check operator status
-kubectl get pods -l app=right-sizer -o wide
-kubectl logs -l app=right-sizer --tail=100
+kubectl get pods -n right-sizer
+kubectl logs -l app=right-sizer -n right-sizer --tail=100
 
-# Review metrics
-kubectl port-forward svc/right-sizer-operator 9090:9090
+# View current configuration
+kubectl get rightsizerconfigs -A -o yaml
+kubectl get rightsizerpolicies -A -o yaml
+
+# Check metrics
+kubectl port-forward -n right-sizer svc/right-sizer 9090:9090
 curl http://localhost:9090/metrics | grep rightsizer
 
-# Check policy applications
-kubectl get events --field-selector reason=PolicyApplied
-
-# Review audit logs (if PVC mounted)
-kubectl exec -it deployment/right-sizer-operator -- tail -f /var/log/right-sizer/audit.log
+# View events
+kubectl get events -n right-sizer --sort-by='.lastTimestamp'
 ```
+
+---
+
+## Local Development
+
+### Prerequisites
+- Go 1.22+
+- Docker
+- Kubernetes 1.33+ (Minikube recommended)
+- Make
+
+### Setup Development Environment
+
+```bash
+# Start Minikube with Kubernetes 1.33+
+minikube start --kubernetes-version=v1.33.0 --memory=4096 --cpus=2
+
+# Build and deploy (if using Helm, CRDs are included)
+make build
+make docker-build
+make deploy
+
+# If deploying without Helm for development, install CRDs manually:
+# kubectl apply -f deploy/crds/
+
+# Watch logs
+kubectl logs -f deployment/right-sizer-operator -n right-sizer
+
+# Run tests
+make test
+
+# Generate code
+make generate
+```
+
+### Project Structure
+```
+right-sizer/
+├── go/                     # Go source code
+│   ├── api/               # CRD API definitions
+│   ├── controllers/       # Kubernetes controllers
+│   ├── admission/         # Admission webhooks
+│   ├── audit/            # Audit logging
+│   ├── config/           # Configuration management
+│   ├── metrics/          # Metrics collection
+│   ├── policy/           # Policy engine
+│   ├── retry/            # Retry and circuit breaker
+│   └── validation/       # Resource validation
+├── helm/                  # Helm chart
+├── examples/             # Example configurations
+├── scripts/              # Utility scripts
+│   └── rbac/            # RBAC management scripts
+├── docs/                 # Documentation
+└── tests/               # Test files
+```
+
+---
 
 ## Documentation
 
 - [Configuration Guide](CONFIGURATION.md) - Complete configuration reference
+- [CRD Configuration Guide](CONFIGURATION-CRD.md) - CRD-specific configuration
 - [Build Guide](BUILD.md) - Build and deployment instructions
+- [RBAC Guide](docs/RBAC.md) - Comprehensive RBAC documentation
 - [Contributing](CONTRIBUTING.md) - Development and contribution guidelines
-- [Project Structure](PROJECT-STRUCTURE.md) - Code organization and architecture
-- [Policy Examples](examples/policy-rules-example.yaml) - Comprehensive policy configurations
-- [Advanced Configuration](examples/advanced-configuration.yaml) - Production-ready deployment examples
+- [Examples](examples/) - Sample configurations and policies
+
+---
+
+## Version Compatibility
+
+| Component | Minimum Version | Recommended Version | Notes |
+|-----------|----------------|-------------------|--------|
+| Kubernetes | 1.33 | 1.33+ | In-place resize requires 1.33+ |
+| Helm | 3.0 | 3.12+ | Latest features |
+| Metrics Server | 0.5.0 | 0.6.0+ | Or Prometheus |
+| cert-manager | 1.5.0 | 1.13.0+ | If using webhook certificates |
+
+---
+
+## Contributing
+
+We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for details on:
+- Code of conduct
+- Development process
+- Submitting pull requests
+- Reporting issues
+
+---
 
 ## License
 
 This project is licensed under the **GNU Affero General Public License v3.0 (AGPL-3.0)**. See [LICENSE](LICENSE) for details.
+
+---
+
+## Support
+
+- **Documentation**: [https://right-sizer.io/docs](https://right-sizer.io/docs)
+- **Issues**: [GitHub Issues](https://github.com/right-sizer/right-sizer/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/right-sizer/right-sizer/discussions)
+- **Security**: Report security vulnerabilities to security@right-sizer.io
