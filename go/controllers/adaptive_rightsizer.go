@@ -25,7 +25,6 @@ import (
 	"right-sizer/logger"
 	"right-sizer/metrics"
 
-	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -46,14 +45,14 @@ type AdaptiveRightSizer struct {
 
 // ResourceUpdate represents a pending resource update
 type ResourceUpdate struct {
-	Namespace     string
-	Name          string
-	ResourceType  string // "Pod", "Deployment", "StatefulSet"
-	ContainerName string
-	OldResources  corev1.ResourceRequirements
-	NewResources  corev1.ResourceRequirements
-	Method        string // "in-place" or "rolling-update"
-	Reason        string
+	Namespace      string
+	Name           string
+	ResourceType   string // Pod only now
+	ContainerName  string
+	ContainerIndex int
+	OldResources   corev1.ResourceRequirements
+	NewResources   corev1.ResourceRequirements
+	Reason         string
 }
 
 // Start begins the adaptive rightsizing loop
@@ -122,160 +121,25 @@ func (r *AdaptiveRightSizer) testInPlaceCapability(ctx context.Context) bool {
 	return false
 }
 
-// performRightSizing processes all workloads for optimization
+// performRightSizing processes all pods for optimization using in-place resize
 func (r *AdaptiveRightSizer) performRightSizing(ctx context.Context) {
 	updates := []ResourceUpdate{}
 
-	// Process Deployments
-	deployments, err := r.analyzeDeployments(ctx)
+	// Analyze ALL pods directly (including those from deployments, statefulsets, etc)
+	// We will update pods directly using in-place resize, not their controllers
+	pods, err := r.analyzeAllPods(ctx)
 	if err != nil {
-		log.Printf("Error analyzing deployments: %v", err)
+		log.Printf("Error analyzing pods: %v", err)
 	} else {
-		updates = append(updates, deployments...)
+		updates = append(updates, pods...)
 	}
 
-	// Process StatefulSets
-	statefulSets, err := r.analyzeStatefulSets(ctx)
-	if err != nil {
-		log.Printf("Error analyzing statefulsets: %v", err)
-	} else {
-		updates = append(updates, statefulSets...)
-	}
-
-	// Process standalone Pods if in-place is enabled
-	if r.InPlaceEnabled {
-		pods, err := r.analyzeStandalonePods(ctx)
-		if err != nil {
-			log.Printf("Error analyzing pods: %v", err)
-		} else {
-			updates = append(updates, pods...)
-		}
-	}
-
-	// Apply updates
+	// Apply updates using in-place resize
 	r.applyUpdates(ctx, updates)
 }
 
-// analyzeDeployments analyzes all deployments for resource optimization
-func (r *AdaptiveRightSizer) analyzeDeployments(ctx context.Context) ([]ResourceUpdate, error) {
-	var deployList appsv1.DeploymentList
-	if err := r.Client.List(ctx, &deployList); err != nil {
-		return nil, err
-	}
-
-	updates := []ResourceUpdate{}
-
-	for _, deploy := range deployList.Items {
-		// Check namespace filters first
-		if !r.shouldProcessNamespace(deploy.Namespace) {
-			continue
-		}
-		if r.isSystemWorkload(deploy.Namespace, deploy.Name) {
-			continue
-		}
-
-		// Get pods for this deployment
-		pods, err := r.getPodsForWorkload(ctx, deploy.Namespace, deploy.Spec.Selector.MatchLabels)
-		if err != nil {
-			continue
-		}
-
-		if len(pods) == 0 {
-			continue
-		}
-
-		// Calculate average metrics
-		avgMetrics := r.calculateAverageMetrics(pods)
-		if avgMetrics == nil {
-			continue
-		}
-
-		// Check each container
-		for i, container := range deploy.Spec.Template.Spec.Containers {
-			newResources := r.calculateOptimalResources(*avgMetrics)
-
-			if r.needsAdjustment(container.Resources, newResources) {
-				updates = append(updates, ResourceUpdate{
-					Namespace:     deploy.Namespace,
-					Name:          deploy.Name,
-					ResourceType:  "Deployment",
-					ContainerName: container.Name,
-					OldResources:  container.Resources,
-					NewResources:  newResources,
-					Method:        "rolling-update",
-					Reason:        r.getAdjustmentReason(container.Resources, newResources),
-				})
-
-				// Update the deployment spec for later application
-				deploy.Spec.Template.Spec.Containers[i].Resources = newResources
-			}
-		}
-	}
-
-	return updates, nil
-}
-
-// analyzeStatefulSets analyzes all statefulsets for resource optimization
-func (r *AdaptiveRightSizer) analyzeStatefulSets(ctx context.Context) ([]ResourceUpdate, error) {
-	var stsList appsv1.StatefulSetList
-	if err := r.Client.List(ctx, &stsList); err != nil {
-		return nil, err
-	}
-
-	updates := []ResourceUpdate{}
-
-	for _, sts := range stsList.Items {
-		// Check namespace filters first
-		if !r.shouldProcessNamespace(sts.Namespace) {
-			continue
-		}
-		if r.isSystemWorkload(sts.Namespace, sts.Name) {
-			continue
-		}
-
-		// Get pods for this statefulset
-		pods, err := r.getPodsForWorkload(ctx, sts.Namespace, sts.Spec.Selector.MatchLabels)
-		if err != nil {
-			continue
-		}
-
-		if len(pods) == 0 {
-			continue
-		}
-
-		// Calculate average metrics
-		avgMetrics := r.calculateAverageMetrics(pods)
-		if avgMetrics == nil {
-			continue
-		}
-
-		// Check each container
-		for i, container := range sts.Spec.Template.Spec.Containers {
-			newResources := r.calculateOptimalResources(*avgMetrics)
-
-			if r.needsAdjustment(container.Resources, newResources) {
-				updates = append(updates, ResourceUpdate{
-					Namespace:     sts.Namespace,
-					Name:          sts.Name,
-					ResourceType:  "StatefulSet",
-					ContainerName: container.Name,
-					OldResources:  container.Resources,
-					NewResources:  newResources,
-					Method:        "rolling-update",
-					Reason:        r.getAdjustmentReason(container.Resources, newResources),
-				})
-
-				// Update the statefulset spec for later application
-				sts.Spec.Template.Spec.Containers[i].Resources = newResources
-			}
-		}
-	}
-
-	return updates, nil
-}
-
-// analyzeStandalonePods analyzes standalone pods (not managed by controllers)
-func (r *AdaptiveRightSizer) analyzeStandalonePods(ctx context.Context) ([]ResourceUpdate, error) {
+// analyzeAllPods analyzes all pods in the cluster for resource optimization
+func (r *AdaptiveRightSizer) analyzeAllPods(ctx context.Context) ([]ResourceUpdate, error) {
 	var podList corev1.PodList
 	if err := r.Client.List(ctx, &podList); err != nil {
 		return nil, err
@@ -284,52 +148,63 @@ func (r *AdaptiveRightSizer) analyzeStandalonePods(ctx context.Context) ([]Resou
 	updates := []ResourceUpdate{}
 
 	for _, pod := range podList.Items {
-		// Check namespace filters first
-		if !r.shouldProcessNamespace(pod.Namespace) {
-			continue
-		}
-
-		// Skip if managed by a controller
-		if len(pod.OwnerReferences) > 0 {
-			continue
-		}
-
-		if r.isSystemWorkload(pod.Namespace, pod.Name) {
-			continue
-		}
-
+		// Skip pods that are not running
 		if pod.Status.Phase != corev1.PodRunning {
 			continue
 		}
 
-		// Get metrics for this pod
-		// Get current pod metrics
-		metrics, err := r.MetricsProvider.FetchPodMetrics(pod.Namespace, pod.Name)
-		if err != nil {
-			logger.Debug("No metrics for pod %s/%s", pod.Namespace, pod.Name)
+		// Check namespace filters first
+		if !r.shouldProcessNamespace(pod.Namespace) {
+			continue
+		}
+		if r.isSystemWorkload(pod.Namespace, pod.Name) {
 			continue
 		}
 
-		// Check each container
-		for _, container := range pod.Spec.Containers {
-			newResources := r.calculateOptimalResources(metrics)
+		// Skip pods with skip annotation
+		if pod.Annotations != nil {
+			if skip, ok := pod.Annotations["rightsizer.io/skip"]; ok && skip == "true" {
+				continue
+			}
+		}
+
+		// Get metrics for this specific pod
+		podMetrics, err := r.MetricsProvider.FetchPodMetrics(pod.Namespace, pod.Name)
+		if err != nil {
+			log.Printf("Failed to get metrics for pod %s/%s: %v", pod.Namespace, pod.Name, err)
+			continue
+		}
+
+		// Check each container in the pod
+		for i, container := range pod.Spec.Containers {
+			// Calculate optimal resources based on actual usage
+			// Note: metrics-server provides pod-level metrics, not per-container
+			// So we'll use the pod metrics for all containers
+			newResources := r.calculateOptimalResources(podMetrics)
 
 			if r.needsAdjustment(container.Resources, newResources) {
 				updates = append(updates, ResourceUpdate{
-					Namespace:     pod.Namespace,
-					Name:          pod.Name,
-					ResourceType:  "Pod",
-					ContainerName: container.Name,
-					OldResources:  container.Resources,
-					NewResources:  newResources,
-					Method:        "in-place",
-					Reason:        r.getAdjustmentReason(container.Resources, newResources),
+					Namespace:      pod.Namespace,
+					Name:           pod.Name,
+					ResourceType:   "Pod",
+					ContainerName:  container.Name,
+					ContainerIndex: i,
+					OldResources:   container.Resources,
+					NewResources:   newResources,
+					Reason:         r.getAdjustmentReason(container.Resources, newResources),
 				})
 			}
 		}
 	}
 
 	return updates, nil
+}
+
+// analyzeStandalonePods analyzes standalone pods (deprecated - all pods are now analyzed)
+func (r *AdaptiveRightSizer) analyzeStandalonePods(ctx context.Context) ([]ResourceUpdate, error) {
+	// This function is deprecated as we now analyze all pods in analyzeAllPods
+	return []ResourceUpdate{}, nil
+
 }
 
 // applyUpdates applies the calculated resource updates
@@ -347,80 +222,18 @@ func (r *AdaptiveRightSizer) applyUpdates(ctx context.Context, updates []Resourc
 		}
 
 		r.logUpdate(update, false)
+	}
 
-		switch update.ResourceType {
-		case "Deployment":
-			if err := r.updateDeployment(ctx, update); err != nil {
-				log.Printf("Error updating deployment %s/%s: %v", update.Namespace, update.Name, err)
-			}
-		case "StatefulSet":
-			if err := r.updateStatefulSet(ctx, update); err != nil {
-				log.Printf("Error updating statefulset %s/%s: %v", update.Namespace, update.Name, err)
-			}
-		case "Pod":
-			if r.InPlaceEnabled {
-				if err := r.updatePodInPlace(ctx, update); err != nil {
-					log.Printf("Error updating pod %s/%s: %v", update.Namespace, update.Name, err)
-				}
+	// Apply all pod updates using in-place resize
+	for _, update := range updates {
+		if update.ResourceType == "Pod" {
+			if err := r.updatePodInPlace(ctx, update); err != nil {
+				log.Printf("Error updating pod %s/%s: %v", update.Namespace, update.Name, err)
+			} else {
+				log.Printf("✅ Successfully resized pod %s/%s using in-place resize", update.Namespace, update.Name)
 			}
 		}
 	}
-}
-
-// updateDeployment updates a deployment's resources
-func (r *AdaptiveRightSizer) updateDeployment(ctx context.Context, update ResourceUpdate) error {
-	var deploy appsv1.Deployment
-	if err := r.Client.Get(ctx, types.NamespacedName{
-		Namespace: update.Namespace,
-		Name:      update.Name,
-	}, &deploy); err != nil {
-		return err
-	}
-
-	// Update container resources
-	for i := range deploy.Spec.Template.Spec.Containers {
-		if deploy.Spec.Template.Spec.Containers[i].Name == update.ContainerName {
-			deploy.Spec.Template.Spec.Containers[i].Resources = update.NewResources
-			break
-		}
-	}
-
-	// Add annotation
-	if deploy.Spec.Template.Annotations == nil {
-		deploy.Spec.Template.Annotations = make(map[string]string)
-	}
-	deploy.Spec.Template.Annotations["right-sizer/last-update"] = time.Now().Format(time.RFC3339)
-	deploy.Spec.Template.Annotations["right-sizer/reason"] = update.Reason
-
-	return r.Client.Update(ctx, &deploy)
-}
-
-// updateStatefulSet updates a statefulset's resources
-func (r *AdaptiveRightSizer) updateStatefulSet(ctx context.Context, update ResourceUpdate) error {
-	var sts appsv1.StatefulSet
-	if err := r.Client.Get(ctx, types.NamespacedName{
-		Namespace: update.Namespace,
-		Name:      update.Name,
-	}, &sts); err != nil {
-		return err
-	}
-
-	// Update container resources
-	for i := range sts.Spec.Template.Spec.Containers {
-		if sts.Spec.Template.Spec.Containers[i].Name == update.ContainerName {
-			sts.Spec.Template.Spec.Containers[i].Resources = update.NewResources
-			break
-		}
-	}
-
-	// Add annotation
-	if sts.Spec.Template.Annotations == nil {
-		sts.Spec.Template.Annotations = make(map[string]string)
-	}
-	sts.Spec.Template.Annotations["right-sizer/last-update"] = time.Now().Format(time.RFC3339)
-	sts.Spec.Template.Annotations["right-sizer/reason"] = update.Reason
-
-	return r.Client.Update(ctx, &sts)
 }
 
 // updatePodInPlace attempts to update pod resources in-place
@@ -610,7 +423,7 @@ func (r *AdaptiveRightSizer) logUpdate(update ResourceUpdate, dryRun bool) {
 	oldCpuReq := update.OldResources.Requests[corev1.ResourceCPU]
 	oldMemReq := update.OldResources.Requests[corev1.ResourceMemory]
 
-	log.Printf("%s%s %s/%s/%s - CPU: %s→%s, Memory: %s→%s (%s)",
+	log.Printf("%s%s %s/%s/%s - CPU: %s→%s, Memory: %s→%s (in-place)",
 		mode,
 		update.ResourceType,
 		update.Namespace,
@@ -619,9 +432,7 @@ func (r *AdaptiveRightSizer) logUpdate(update ResourceUpdate, dryRun bool) {
 		oldCpuReq.String(),
 		cpuReq.String(),
 		oldMemReq.String(),
-		memReq.String(),
-		update.Method,
-	)
+		memReq.String())
 	return
 }
 

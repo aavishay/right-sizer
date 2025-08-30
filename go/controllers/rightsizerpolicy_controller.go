@@ -86,7 +86,7 @@ func (r *RightSizerPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	// Initialize status if needed
 	if policy.Status.Phase == "" {
-		policy.Status.Phase = "Pending"
+		policy.Status.Phase = "Active"
 		policy.Status.ResourcesAffected = 0
 		policy.Status.ResourcesResized = 0
 		if err := r.Status().Update(ctx, policy); err != nil {

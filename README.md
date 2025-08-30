@@ -537,6 +537,19 @@ kubectl get mutatingwebhookconfigurations
 kubectl get secrets -n right-sizer | grep tls
 ```
 
+#### 4. CRD Field Validation Errors ("unknown field" in logs)
+If you see "unknown field" warnings in the operator logs:
+```bash
+# Quick fix using the provided script
+./scripts/fix-crd-fields.sh
+
+# Or manually apply the correct CRDs
+kubectl apply -f helm/crds/rightsizer.io_rightsizerconfigs.yaml
+kubectl apply -f helm/crds/rightsizer.io_rightsizerpolicies.yaml
+```
+
+See [CRD Field Troubleshooting Guide](docs/TROUBLESHOOTING_CRD_FIELDS.md) for detailed information.
+
 ### Diagnostic Commands
 
 ```bash
@@ -561,7 +574,7 @@ kubectl get events -n right-sizer --sort-by='.lastTimestamp'
 ## Local Development
 
 ### Prerequisites
-- Go 1.22+
+- Go 1.24+
 - Docker
 - Kubernetes 1.33+ (Minikube recommended)
 - Make

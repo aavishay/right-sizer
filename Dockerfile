@@ -27,17 +27,20 @@ FROM alpine:3.18
 # Install ca-certificates for HTTPS requests
 RUN apk --no-cache add ca-certificates
 
-WORKDIR /root/
-
-# Copy the binary from builder stage
-COPY --from=builder /app/right-sizer .
-
-# Create non-root user
+# Create non-root user first
 RUN adduser -D -s /bin/sh appuser
+
+WORKDIR /app
+
+# Copy the binary from builder stage and ensure it's executable
+COPY --from=builder --chown=appuser:appuser /app/right-sizer /app/right-sizer
+RUN chmod +x /app/right-sizer
+
+# Switch to non-root user
 USER appuser
 
 # Expose health check port
 EXPOSE 8081
 
 # Run the binary
-ENTRYPOINT ["./right-sizer"]
+ENTRYPOINT ["/app/right-sizer"]

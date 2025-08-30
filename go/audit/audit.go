@@ -85,8 +85,8 @@ type AuditConfig struct {
 // DefaultAuditConfig returns default audit configuration
 func DefaultAuditConfig() AuditConfig {
 	return AuditConfig{
-		LogPath:        "/var/log/right-sizer/audit.log",
-		MaxFileSize:    100 * 1024 * 1024, // 100MB
+		LogPath:        "/tmp/right-sizer-audit.log", // Use /tmp which is typically writable in containers
+		MaxFileSize:    100 * 1024 * 1024,            // 100MB
 		MaxFiles:       10,
 		BufferSize:     1000,
 		FlushInterval:  5 * time.Second,
@@ -114,10 +114,17 @@ func NewAuditLogger(client client.Client, cfg *config.Config, metrics *metrics.O
 			return nil, fmt.Errorf("failed to create audit log directory: %v", err)
 		}
 
-		// Open log file
-		logFile, err := os.OpenFile(auditConfig.LogPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
-		if err != nil {
-			return nil, fmt.Errorf("failed to open audit log file: %v", err)
+		// Open log file if file logging is enabled
+		var logFile *os.File
+		if auditConfig.EnableFileLog {
+			var err error
+			logFile, err = os.OpenFile(auditConfig.LogPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+			if err != nil {
+				// If we can't open the file, continue without file logging
+				logger.Warn("Cannot open audit log file, continuing without file logging: %v", err)
+				auditConfig.EnableFileLog = false
+				logFile = nil
+			}
 		}
 		al.logFile = logFile
 	}

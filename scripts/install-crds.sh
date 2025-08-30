@@ -15,7 +15,7 @@ NC='\033[0m' # No Color
 # Default values
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-CRD_PATH="${CRD_PATH:-$PROJECT_ROOT/helm/crds/rightsizer-crds.yaml}"
+CRD_DIR="${CRD_DIR:-$PROJECT_ROOT/helm/crds}"
 DRY_RUN="${DRY_RUN:-false}"
 WAIT="${WAIT:-true}"
 TIMEOUT="${TIMEOUT:-60s}"
@@ -79,29 +79,50 @@ check_existing_crds() {
 
 # Function to install CRDs
 install_crds() {
-  print_status "INFO" "Installing Right Sizer CRDs from: $CRD_PATH"
+  print_status "INFO" "Installing Right Sizer CRDs from: $CRD_DIR"
 
-  if [[ ! -f "$CRD_PATH" ]]; then
-    print_status "ERROR" "CRD file not found at: $CRD_PATH"
+  # Check if directory exists
+  if [[ ! -d "$CRD_DIR" ]]; then
+    print_status "ERROR" "CRD directory not found at: $CRD_DIR"
     exit 1
   fi
 
-  local cmd="kubectl apply -f $CRD_PATH"
+  # Install the specific CRD files
+  local crd_files=(
+    "$CRD_DIR/rightsizer.io_rightsizerconfigs.yaml"
+    "$CRD_DIR/rightsizer.io_rightsizerpolicies.yaml"
+  )
 
-  if [[ "$DRY_RUN" == "true" ]]; then
-    cmd="$cmd --dry-run=client"
-    print_status "INFO" "Running in dry-run mode"
-  fi
-
-  if $cmd; then
-    if [[ "$DRY_RUN" != "true" ]]; then
-      print_status "SUCCESS" "CRDs installed successfully"
-    else
-      print_status "INFO" "Dry-run completed successfully"
+  for crd_file in "${crd_files[@]}"; do
+    if [[ ! -f "$crd_file" ]]; then
+      print_status "ERROR" "CRD file not found: $crd_file"
+      exit 1
     fi
+
+    local cmd="kubectl apply -f $crd_file"
+
+    if [[ "$DRY_RUN" == "true" ]]; then
+      cmd="$cmd --dry-run=client"
+      print_status "INFO" "Running in dry-run mode"
+    fi
+
+    print_status "INFO" "Installing $(basename $crd_file)..."
+    if $cmd; then
+      if [[ "$DRY_RUN" != "true" ]]; then
+        print_status "SUCCESS" "Installed $(basename $crd_file)"
+      else
+        print_status "INFO" "Dry-run completed for $(basename $crd_file)"
+      fi
+    else
+      print_status "ERROR" "Failed to install $(basename $crd_file)"
+      exit 1
+    fi
+  done
+
+  if [[ "$DRY_RUN" != "true" ]]; then
+    print_status "SUCCESS" "All CRDs installed successfully"
   else
-    print_status "ERROR" "Failed to install CRDs"
-    exit 1
+    print_status "INFO" "Dry-run completed successfully"
   fi
 }
 
@@ -222,8 +243,8 @@ main() {
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
   case $1 in
-  --crd-path)
-    CRD_PATH="$2"
+  --crd-dir)
+    CRD_DIR="$2"
     shift 2
     ;;
   --dry-run)
@@ -242,14 +263,14 @@ while [[ $# -gt 0 ]]; do
     echo "Usage: $0 [OPTIONS]"
     echo
     echo "Options:"
-    echo "  --crd-path PATH    Path to CRD definitions file"
+    echo "  --crd-dir PATH     Path to directory containing CRD files"
     echo "  --dry-run          Simulate installation without applying changes"
     echo "  --no-wait          Don't wait for CRDs to be established"
     echo "  --timeout DURATION Timeout for waiting (default: 60s)"
     echo "  -h, --help         Show this help message"
     echo
     echo "Environment Variables:"
-    echo "  CRD_PATH           Alternative to --crd-path flag"
+    echo "  CRD_DIR            Alternative to --crd-dir flag"
     echo "  DRY_RUN            Alternative to --dry-run flag (true/false)"
     echo "  WAIT               Alternative to --no-wait flag (true/false)"
     echo "  TIMEOUT            Alternative to --timeout flag"
@@ -261,8 +282,8 @@ while [[ $# -gt 0 ]]; do
     echo "  # Dry run to see what would be installed"
     echo "  $0 --dry-run"
     echo
-    echo "  # Install from custom path"
-    echo "  $0 --crd-path /path/to/crds.yaml"
+    echo "  # Install from custom directory"
+    echo "  $0 --crd-dir /path/to/crds/"
     echo
     echo "  # Install without waiting"
     echo "  $0 --no-wait"

@@ -23,7 +23,8 @@ Before configuring the Right Sizer operator, you must install the CRDs:
 ./scripts/install-crds.sh
 
 # Or manually
-kubectl apply -f helm/crds/rightsizer-crds.yaml
+kubectl apply -f helm/crds/rightsizer.io_rightsizerconfigs.yaml
+kubectl apply -f helm/crds/rightsizer.io_rightsizerpolicies.yaml
 
 # Verify installation
 kubectl get crd | grep rightsizer

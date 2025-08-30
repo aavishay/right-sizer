@@ -287,7 +287,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v2
         with:
-          go-version: 1.22
+          go-version: 1.24
       
       - name: Run Unit Tests
         run: |

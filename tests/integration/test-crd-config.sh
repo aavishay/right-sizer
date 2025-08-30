@@ -68,7 +68,8 @@ build_image() {
 # Deploy CRDs
 deploy_crds() {
   log_info "Deploying CRDs..."
-  kubectl apply -f helm/crds/
+  kubectl apply -f helm/crds/rightsizer.io_rightsizerconfigs.yaml
+  kubectl apply -f helm/crds/rightsizer.io_rightsizerpolicies.yaml
 
   # Wait for CRDs to be established
   kubectl wait --for condition=established --timeout=60s \

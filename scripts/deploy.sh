@@ -45,14 +45,19 @@ while [[ $# -gt 0 ]]; do
     USE_HELM=true
     shift
     ;;
+  --cleanup)
+    CLEANUP_ONLY=true
+    shift
+    ;;
   --help | -h)
     echo "Usage: $0 [options]"
     echo "Options:"
     echo "  --namespace, -n <namespace>  Namespace to deploy to (default: default)"
-    echo "  --tag, -t <tag>             Image tag (default: latest)"
-    echo "  --no-build                  Skip building the image locally"
-    echo "  --helm                      Use Helm for deployment"
-    echo "  --help, -h                  Show this help message"
+    echo "  --tag, -t <tag>              Docker image tag (default: latest)"
+    echo "  --no-build                   Skip building the Docker image"
+    echo "  --helm                       Use Helm for deployment (default)"
+    echo "  --cleanup                    Clean up existing deployment before installing"
+    echo "  --help, -h                   Show this help message"
     exit 0
     ;;
   *)
@@ -97,11 +102,14 @@ K8S_MINOR=$(echo $K8S_VERSION | cut -d'.' -f2)
 if [[ $K8S_MAJOR -ge 1 && $K8S_MINOR -ge 33 ]]; then
   echo -e "${GREEN}✓ Kubernetes ${K8S_VERSION} supports in-place pod resize${NC}"
 
-  # Check if resize subresource is available
-  if kubectl api-resources | grep -q "pods/resize"; then
-    echo -e "${GREEN}✓ Resize subresource is available${NC}"
+  # Check if resize subresource is available (only in newer kubectl versions)
+  # Note: The resize subresource might not appear in api-resources output even when available
+  if kubectl api-resources 2>/dev/null | grep -q "pods/resize"; then
+    echo -e "${GREEN}✓ Resize subresource explicitly available in API${NC}"
   else
-    echo -e "${YELLOW}⚠ Resize subresource not found. Feature may need to be enabled.${NC}"
+    # Try to check if the feature gate is enabled (this is informational only)
+    echo -e "${BLUE}ℹ Resize subresource not listed in api-resources (this is normal)${NC}"
+    echo -e "${BLUE}  The feature is available in Kubernetes 1.33+ by default${NC}"
   fi
 else
   echo -e "${YELLOW}⚠ Kubernetes ${K8S_VERSION} does not support in-place resize (requires v1.33+)${NC}"
@@ -149,6 +157,47 @@ else
   echo -e "\n${YELLOW}Skipping image build (using existing image)${NC}"
 fi
 
+# Function to cleanup existing resources
+cleanup_resources() {
+  echo -e "\n${YELLOW}Cleaning up existing resources...${NC}"
+
+  # Check if Helm release exists
+  if helm list -n ${NAMESPACE} 2>/dev/null | grep -q ${OPERATOR_NAME}; then
+    echo -e "${YELLOW}Removing existing Helm release...${NC}"
+    helm uninstall ${OPERATOR_NAME} -n ${NAMESPACE} 2>/dev/null || true
+  fi
+
+  # Clean up deployment
+  if kubectl get deployment ${OPERATOR_NAME} -n ${NAMESPACE} &>/dev/null; then
+    echo -e "${YELLOW}Deleting existing deployment...${NC}"
+    kubectl delete deployment ${OPERATOR_NAME} -n ${NAMESPACE} --grace-period=30 --wait=false
+  fi
+
+  # Clean up other resources
+  kubectl delete service ${OPERATOR_NAME} -n ${NAMESPACE} 2>/dev/null || true
+  kubectl delete serviceaccount ${OPERATOR_NAME} -n ${NAMESPACE} 2>/dev/null || true
+  kubectl delete role ${OPERATOR_NAME} -n ${NAMESPACE} 2>/dev/null || true
+  kubectl delete rolebinding ${OPERATOR_NAME} -n ${NAMESPACE} 2>/dev/null || true
+
+  # Clean up cluster-scoped resources only if they belong to our namespace
+  if kubectl get clusterrole ${OPERATOR_NAME} &>/dev/null; then
+    # Check if it's managed by Helm in our namespace
+    if kubectl get clusterrole ${OPERATOR_NAME} -o jsonpath='{.metadata.annotations.meta\.helm\.sh/release-namespace}' 2>/dev/null | grep -q ${NAMESPACE}; then
+      kubectl delete clusterrole ${OPERATOR_NAME} 2>/dev/null || true
+      kubectl delete clusterrolebinding ${OPERATOR_NAME} 2>/dev/null || true
+    fi
+  fi
+
+  echo -e "${GREEN}✓ Cleanup complete${NC}"
+}
+
+# Handle cleanup-only mode
+if [[ "${CLEANUP_ONLY}" == "true" ]]; then
+  cleanup_resources
+  echo -e "${GREEN}✓ Cleanup completed successfully${NC}"
+  exit 0
+fi
+
 # Create namespace if it doesn't exist
 echo -e "\n${YELLOW}Checking namespace...${NC}"
 if ! kubectl get namespace ${NAMESPACE} &>/dev/null; then
@@ -156,6 +205,13 @@ if ! kubectl get namespace ${NAMESPACE} &>/dev/null; then
   kubectl create namespace ${NAMESPACE}
 fi
 echo -e "${GREEN}✓ Namespace ${NAMESPACE} is ready${NC}"
+
+# Check for existing resources and cleanup if needed
+if kubectl get deployment ${OPERATOR_NAME} -n ${NAMESPACE} &>/dev/null; then
+  echo -e "${YELLOW}⚠ Found existing deployment in namespace ${NAMESPACE}${NC}"
+  echo -e "${YELLOW}Cleaning up before deployment...${NC}"
+  cleanup_resources
+fi
 
 # Deploy the operator
 echo -e "\n${YELLOW}Deploying operator...${NC}"
@@ -169,11 +225,20 @@ if [[ "$USE_HELM" == true ]]; then
 
   echo -e "${YELLOW}Installing with Helm...${NC}"
 
+  # Check Helm chart directory
+  if [[ ! -f "./helm/Chart.yaml" ]]; then
+    echo -e "${RED}Error: Helm chart not found at ./helm/Chart.yaml${NC}"
+    echo -e "${YELLOW}Please run this script from the project root directory.${NC}"
+    exit 1
+  fi
+
   helm upgrade --install ${OPERATOR_NAME} ./helm \
     --namespace ${NAMESPACE} \
     --set image.repository=${OPERATOR_NAME} \
     --set image.tag=${IMAGE_TAG} \
     --set image.pullPolicy=IfNotPresent \
+    --set createDefaultConfig=true \
+    --set crds.install=true \
     --wait --timeout 5m
 
   echo -e "${GREEN}✓ Helm deployment complete${NC}"

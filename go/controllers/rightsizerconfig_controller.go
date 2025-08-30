@@ -75,7 +75,7 @@ func (r *RightSizerConfigReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	// Initialize status if needed
 	if rsc.Status.Phase == "" {
-		rsc.Status.Phase = "Pending"
+		rsc.Status.Phase = "Active"
 		rsc.Status.OperatorVersion = "v1.0.0" // You may want to get this from build info
 		if err := r.Status().Update(ctx, rsc); err != nil {
 			log.Error("Failed to update initial status: %v", err)
