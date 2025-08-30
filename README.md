@@ -45,19 +45,27 @@ A Kubernetes operator for automatic pod resource right-sizing with comprehensive
 ### Installation
 
 ```bash
-# Install using Helm (CRDs are automatically installed)
-helm repo add right-sizer https://right-sizer.github.io/charts
-helm install right-sizer right-sizer/right-sizer \
-  --namespace right-sizer \
-  --create-namespace
+# For local development, build the Docker image first
+# (Skip this step if using a published image)
+docker build -t ghcr.io/right-sizer/right-sizer:latest .
+# If using Minikube, load the image:
+# minikube image load ghcr.io/right-sizer/right-sizer:latest
 
-# Or install from local chart (includes CRDs)
+# Install from local Helm chart (CRDs are automatically installed)
 helm install right-sizer ./helm \
   --namespace right-sizer \
   --create-namespace
+
+# Future: Install from Helm repository (when published)
+# helm repo add right-sizer https://right-sizer.github.io/charts
+# helm install right-sizer right-sizer/right-sizer \
+#   --namespace right-sizer \
+#   --create-namespace
 ```
 
 > **Note**: CRDs are automatically installed as part of the Helm chart. The `crds.install` value is set to `true` by default.
+> 
+> **Local Development**: If the pod shows `ErrImagePull`, you need to build the Docker image locally first or use a custom image repository.
 
 ### Verify Installation
 
