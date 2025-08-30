@@ -1,0 +1,460 @@
+# Example RightSizerPolicy Resources
+# These are namespace-scoped resources that define specific sizing policies for groups of workloads
+
+---
+# Policy 1: Production Web Applications
+# High priority policy for production web workloads with conservative sizing
+apiVersion: rightsizer.io/v1alpha1
+kind: RightSizerPolicy
+metadata:
+  name: production-web-apps
+  namespace: production
+spec:
+  enabled: true
+  priority: 200  # Higher priority than default
+  mode: conservative
+  dryRun: false
+
+  # Target all web deployments in production namespace
+  targetRef:
+    kind: Deployment
+    apiVersion: apps/v1
+    namespaces:
+      - production
+    labelSelector:
+      matchLabels:
+        tier: web
+        environment: production
+    excludeNames:
+      - legacy-app  # Exclude legacy application
+
+  # Conservative resource strategy for production
+  resourceStrategy:
+    cpu:
+      requestMultiplier: 1.5       # 50% buffer for stability
+      requestAddition: 200         # 200m baseline for web servers
+      limitMultiplier: 3.0         # 3x headroom for traffic spikes
+      limitAddition: 500           # Extra 500m for burst capacity
+      minRequest: 100              # Minimum 100m CPU
+      maxLimit: 8000               # Max 8 cores
+      targetUtilization: 70        # Target 70% CPU utilization
+    memory:
+      requestMultiplier: 1.4       # 40% buffer
+      requestAddition: 512         # 512MB baseline for web processes
+      limitMultiplier: 2.5         # 2.5x headroom
+      limitAddition: 1024          # Extra 1GB for caching
+      minRequest: 256              # Minimum 256MB
+      maxLimit: 16384              # Max 16GB
+      targetUtilization: 75        # Target 75% memory utilization
+    metricsSource: prometheus
+    prometheusConfig:
+      url: "http://prometheus.monitoring:9090"
+      cpuQuery: 'avg_over_time(container_cpu_usage_seconds_total{namespace="production",pod=~"{{ .PodName }}"}[7d])'
+      memoryQuery: 'avg_over_time(container_memory_working_set_bytes{namespace="production",pod=~"{{ .PodName }}"}[7d])'
+    historyWindow: "7d"
+    percentile: 99                # Use 99th percentile for production
+    updateMode: rolling            # Rolling updates only
+
+  # Schedule for business hours optimization
+  schedule:
+    interval: "5m"
+    timeWindows:
+      - start: "08:00"
+        end: "20:00"
+        daysOfWeek: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
+        timezone: "America/New_York"
+
+  # Strict constraints for production
+  constraints:
+    maxChangePercentage: 30       # Max 30% change at once
+    minChangeThreshold: 10         # Don't apply changes less than 10%
+    cooldownPeriod: "10m"          # 10 minute cooldown
+    maxRestartsPerHour: 2          # Max 2 restarts per hour
+    respectPDB: true               # Always respect PDBs
+    respectHPA: true               # Don't conflict with HPA
+    respectVPA: false              # We're replacing VPA
+
+  # Webhook notifications for changes
+  webhooks:
+    - url: "https://hooks.slack.com/services/PROD/WEBHOOK"
+      events: ["resize", "error"]
+      headers:
+        Content-Type: "application/json"
+      retryPolicy:
+        maxRetries: 3
+        retryInterval: "5s"
+
+  # Annotations to add to resized resources
+  resourceAnnotations:
+    rightsizer.io/policy: "production-web-apps"
+    rightsizer.io/mode: "conservative"
+    rightsizer.io/last-updated: "{{ .Timestamp }}"
+
+---
+# Policy 2: Development Environments
+# Lower priority policy for dev environments with aggressive optimization
+apiVersion: rightsizer.io/v1alpha1
+kind: RightSizerPolicy
+metadata:
+  name: dev-environments
+  namespace: development
+spec:
+  enabled: true
+  priority: 50  # Lower priority
+  mode: aggressive
+  dryRun: false
+
+  targetRef:
+    kind: Deployment
+    namespaces:
+      - dev
+      - development
+      - sandbox
+    excludeNamespaces: []
+    labelSelector:
+      matchExpressions:
+        - key: environment
+          operator: In
+          values: ["dev", "development", "sandbox"]
+
+  resourceStrategy:
+    cpu:
+      requestMultiplier: 1.05      # Only 5% buffer
+      requestAddition: 0           # No baseline
+      limitMultiplier: 1.5         # 1.5x limit
+      limitAddition: 0
+      minRequest: 10               # Very low minimum
+      maxLimit: 2000               # Max 2 cores in dev
+    memory:
+      requestMultiplier: 1.05
+      requestAddition: 0
+      limitMultiplier: 1.5
+      limitAddition: 0
+      minRequest: 32
+      maxLimit: 4096               # Max 4GB in dev
+    metricsSource: metrics-server  # Use simple metrics-server
+    historyWindow: "1d"            # Only consider 1 day
+    percentile: 90                 # 90th percentile is fine for dev
+    updateMode: immediate          # Apply immediately
+
+  schedule:
+    interval: "30s"                # Check frequently
+
+  constraints:
+    maxChangePercentage: 70        # Allow large changes
+    minChangeThreshold: 2          # Apply even tiny optimizations
+    cooldownPeriod: "1m"           # Short cooldown
+    maxRestartsPerHour: 10         # Allow frequent restarts
+    respectPDB: false              # Ignore PDBs in dev
+    respectHPA: false              # Ignore HPA in dev
+
+---
+# Policy 3: Batch Jobs
+# Policy for batch processing jobs with spike handling
+apiVersion: rightsizer.io/v1alpha1
+kind: RightSizerPolicy
+metadata:
+  name: batch-jobs
+  namespace: data-processing
+spec:
+  enabled: true
+  priority: 150
+  mode: custom
+  dryRun: false
+
+  targetRef:
+    kind: Job
+    namespaces:
+      - data-processing
+      - analytics
+    labelSelector:
+      matchLabels:
+        workload-type: batch
+
+  resourceStrategy:
+    cpu:
+      requestMultiplier: 1.2       # Some buffer
+      requestAddition: 500         # 500m base for batch processing
+      limitMultiplier: 4.0         # 4x for burst processing
+      limitAddition: 1000          # Extra 1 core for spikes
+      minRequest: 500
+      maxLimit: 16000              # Allow up to 16 cores for batch
+    memory:
+      requestMultiplier: 1.3       # Memory buffer for data
+      requestAddition: 2048        # 2GB base for data loading
+      limitMultiplier: 3.0         # 3x for large datasets
+      limitAddition: 4096          # Extra 4GB for processing
+      minRequest: 1024
+      maxLimit: 65536              # Allow up to 64GB for large batches
+    historyWindow: "3d"
+    percentile: 95
+    updateMode: immediate          # Jobs can be updated immediately
+
+  schedule:
+    interval: "1m"
+    # Only during batch processing hours
+    timeWindows:
+      - start: "00:00"
+        end: "06:00"
+        daysOfWeek: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+        timezone: "UTC"
+
+  constraints:
+    maxChangePercentage: 80        # Allow large changes for batch
+    minChangeThreshold: 5
+    cooldownPeriod: "2m"
+    maxRestartsPerHour: 5          # Jobs can restart more often
+    respectPDB: false              # PDBs don't apply to jobs
+    respectHPA: false              # HPA doesn't apply to jobs
+
+---
+# Policy 4: StatefulSets (Databases)
+# Careful policy for stateful workloads
+apiVersion: rightsizer.io/v1alpha1
+kind: RightSizerPolicy
+metadata:
+  name: stateful-databases
+  namespace: databases
+spec:
+  enabled: true
+  priority: 300  # Very high priority
+  mode: conservative
+  dryRun: true   # Start with dry-run for databases
+
+  targetRef:
+    kind: StatefulSet
+    namespaces:
+      - databases
+      - persistence
+    labelSelector:
+      matchLabels:
+        tier: database
+    annotationSelector:
+      rightsizer.io/enabled: "true"  # Require explicit opt-in
+
+  resourceStrategy:
+    cpu:
+      requestMultiplier: 1.8       # High buffer for databases
+      requestAddition: 1000        # 1 core baseline
+      limitMultiplier: 2.5         # Reasonable limit
+      limitAddition: 2000          # Extra 2 cores
+      minRequest: 1000             # Minimum 1 core
+      maxLimit: 32000              # Max 32 cores
+      targetUtilization: 60        # Keep utilization low
+    memory:
+      requestMultiplier: 1.5       # Memory is critical for databases
+      requestAddition: 4096        # 4GB baseline
+      limitMultiplier: 2.0         # Don't overcommit memory
+      limitAddition: 8192          # Extra 8GB for cache
+      minRequest: 2048             # Minimum 2GB
+      maxLimit: 131072             # Max 128GB
+      targetUtilization: 70
+    metricsSource: prometheus
+    prometheusConfig:
+      url: "http://prometheus.monitoring:9090"
+      cpuQuery: 'avg_over_time(container_cpu_usage_seconds_total{namespace="databases",pod=~"{{ .PodName }}"}[30d])'
+      memoryQuery: 'avg_over_time(container_memory_working_set_bytes{namespace="databases",pod=~"{{ .PodName }}"}[30d])'
+    historyWindow: "30d"           # Long history for databases
+    percentile: 99                 # Very conservative percentile
+    updateMode: scheduled          # Only during maintenance windows
+
+  schedule:
+    interval: "1h"                 # Check hourly
+    cronSchedule: "0 2 * * 0"      # Apply changes Sunday 2 AM
+
+  constraints:
+    maxChangePercentage: 20        # Small changes only
+    minChangeThreshold: 15         # Don't apply tiny changes
+    cooldownPeriod: "1h"           # Long cooldown
+    maxRestartsPerHour: 1          # Minimize restarts
+    respectPDB: true               # Always respect PDBs
+    respectHPA: true
+    respectVPA: true
+
+---
+# Policy 5: Machine Learning Workloads
+# GPU-aware policy for ML training and inference
+apiVersion: rightsizer.io/v1alpha1
+kind: RightSizerPolicy
+metadata:
+  name: ml-workloads
+  namespace: ml-platform
+spec:
+  enabled: true
+  priority: 250
+  mode: custom
+  dryRun: false
+
+  targetRef:
+    kind: Deployment
+    namespaces:
+      - ml-platform
+      - ai-research
+    labelSelector:
+      matchLabels:
+        workload: ml
+    annotationSelector:
+      gpu.nvidia.com/enabled: "true"
+
+  resourceStrategy:
+    cpu:
+      requestMultiplier: 1.3       # CPU often underutilized with GPU
+      requestAddition: 2000        # 2 cores for data preprocessing
+      limitMultiplier: 2.0
+      limitAddition: 4000          # Extra for data loading spikes
+      minRequest: 2000             # Minimum 2 cores
+      maxLimit: 64000              # Max 64 cores
+    memory:
+      requestMultiplier: 1.4       # Memory for model and data
+      requestAddition: 8192        # 8GB baseline
+      limitMultiplier: 2.0
+      limitAddition: 16384         # Extra 16GB for large models
+      minRequest: 8192             # Minimum 8GB
+      maxLimit: 262144             # Max 256GB for large models
+    metricsSource: custom
+    historyWindow: "14d"
+    percentile: 95
+    updateMode: rolling
+
+  schedule:
+    interval: "10m"
+    # Avoid resizing during training runs
+    timeWindows:
+      - start: "22:00"
+        end: "06:00"
+        daysOfWeek: ["Saturday", "Sunday"]
+        timezone: "UTC"
+
+  constraints:
+    maxChangePercentage: 40
+    minChangeThreshold: 10
+    cooldownPeriod: "30m"          # Longer cooldown for ML
+    maxRestartsPerHour: 1          # Avoid interrupting training
+    respectPDB: true
+    respectHPA: false              # We handle scaling
+
+---
+# Policy 6: Microservices with Service Mesh
+# Policy for microservices with Istio/Linkerd sidecar consideration
+apiVersion: rightsizer.io/v1alpha1
+kind: RightSizerPolicy
+metadata:
+  name: microservices-mesh
+  namespace: microservices
+spec:
+  enabled: true
+  priority: 100
+  mode: balanced
+  dryRun: false
+
+  targetRef:
+    kind: Deployment
+    namespaces:
+      - microservices
+      - api-gateway
+    labelSelector:
+      matchLabels:
+        mesh: enabled
+    excludeNames:
+      - istio-gateway
+      - linkerd-proxy
+
+  resourceStrategy:
+    cpu:
+      requestMultiplier: 1.2
+      requestAddition: 100         # Account for sidecar overhead
+      limitMultiplier: 2.5
+      limitAddition: 200           # Extra for sidecar spikes
+      minRequest: 50
+      maxLimit: 4000
+    memory:
+      requestMultiplier: 1.3
+      requestAddition: 256         # Account for sidecar memory
+      limitMultiplier: 2.0
+      limitAddition: 512           # Extra for sidecar buffers
+      minRequest: 128
+      maxLimit: 8192
+    metricsSource: prometheus
+    prometheusConfig:
+      url: "http://prometheus.monitoring:9090"
+      # Custom queries that exclude sidecar metrics
+      cpuQuery: 'sum(rate(container_cpu_usage_seconds_total{namespace="microservices",container!="istio-proxy",container!="linkerd-proxy"}[5m])) by (pod)'
+      memoryQuery: 'sum(container_memory_working_set_bytes{namespace="microservices",container!="istio-proxy",container!="linkerd-proxy"}) by (pod)'
+    historyWindow: "3d"
+    percentile: 95
+    updateMode: rolling
+
+  schedule:
+    interval: "2m"
+
+  constraints:
+    maxChangePercentage: 50
+    minChangeThreshold: 8
+    cooldownPeriod: "5m"
+    maxRestartsPerHour: 3
+    respectPDB: true
+    respectHPA: true
+
+---
+# Policy 7: Multi-Namespace Policy
+# Example of a policy that spans multiple namespaces with different configs
+apiVersion: rightsizer.io/v1alpha1
+kind: RightSizerPolicy
+metadata:
+  name: cross-namespace-optimization
+  namespace: right-sizer-system  # Policy in system namespace
+spec:
+  enabled: true
+  priority: 75
+  mode: balanced
+  dryRun: false
+
+  targetRef:
+    kind: Deployment
+    # Target multiple namespaces
+    namespaces:
+      - frontend
+      - backend
+      - api
+    # Exclude system workloads
+    excludeNamespaces:
+      - kube-system
+      - istio-system
+    labelSelector:
+      matchExpressions:
+        - key: rightsizer.io/optimize
+          operator: Exists
+        - key: tier
+          operator: In
+          values: ["web", "api", "worker"]
+
+  resourceStrategy:
+    cpu:
+      requestMultiplier: 1.15
+      requestAddition: 50
+      limitMultiplier: 2.0
+      limitAddition: 100
+      minRequest: 25
+      maxLimit: 4000
+    memory:
+      requestMultiplier: 1.2
+      requestAddition: 64
+      limitMultiplier: 2.0
+      limitAddition: 128
+      minRequest: 64
+      maxLimit: 8192
+    metricsSource: metrics-server
+    historyWindow: "2d"
+    percentile: 90
+    updateMode: rolling
+
+  schedule:
+    interval: "3m"
+
+  constraints:
+    maxChangePercentage: 60
+    minChangeThreshold: 5
+    cooldownPeriod: "5m"
+    maxRestartsPerHour: 4
+    respectPDB: true
+    respectHPA: true

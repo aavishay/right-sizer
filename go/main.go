@@ -22,6 +22,7 @@ import (
 	"os"
 	"os/signal"
 	"right-sizer/admission"
+	"right-sizer/api/v1alpha1"
 	"right-sizer/audit"
 	"right-sizer/config"
 	"right-sizer/controllers"
@@ -207,6 +208,12 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Register CRD schemes
+	if err := v1alpha1.AddToScheme(mgr.GetScheme()); err != nil {
+		logger.Error("unable to add CRD schemes: %v", err)
+		os.Exit(1)
+	}
+
 	// Initialize Kubernetes clientset
 	clientset, err = kubernetes.NewForConfig(kubeConfig)
 	if err != nil {
@@ -337,6 +344,34 @@ func main() {
 			os.Exit(1)
 		}
 	}
+
+	// Setup CRD controllers
+	logger.Info("Setting up CRD controllers...")
+
+	// Setup RightSizerConfig controller (should be initialized first)
+	configController := &controllers.RightSizerConfigReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+		Config: cfg,
+	}
+	if err := configController.SetupWithManager(mgr); err != nil {
+		logger.Error("unable to setup RightSizerConfig controller: %v", err)
+		os.Exit(1)
+	}
+	logger.Info("✅ RightSizerConfig controller initialized")
+
+	// Setup RightSizerPolicy controller
+	policyController := &controllers.RightSizerPolicyReconciler{
+		Client:          mgr.GetClient(),
+		Scheme:          mgr.GetScheme(),
+		MetricsProvider: provider,
+		Config:          cfg,
+	}
+	if err := policyController.SetupWithManager(mgr); err != nil {
+		logger.Error("unable to setup RightSizerPolicy controller: %v", err)
+		os.Exit(1)
+	}
+	logger.Info("✅ RightSizerPolicy controller initialized")
 
 	// Start admission webhook if enabled
 	if webhookManager != nil {

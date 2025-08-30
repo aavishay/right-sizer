@@ -166,6 +166,10 @@ func (r *AdaptiveRightSizer) analyzeDeployments(ctx context.Context) ([]Resource
 	updates := []ResourceUpdate{}
 
 	for _, deploy := range deployList.Items {
+		// Check namespace filters first
+		if !r.shouldProcessNamespace(deploy.Namespace) {
+			continue
+		}
 		if r.isSystemWorkload(deploy.Namespace, deploy.Name) {
 			continue
 		}
@@ -221,6 +225,10 @@ func (r *AdaptiveRightSizer) analyzeStatefulSets(ctx context.Context) ([]Resourc
 	updates := []ResourceUpdate{}
 
 	for _, sts := range stsList.Items {
+		// Check namespace filters first
+		if !r.shouldProcessNamespace(sts.Namespace) {
+			continue
+		}
 		if r.isSystemWorkload(sts.Namespace, sts.Name) {
 			continue
 		}
@@ -276,6 +284,11 @@ func (r *AdaptiveRightSizer) analyzeStandalonePods(ctx context.Context) ([]Resou
 	updates := []ResourceUpdate{}
 
 	for _, pod := range podList.Items {
+		// Check namespace filters first
+		if !r.shouldProcessNamespace(pod.Namespace) {
+			continue
+		}
+
 		// Skip if managed by a controller
 		if len(pod.OwnerReferences) > 0 {
 			continue
@@ -609,6 +622,33 @@ func (r *AdaptiveRightSizer) logUpdate(update ResourceUpdate, dryRun bool) {
 		memReq.String(),
 		update.Method,
 	)
+	return false
+}
+
+// shouldProcessNamespace checks if a namespace should be processed based on include/exclude lists
+func (r *AdaptiveRightSizer) shouldProcessNamespace(namespace string) bool {
+	cfg := config.Get()
+
+	// Check exclude list first (takes precedence)
+	for _, excludeNs := range cfg.NamespaceExclude {
+		if namespace == excludeNs {
+			return false
+		}
+	}
+
+	// If include list is empty, process all non-excluded namespaces
+	if len(cfg.NamespaceInclude) == 0 {
+		return true
+	}
+
+	// Check if namespace is in include list
+	for _, includeNs := range cfg.NamespaceInclude {
+		if namespace == includeNs {
+			return true
+		}
+	}
+
+	return false
 }
 
 // SetupAdaptiveRightSizer creates and starts the adaptive rightsizer

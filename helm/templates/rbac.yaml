@@ -16,6 +16,17 @@ metadata:
   labels:
     {{- include "right-sizer.labels" . | nindent 4 }}
 rules:
+  # Custom Resource Definitions
+  - apiGroups: ["rightsizer.io"]
+    resources: ["rightsizerpolicies", "rightsizerconfigs"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["rightsizer.io"]
+    resources: ["rightsizerpolicies/status", "rightsizerconfigs/status"]
+    verbs: ["get", "update", "patch"]
+  - apiGroups: ["rightsizer.io"]
+    resources: ["rightsizerpolicies/finalizers", "rightsizerconfigs/finalizers"]
+    verbs: ["update"]
+
   # Core pod operations
   - apiGroups: [""]
     resources: ["pods"]

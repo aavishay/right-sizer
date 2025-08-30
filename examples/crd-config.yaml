@@ -1,0 +1,231 @@
+# Example RightSizerConfig - Global Configuration for Right-Sizer Operator
+# This is a cluster-scoped resource that configures the behavior of the entire right-sizer operator
+
+apiVersion: rightsizer.io/v1alpha1
+kind: RightSizerConfig
+metadata:
+  name: right-sizer-global-config
+spec:
+  # Enable/disable the operator globally
+  enabled: true
+
+  # Default sizing mode for all resources
+  defaultMode: balanced  # Options: aggressive, balanced, conservative, custom
+
+  # How often to check and resize resources
+  resizeInterval: "1m"
+
+  # Global dry-run mode (won't apply changes, only log)
+  dryRun: false
+
+  # Default resource calculation strategy
+  defaultResourceStrategy:
+    cpu:
+      requestMultiplier: 1.2      # 20% buffer above usage
+      requestAddition: 100         # Add 100m baseline
+      limitMultiplier: 2.0         # 2x the request
+      limitAddition: 200           # Add 200m to limits
+      minRequest: 50               # Minimum 50m CPU
+      maxLimit: 4000               # Maximum 4 cores
+    memory:
+      requestMultiplier: 1.2      # 20% buffer above usage
+      requestAddition: 128         # Add 128MB baseline
+      limitMultiplier: 2.0         # 2x the request
+      limitAddition: 256           # Add 256MB to limits
+      minRequest: 128              # Minimum 128MB
+      maxLimit: 8192               # Maximum 8GB
+    historyWindow: "7d"           # Consider 7 days of history
+    percentile: 95                 # Use 95th percentile for calculations
+    updateMode: rolling            # Options: immediate, rolling, scheduled
+
+  # Global constraints for resource adjustments
+  globalConstraints:
+    maxChangePercentage: 50       # Don't change resources by more than 50%
+    minChangeThreshold: 5          # Don't apply changes less than 5%
+    cooldownPeriod: "5m"           # Wait 5 minutes between adjustments
+    maxConcurrentResizes: 10       # Limit concurrent resize operations
+    maxRestartsPerHour: 5          # Limit pod restarts per hour
+    respectPDB: true               # Respect PodDisruptionBudgets
+    respectHPA: true               # Don't conflict with HPA
+    respectVPA: true               # Don't conflict with VPA
+
+  # Metrics collection configuration
+  metricsConfig:
+    provider: metrics-server       # Options: metrics-server, prometheus, custom
+    prometheusEndpoint: "http://prometheus:9090"
+    scrapeInterval: "30s"
+    retentionPeriod: "30d"
+    customQueries:
+      cpu_usage: 'rate(container_cpu_usage_seconds_total[5m])'
+      memory_usage: 'container_memory_working_set_bytes'
+    enableProfiling: false
+
+  # Observability configuration
+  observabilityConfig:
+    logLevel: info                 # Options: debug, info, warn, error
+    logFormat: json                # Options: json, text
+    enableAuditLog: true
+    auditLogPath: "/var/log/right-sizer/audit.log"
+    enableMetricsExport: true
+    metricsPort: 9090
+    enableTracing: false
+    tracingEndpoint: "http://jaeger:14268/api/traces"
+    enableEvents: true
+
+  # Security configuration
+  securityConfig:
+    enableAdmissionController: false
+    admissionWebhookPort: 8443
+    requireAnnotation: false
+    annotationKey: "right-sizer.io/enabled"
+    enableMutatingWebhook: false
+    enableValidatingWebhook: true
+    tlsConfig:
+      certSecretName: "right-sizer-webhook-certs"
+      certPath: "/etc/certs/tls.crt"
+      keyPath: "/etc/certs/tls.key"
+      autoGenerate: true
+
+  # Operator behavior configuration
+  operatorConfig:
+    leaderElection: true
+    leaderElectionNamespace: "right-sizer-system"
+    leaderElectionID: "right-sizer-leader"
+    maxRetries: 3
+    retryInterval: "5s"
+    enableCircuitBreaker: true
+    circuitBreakerThreshold: 5
+    reconcileInterval: "10m"
+    workerThreads: 5
+
+  # Namespace configuration
+  namespaceConfig:
+    # Include only these namespaces (empty means all)
+    includeNamespaces: []
+    # Exclude these namespaces
+    excludeNamespaces:
+      - kube-system
+      - kube-public
+      - kube-node-lease
+      - cert-manager
+    # System namespaces that should never be modified
+    systemNamespaces:
+      - kube-system
+      - kube-public
+      - kube-node-lease
+      - right-sizer-system
+    # Select namespaces by labels
+    namespaceLabels:
+      environment: production
+      right-sizer: enabled
+
+  # Notification configuration
+  notificationConfig:
+    enableNotifications: true
+    notificationLevel: warning    # Options: debug, info, warning, error
+    slackConfig:
+      webhookURL: "https://hooks.slack.com/services/YOUR/WEBHOOK/URL"
+      channel: "#rightsizer-alerts"
+      username: "RightSizer"
+      iconEmoji: ":robot_face:"
+    emailConfig:
+      smtpServer: "smtp.example.com"
+      smtpPort: 587
+      from: "rightsizer@example.com"
+      to:
+        - "ops-team@example.com"
+        - "platform@example.com"
+      useTLS: true
+      authSecretRef:
+        name: smtp-credentials
+        key: password
+    webhookConfigs:
+      - name: pagerduty
+        url: "https://events.pagerduty.com/v2/enqueue"
+        method: POST
+        headers:
+          Content-Type: "application/json"
+          Authorization: "Token token=YOUR_TOKEN"
+        timeout: "30s"
+        retryCount: 3
+
+  # Feature gates for enabling/disabling specific features
+  featureGates:
+    enableInPlaceResize: true      # Enable Kubernetes 1.27+ in-place resize
+    enablePolicyEngine: true        # Enable policy-based sizing
+    enableAdaptiveScaling: true     # Enable adaptive scaling based on patterns
+    enableCostOptimization: true    # Enable cost optimization features
+    enablePredictiveScaling: false  # Enable ML-based predictive scaling
+    enableAutoRollback: true        # Enable automatic rollback on failures
+    enableMultiCluster: false       # Enable multi-cluster support
+
+---
+# Example with minimal configuration
+apiVersion: rightsizer.io/v1alpha1
+kind: RightSizerConfig
+metadata:
+  name: right-sizer-simple-config
+spec:
+  enabled: true
+  defaultMode: balanced
+  resizeInterval: "5m"
+  dryRun: false
+
+  defaultResourceStrategy:
+    cpu:
+      requestMultiplier: 1.1
+      limitMultiplier: 1.5
+    memory:
+      requestMultiplier: 1.1
+      limitMultiplier: 1.5
+
+  namespaceConfig:
+    excludeNamespaces:
+      - kube-system
+      - kube-public
+
+---
+# Example for development environment with aggressive optimization
+apiVersion: rightsizer.io/v1alpha1
+kind: RightSizerConfig
+metadata:
+  name: right-sizer-dev-config
+spec:
+  enabled: true
+  defaultMode: aggressive
+  resizeInterval: "30s"
+  dryRun: false
+
+  defaultResourceStrategy:
+    cpu:
+      requestMultiplier: 1.05      # Only 5% buffer
+      requestAddition: 0            # No baseline addition
+      limitMultiplier: 1.2          # Tight limits
+      limitAddition: 0
+      minRequest: 10
+      maxLimit: 2000                # Max 2 cores in dev
+    memory:
+      requestMultiplier: 1.05
+      requestAddition: 0
+      limitMultiplier: 1.2
+      limitAddition: 0
+      minRequest: 32
+      maxLimit: 4096                # Max 4GB in dev
+    updateMode: immediate           # Apply changes immediately
+
+  globalConstraints:
+    maxChangePercentage: 70         # Allow larger changes
+    minChangeThreshold: 2           # Apply even small optimizations
+    cooldownPeriod: "1m"            # Faster iteration
+    maxRestartsPerHour: 10          # Allow more restarts in dev
+
+  observabilityConfig:
+    logLevel: debug                 # Verbose logging in dev
+    enableAuditLog: false           # Skip audit in dev
+    enableMetricsExport: false      # Skip metrics in dev
+
+  namespaceConfig:
+    includeNamespaces:
+      - dev
+      - staging
+      - test

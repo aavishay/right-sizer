@@ -1,0 +1,69 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: rightsizerconfigs.rightsizer.io
+spec:
+  group: rightsizer.io
+  names:
+    kind: RightSizerConfig
+    listKind: RightSizerConfigList
+    plural: rightsizerconfigs
+    singular: rightsizerconfig
+    shortNames:
+      - rsc
+  scope: Cluster
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                enabled:
+                  type: boolean
+                  default: true
+                defaultMode:
+                  type: string
+                  enum: ["aggressive", "balanced", "conservative", "custom"]
+                  default: balanced
+                resizeInterval:
+                  type: string
+                  default: "1m"
+                dryRun:
+                  type: boolean
+                  default: false
+                defaultResourceStrategy:
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+                globalConstraints:
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+                metricsConfig:
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+                observabilityConfig:
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+                securityConfig:
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+                operatorConfig:
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+                namespaceConfig:
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+                notificationConfig:
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+                featureGates:
+                  type: object
+                  additionalProperties:
+                    type: boolean
+            status:
+              type: object
+              x-kubernetes-preserve-unknown-fields: true

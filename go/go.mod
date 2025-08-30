@@ -4,6 +4,12 @@ go 1.24.0
 
 toolchain go1.24.6
 
+replace golang.org/x/tools => golang.org/x/tools v0.10.0
+
+replace golang.org/x/sys => golang.org/x/sys v0.10.0
+
+replace golang.org/x/net => golang.org/x/net v0.10.0
+
 require (
 	github.com/go-logr/zapr v1.3.0
 	github.com/prometheus/client_golang v1.22.0

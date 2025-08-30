@@ -115,6 +115,12 @@ func (r *InPlaceRightSizer) rightSizeAllPods(ctx context.Context) {
 			continue
 		}
 
+		// Check namespace filters
+		if !r.shouldProcessNamespace(pod.Namespace) {
+			skippedCount++
+			continue
+		}
+
 		// Skip pods that don't support in-place resize
 		if !r.supportsInPlaceResize(&pod) {
 			log.Printf("⚠️  Pod %s/%s does not support in-place resize, skipping", pod.Namespace, pod.Name)
@@ -544,7 +550,34 @@ func (r *InPlaceRightSizer) applyInPlaceResize(ctx context.Context, pod *corev1.
 		return fmt.Errorf("resize failed: %w", err)
 	}
 
+	log.Printf("✅ Successfully resized pod %s/%s", pod.Namespace, pod.Name)
 	return nil
+}
+
+// shouldProcessNamespace checks if a namespace should be processed based on include/exclude lists
+func (r *InPlaceRightSizer) shouldProcessNamespace(namespace string) bool {
+	cfg := config.Get()
+
+	// Check exclude list first (takes precedence)
+	for _, excludeNs := range cfg.NamespaceExclude {
+		if namespace == excludeNs {
+			return false
+		}
+	}
+
+	// If include list is empty, process all non-excluded namespaces
+	if len(cfg.NamespaceInclude) == 0 {
+		return true
+	}
+
+	// Check if namespace is in include list
+	for _, includeNs := range cfg.NamespaceInclude {
+		if namespace == includeNs {
+			return true
+		}
+	}
+
+	return false
 }
 
 // fallbackPatch is deprecated as regular patches cannot modify pod resources
