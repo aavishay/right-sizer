@@ -29,6 +29,8 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
@@ -37,6 +39,8 @@ import (
 // in-place updates (when available) and deployment updates as fallback
 type AdaptiveRightSizer struct {
 	Client          client.Client
+	ClientSet       *kubernetes.Clientset
+	RestConfig      *rest.Config
 	MetricsProvider metrics.Provider
 	Interval        time.Duration
 	InPlaceEnabled  bool // Will be auto-detected
@@ -238,8 +242,7 @@ func (r *AdaptiveRightSizer) applyUpdates(ctx context.Context, updates []Resourc
 
 // updatePodInPlace attempts to update pod resources in-place
 func (r *AdaptiveRightSizer) updatePodInPlace(ctx context.Context, update ResourceUpdate) error {
-	// This would use the resize subresource when available
-	// For now, we'll just annotate the pod
+	// Get the current pod
 	var pod corev1.Pod
 	if err := r.Client.Get(ctx, types.NamespacedName{
 		Namespace: update.Namespace,
@@ -248,20 +251,53 @@ func (r *AdaptiveRightSizer) updatePodInPlace(ctx context.Context, update Resour
 		return err
 	}
 
-	if pod.Annotations == nil {
-		pod.Annotations = make(map[string]string)
+	// Create the resize patch
+	type ContainerResourcesPatch struct {
+		Name      string                      `json:"name"`
+		Resources corev1.ResourceRequirements `json:"resources"`
 	}
 
-	recommendationData, _ := json.Marshal(map[string]interface{}{
-		"container":    update.ContainerName,
-		"newResources": update.NewResources,
-		"reason":       update.Reason,
-		"timestamp":    time.Now().Format(time.RFC3339),
-	})
+	type PodSpecPatch struct {
+		Containers []ContainerResourcesPatch `json:"containers"`
+	}
 
-	pod.Annotations["right-sizer/recommendation"] = string(recommendationData)
+	type PodResizePatch struct {
+		Spec PodSpecPatch `json:"spec"`
+	}
 
-	return r.Client.Update(ctx, &pod)
+	resizePatch := PodResizePatch{
+		Spec: PodSpecPatch{
+			Containers: []ContainerResourcesPatch{
+				{
+					Name:      update.ContainerName,
+					Resources: update.NewResources,
+				},
+			},
+		},
+	}
+
+	// Marshal the patch
+	patchData, err := json.Marshal(resizePatch)
+	if err != nil {
+		return fmt.Errorf("failed to marshal resize patch: %w", err)
+	}
+
+	// Use the Kubernetes client-go to patch with the resize subresource
+	// This is the key difference - using the resize subresource endpoint
+	_, err = r.ClientSet.CoreV1().Pods(update.Namespace).Patch(
+		ctx,
+		update.Name,
+		types.StrategicMergePatchType,
+		patchData,
+		metav1.PatchOptions{},
+		"resize", // This is the crucial part - specifying the resize subresource
+	)
+
+	if err != nil {
+		return fmt.Errorf("failed to resize pod: %w", err)
+	}
+
+	return nil
 }
 
 // Helper functions
@@ -465,8 +501,20 @@ func (r *AdaptiveRightSizer) shouldProcessNamespace(namespace string) bool {
 // SetupAdaptiveRightSizer creates and starts the adaptive rightsizer
 func SetupAdaptiveRightSizer(mgr manager.Manager, provider metrics.Provider, dryRun bool) error {
 	cfg := config.Get()
+
+	// Get the rest config from the manager
+	restConfig := mgr.GetConfig()
+
+	// Create a clientset for using the resize subresource
+	clientSet, err := kubernetes.NewForConfig(restConfig)
+	if err != nil {
+		return fmt.Errorf("failed to create kubernetes clientset: %w", err)
+	}
+
 	rightsizer := &AdaptiveRightSizer{
 		Client:          mgr.GetClient(),
+		ClientSet:       clientSet,
+		RestConfig:      restConfig,
 		MetricsProvider: provider,
 		Interval:        cfg.ResizeInterval,
 		DryRun:          dryRun,

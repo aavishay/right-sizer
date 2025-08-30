@@ -1,0 +1,25 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: test-high-resources
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: test-high-resources
+  template:
+    metadata:
+      labels:
+        app: test-high-resources
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:alpine
+        resources:
+          requests:
+            cpu: "500m"
+            memory: "512Mi"
+          limits:
+            cpu: "1000m"
+            memory: "1Gi"
