@@ -1,0 +1,22 @@
+# Custom values for right-sizer with warn log level
+defaultConfig:
+  observability:
+    logLevel: "warn"
+    logFormat: "json"
+    enableAuditLog: true
+    auditLogPath: "/var/log/right-sizer/audit.log"
+    enableMetricsExport: true
+    metricsPort: 9090
+    enableTracing: false
+    tracingEndpoint: ""
+    enableEvents: true
+
+# Optional: If you want to suppress info logs from controller-runtime
+# you can set the controller log level separately
+controllerLogLevel: "warn"
+
+# Optional: Set image if using local build
+image:
+  repository: right-sizer
+  tag: latest
+  pullPolicy: Never

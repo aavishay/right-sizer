@@ -550,6 +550,29 @@ kubectl apply -f helm/crds/rightsizer.io_rightsizerpolicies.yaml
 
 See [CRD Field Troubleshooting Guide](docs/TROUBLESHOOTING_CRD_FIELDS.md) for detailed information.
 
+#### 5. Configuring Log Levels
+To reduce log verbosity, set the log level to `warn` or `error`:
+
+```bash
+# Quick method using the provided script
+./scripts/set-log-level.sh warn
+
+# Set to warn and restart operator immediately
+./scripts/set-log-level.sh --restart warn
+
+# Or patch the CRD directly
+kubectl patch rightsizerconfig default --type='merge' \
+  -p '{"spec":{"observabilityConfig":{"logLevel":"warn"}}}'
+
+# Via Helm values
+helm upgrade right-sizer ./helm \
+  --set defaultConfig.observability.logLevel=warn
+```
+
+Available log levels: `debug`, `info` (default), `warn`, `error`
+
+See [Log Level Configuration Guide](docs/CONFIGURE_LOG_LEVEL.md) for detailed information.
+
 ### Diagnostic Commands
 
 ```bash
