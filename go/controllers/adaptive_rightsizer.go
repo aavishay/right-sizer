@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"right-sizer/config"
@@ -251,6 +252,48 @@ func (r *AdaptiveRightSizer) updatePodInPlace(ctx context.Context, update Resour
 		return err
 	}
 
+	// Find the container to check current resources
+	var currentResources *corev1.ResourceRequirements
+	for _, container := range pod.Spec.Containers {
+		if container.Name == update.ContainerName {
+			currentResources = &container.Resources
+			break
+		}
+	}
+
+	if currentResources == nil {
+		return fmt.Errorf("container %s not found in pod", update.ContainerName)
+	}
+
+	// Check if memory limit is being decreased (not allowed for in-place resize)
+	currentMemLimit := currentResources.Limits.Memory()
+	newMemLimit := update.NewResources.Limits.Memory()
+	currentMemRequest := currentResources.Requests.Memory()
+	newMemRequest := update.NewResources.Requests.Memory()
+
+	memoryLimitDecreased := currentMemLimit != nil && newMemLimit != nil && currentMemLimit.Cmp(*newMemLimit) > 0
+	memoryRequestDecreased := currentMemRequest != nil && newMemRequest != nil && currentMemRequest.Cmp(*newMemRequest) > 0
+
+	if memoryLimitDecreased || memoryRequestDecreased {
+		// Memory is being decreased - keep current memory values but update CPU
+		log.Printf("⚠️  Cannot decrease memory for pod %s/%s", update.Namespace, update.Name)
+		if memoryLimitDecreased {
+			log.Printf("   Memory limit: current=%s, desired=%s", currentMemLimit.String(), newMemLimit.String())
+		}
+		if memoryRequestDecreased {
+			log.Printf("   Memory request: current=%s, desired=%s", currentMemRequest.String(), newMemRequest.String())
+		}
+		log.Printf("   💡 Applying CPU changes only (memory decreases require pod restart)")
+
+		// Keep current memory values, but use new CPU values
+		if currentMemLimit != nil {
+			update.NewResources.Limits[corev1.ResourceMemory] = currentMemLimit.DeepCopy()
+		}
+		if currentMemRequest != nil {
+			update.NewResources.Requests[corev1.ResourceMemory] = currentMemRequest.DeepCopy()
+		}
+	}
+
 	// Create the resize patch
 	type ContainerResourcesPatch struct {
 		Name      string                      `json:"name"`
@@ -294,6 +337,13 @@ func (r *AdaptiveRightSizer) updatePodInPlace(ctx context.Context, update Resour
 	)
 
 	if err != nil {
+		// Check for specific memory decrease error
+		if strings.Contains(err.Error(), "memory limits cannot be decreased") {
+			log.Printf("⚠️  Cannot decrease memory for pod %s/%s", update.Namespace, update.Name)
+			log.Printf("   💡 Pod needs RestartContainer policy for memory decreases. Skipping resize.")
+			// Return nil to not count this as an error
+			return nil
+		}
 		return fmt.Errorf("failed to resize pod: %w", err)
 	}
 
