@@ -478,6 +478,13 @@ spec:
               operatorConfig:
                 description: OperatorConfig configures operator behavior
                 properties:
+                  burst:
+                    default: 30
+                    description: Burst for Kubernetes API client rate limiting
+                    format: int32
+                    maximum: 1000
+                    minimum: 1
+                    type: integer
                   circuitBreakerThreshold:
                     default: 5
                     description: CircuitBreakerThreshold for circuit breaker
@@ -500,12 +507,26 @@ spec:
                     default: right-sizer-system
                     description: LeaderElectionNamespace for leader election
                     type: string
+                  maxConcurrentReconciles:
+                    default: 3
+                    description: MaxConcurrentReconciles per controller
+                    format: int32
+                    maximum: 20
+                    minimum: 1
+                    type: integer
                   maxRetries:
                     default: 3
                     description: MaxRetries for failed operations
                     format: int32
                     minimum: 0
                     type: integer
+                  qps:
+                    default: 20
+                    description: QPS (Queries Per Second) for Kubernetes API client
+                      rate limiting
+                    maximum: 1000
+                    minimum: 1
+                    type: number
                   reconcileInterval:
                     default: 10m
                     description: ReconcileInterval for reconciliation loop

@@ -18,7 +18,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"os"
 	"os/signal"
 	"right-sizer/admission"
@@ -45,27 +44,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/metrics/server"
 )
 
-// StartHealthServer starts a simple HTTP server on :8081 for health checks
-func StartHealthServer() {
-	http.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("healthy"))
-	})
-	http.HandleFunc("/readyz", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("ready"))
-	})
-	http.HandleFunc("/ready", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("ready"))
-	})
-	go func() {
-		logger.Info("Starting health server on :8081")
-		if err := http.ListenAndServe(":8081", nil); err != nil {
-			logger.Error("Health server error: %v", err)
-		}
-	}()
-}
+// Health server is handled by the controller-runtime manager
+// which provides /healthz and /readyz endpoints automatically
 
 func main() {
 	// Print startup banner
@@ -104,9 +84,6 @@ func main() {
 
 	// Initialize enhanced components
 	operatorMetrics := metrics.NewOperatorMetrics()
-
-	// Start health server
-	StartHealthServer()
 
 	// Get Kubernetes config with rate limiting to prevent API server overload
 	kubeConfig := ctrl.GetConfigOrDie()

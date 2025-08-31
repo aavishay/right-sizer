@@ -1,0 +1,99 @@
+apiVersion: rightsizer.io/v1alpha1
+kind: RightSizerConfig
+metadata:
+  name: default
+  namespace: default
+spec:
+  # Custom rate limiting configuration for testing
+  operatorConfig:
+    # Test with lower values to see the effect
+    qps: 10 # Lower QPS for testing (default was 20)
+    burst: 20 # Lower burst for testing (default was 30)
+    maxConcurrentReconciles: 2 # Process fewer pods concurrently (default was 3)
+
+    # Other operator settings
+    leaderElection: false
+    maxRetries: 3
+    retryInterval: "5s"
+    reconcileInterval: "10m"
+    workerThreads: 4
+    circuitBreakerThreshold: 5
+    enableCircuitBreaker: true
+    leaderElectionID: "right-sizer-leader"
+    leaderElectionNamespace: "default"
+
+  # Default resource strategy configuration
+  defaultResourceStrategy:
+    cpu:
+      requestMultiplier: 1.2
+      limitMultiplier: 2.0
+      maxLimit: 4000
+      minRequest: 10
+    memory:
+      requestMultiplier: 1.2
+      limitMultiplier: 2.0
+      maxLimit: 8192
+      minRequest: 64
+
+  # Global constraints
+  globalConstraints:
+    maxChangePercentage: 50
+    minChangeThreshold: 5
+    cooldownPeriod: "5m"
+    maxConcurrentResizes: 5
+    maxRestartsPerHour: 3
+    respectPDB: true
+    respectHPA: true
+    respectVPA: true
+
+  # Metrics configuration
+  metricsConfig:
+    scrapeInterval: "30s"
+    provider: "metrics-server"
+    enableProfiling: false
+    retentionPeriod: "7d"
+
+  # Namespace configuration
+  namespaceConfig:
+    includeNamespaces: [] # Empty means all namespaces
+    excludeNamespaces:
+      - kube-system
+      - kube-public
+      - kube-node-lease
+
+  # Observability configuration
+  observabilityConfig:
+    logLevel: "info"
+    enableAuditLog: true
+    enableMetricsExport: true
+    metricsPort: 9090
+    enableEvents: true
+    enableTracing: false
+    logFormat: "json"
+    auditLogPath: "/var/log/right-sizer/audit.log"
+
+  # Feature gates
+  featureGates:
+    EnableInPlaceResize: true
+    EnableCostOptimization: false
+    EnablePredictiveScaling: false
+
+  # Security configuration
+  securityConfig:
+    enableAdmissionController: false
+    enableMutatingWebhook: false
+    enableValidatingWebhook: true
+    requireAnnotation: false
+    annotationKey: "rightsizer.io/enable"
+    admissionWebhookPort: 8443
+    tlsConfig:
+      autoGenerate: true
+      certSecretName: "right-sizer-webhook-certs"
+      certPath: "/etc/certs/tls.crt"
+      keyPath: "/etc/certs/tls.key"
+
+  # Additional settings
+  enabled: true
+  dryRun: false
+  defaultMode: "balanced"
+  resizeInterval: "30s"
