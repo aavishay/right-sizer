@@ -53,6 +53,9 @@ desktop.ini
 *.bak
 *.orig
 *.pid
+temp/
+build-temp/
+*-temp/
 
 # Environment files
 .env

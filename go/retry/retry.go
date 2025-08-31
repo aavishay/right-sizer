@@ -421,6 +421,23 @@ func WrapKubernetesError(err error) error {
 	return NewRetryableError(err, IsRetryableKubernetesError(err))
 }
 
+// RetryManager provides a simple interface for retry operations
+type RetryManager struct {
+	retryer *Retryer
+}
+
+// NewRetryManager creates a new RetryManager with the given configuration
+func NewRetryManager(config Config) *RetryManager {
+	return &RetryManager{
+		retryer: New(config, nil),
+	}
+}
+
+// RetryWithBackoff performs an operation with exponential backoff retry
+func (rm *RetryManager) RetryWithBackoff(fn func() error) error {
+	return rm.retryer.Do("operation", fn)
+}
+
 // BackoffStrategy represents different backoff strategies
 type BackoffStrategy int
 

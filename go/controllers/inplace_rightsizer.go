@@ -234,7 +234,7 @@ func (r *InPlaceRightSizer) rightSizePod(ctx context.Context, pod *corev1.Pod) (
 	newResourcesMap := r.calculateOptimalResourcesForContainers(usage, pod, scalingDecision)
 
 	// Check if adjustment is needed
-	needsUpdate, details := r.needsAdjustmentWithDetails(pod, newResourcesMap)
+	needsUpdate, _ := r.needsAdjustmentWithDetails(pod, newResourcesMap)
 	if !needsUpdate {
 		return false, nil
 	}
@@ -248,6 +248,21 @@ func (r *InPlaceRightSizer) rightSizePod(ctx context.Context, pod *corev1.Pod) (
 			newMemReq := newResources.Requests[corev1.ResourceMemory]
 
 			if !oldCPUReq.Equal(newCPUReq) || !oldMemReq.Equal(newMemReq) {
+				// Get current usage for detailed logging
+				cpuLimit := container.Resources.Limits.Cpu().AsApproximateFloat64() * 1000
+				memLimit := float64(container.Resources.Limits.Memory().Value()) / (1024 * 1024)
+				cpuUsagePercent := 0.0
+				memUsagePercent := 0.0
+				if cpuLimit > 0 {
+					cpuUsagePercent = (usage.CPUMilli / cpuLimit) * 100
+				}
+				if memLimit > 0 {
+					memUsagePercent = (usage.MemMB / memLimit) * 100
+				}
+
+				log.Printf("🔍 Scaling analysis - CPU: %s (usage: %.0fm/%.0fm, %.1f%%), Memory: %s (usage: %.0fMi/%.0fMi, %.1f%%)",
+					scalingDecisionString(scalingDecision.CPU), usage.CPUMilli, cpuLimit, cpuUsagePercent,
+					scalingDecisionString(scalingDecision.Memory), usage.MemMB, memLimit, memUsagePercent)
 				log.Printf("📈 Container %s/%s/%s will be resized - CPU: %s→%s, Memory: %s→%s",
 					pod.Namespace, pod.Name, container.Name,
 					oldCPUReq.String(), newCPUReq.String(),
@@ -256,13 +271,7 @@ func (r *InPlaceRightSizer) rightSizePod(ctx context.Context, pod *corev1.Pod) (
 		}
 	}
 
-	// Log the resize operation with details
-	log.Printf("🔧 Resizing pod %s/%s:", pod.Namespace, pod.Name)
-	for containerName, changes := range details {
-		log.Printf("   📦 Container '%s':", containerName)
-		log.Printf("      CPU: %s → %s", changes.CurrentCPU, changes.NewCPU)
-		log.Printf("      Memory: %s → %s", changes.CurrentMem, changes.NewMem)
-	}
+	// Apply in-place update using resize subresource (removed duplicate logging)
 
 	// Apply in-place update using resize subresource
 	err = r.applyInPlaceResize(ctx, pod, newResourcesMap)
@@ -349,13 +358,7 @@ func (r *InPlaceRightSizer) checkScalingThresholds(usage metrics.Metrics, pod *c
 		memoryDecision = ScaleDown
 	}
 
-	// Log the decision
-	if cpuDecision != ScaleNone || memoryDecision != ScaleNone {
-		log.Printf("🔍 Scaling analysis for %s/%s - CPU: %s (usage: %.0fm, limit: %.0fm, %.1f%%), Memory: %s (usage: %.0fMi, limit: %.0fMi, %.1f%%)",
-			pod.Namespace, pod.Name,
-			scalingDecisionString(cpuDecision), usage.CPUMilli, totalCPULimit, cpuUsagePercent*100,
-			scalingDecisionString(memoryDecision), usage.MemMB, totalMemLimit, memUsagePercent*100)
-	}
+	// Don't log here to avoid duplication - logging happens in rightSizePod when resize is actually needed
 
 	return ResourceScalingDecision{CPU: cpuDecision, Memory: memoryDecision}
 }
@@ -670,7 +673,7 @@ func (r *InPlaceRightSizer) applyInPlaceResize(ctx context.Context, pod *corev1.
 		return fmt.Errorf("resize failed: %w", err)
 	}
 
-	log.Printf("✅ Successfully resized pod %s/%s", pod.Namespace, pod.Name)
+	// Success - logging already done in rightSizePod
 	return nil
 }
 

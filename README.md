@@ -681,11 +681,11 @@ right-sizer/
 
 ## Documentation
 
-- [Configuration Guide](CONFIGURATION.md) - Complete configuration reference
-- [CRD Configuration Guide](CONFIGURATION-CRD.md) - CRD-specific configuration
-- [Build Guide](BUILD.md) - Build and deployment instructions
+- [Configuration Guide](docs/CONFIGURATION.md) - Complete configuration reference
+- [CRD Configuration Guide](docs/CONFIGURATION-CRD.md) - CRD-specific configuration
+- [Build Guide](docs/BUILD.md) - Build and deployment instructions
 - [RBAC Guide](docs/RBAC.md) - Comprehensive RBAC documentation
-- [Contributing](CONTRIBUTING.md) - Development and contribution guidelines
+- [Contributing](docs/CONTRIBUTING.md) - Development and contribution guidelines
 - [Examples](examples/) - Sample configurations and policies
 
 ---
@@ -703,7 +703,7 @@ right-sizer/
 
 ## Contributing
 
-We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for details on:
+We welcome contributions! Please see [CONTRIBUTING.md](docs/CONTRIBUTING.md) for details on:
 - Code of conduct
 - Development process
 - Submitting pull requests

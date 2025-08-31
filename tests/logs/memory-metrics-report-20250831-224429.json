@@ -1,0 +1,15 @@
+{
+  "timestamp": "2025-08-31T19:44:29Z",
+  "test_suite": "memory-metrics",
+  "environment": {
+    "minikube_profile": "right-sizer-memory",
+    "namespace": "right-sizer",
+    "test_namespace": "memory-test"
+  },
+  "results": {
+    "total": 20,
+    "passed": 7,
+    "failed": 13,
+    "success_rate": 35
+  }
+}

@@ -250,6 +250,21 @@ func (r *AdaptiveRightSizer) analyzeAllPods(ctx context.Context) ([]ResourceUpda
 				newCPUReq := newResources.Requests[corev1.ResourceCPU]
 				newMemReq := newResources.Requests[corev1.ResourceMemory]
 
+				// Get current usage for detailed logging
+				cpuLimit := container.Resources.Limits.Cpu().AsApproximateFloat64() * 1000
+				memLimit := float64(container.Resources.Limits.Memory().Value()) / (1024 * 1024)
+				cpuUsagePercent := 0.0
+				memUsagePercent := 0.0
+				if cpuLimit > 0 {
+					cpuUsagePercent = (podMetrics.CPUMilli / cpuLimit) * 100
+				}
+				if memLimit > 0 {
+					memUsagePercent = (podMetrics.MemMB / memLimit) * 100
+				}
+
+				logger.Info("🔍 Scaling analysis - CPU: %s (usage: %.0fm/%.0fm, %.1f%%), Memory: %s (usage: %.0fMi/%.0fMi, %.1f%%)",
+					scalingDecisionString(scalingDecision.CPU), podMetrics.CPUMilli, cpuLimit, cpuUsagePercent,
+					scalingDecisionString(scalingDecision.Memory), podMetrics.MemMB, memLimit, memUsagePercent)
 				logger.Info("📈 Container %s/%s/%s will be resized - CPU: %s→%s, Memory: %s→%s",
 					pod.Namespace, pod.Name, container.Name,
 					oldCPUReq.String(), newCPUReq.String(),
@@ -347,10 +362,11 @@ func (r *AdaptiveRightSizer) applyUpdates(ctx context.Context, updates []Resourc
 			default:
 			}
 
-			if err := r.updatePodInPlace(ctx, update); err != nil {
-				log.Printf("Error updating pod %s/%s: %v", update.Namespace, update.Name, err)
-			} else {
-				log.Printf("✅ Successfully resized pod %s/%s using in-place resize", update.Namespace, update.Name)
+			actualChanges, err := r.updatePodInPlace(ctx, update)
+			if err != nil {
+				log.Printf("❌ Error updating pod %s/%s: %v", update.Namespace, update.Name, err)
+			} else if actualChanges != "" && !strings.Contains(actualChanges, "Skipped") {
+				log.Printf("✅ %s", actualChanges)
 			}
 
 			// Add small delay between pods within a batch to avoid rapid-fire API calls
@@ -370,7 +386,8 @@ func (r *AdaptiveRightSizer) applyUpdates(ctx context.Context, updates []Resourc
 }
 
 // updatePodInPlace attempts to update pod resources in-place with mutex protection
-func (r *AdaptiveRightSizer) updatePodInPlace(ctx context.Context, update ResourceUpdate) error {
+// Returns a description of what was actually changed
+func (r *AdaptiveRightSizer) updatePodInPlace(ctx context.Context, update ResourceUpdate) (string, error) {
 	// Use mutex to prevent concurrent API calls that could overwhelm the server
 	r.updateMutex.Lock()
 	defer r.updateMutex.Unlock()
@@ -381,7 +398,7 @@ func (r *AdaptiveRightSizer) updatePodInPlace(ctx context.Context, update Resour
 		Namespace: update.Namespace,
 		Name:      update.Name,
 	}, &pod); err != nil {
-		return err
+		return "", err
 	}
 
 	// Find the container to check current resources
@@ -394,7 +411,7 @@ func (r *AdaptiveRightSizer) updatePodInPlace(ctx context.Context, update Resour
 	}
 
 	if currentResources == nil {
-		return fmt.Errorf("container %s not found in pod", update.ContainerName)
+		return "", fmt.Errorf("container %s not found in pod", update.ContainerName)
 	}
 
 	// Check if memory limit is being decreased (not allowed for in-place resize)
@@ -406,14 +423,15 @@ func (r *AdaptiveRightSizer) updatePodInPlace(ctx context.Context, update Resour
 	memoryLimitDecreased := currentMemLimit != nil && newMemLimit != nil && currentMemLimit.Cmp(*newMemLimit) > 0
 	memoryRequestDecreased := currentMemRequest != nil && newMemRequest != nil && currentMemRequest.Cmp(*newMemRequest) > 0
 
+	cpuOnly := false
 	if memoryLimitDecreased || memoryRequestDecreased {
 		// Memory is being decreased - keep current memory values but update CPU
 		log.Printf("⚠️  Cannot decrease memory for pod %s/%s", update.Namespace, update.Name)
 		if memoryLimitDecreased {
-			log.Printf("   Memory limit: current=%s, desired=%s", currentMemLimit.String(), newMemLimit.String())
+			log.Printf("   Memory limit: current=%s, desired=%s (decrease not allowed)", currentMemLimit.String(), newMemLimit.String())
 		}
 		if memoryRequestDecreased {
-			log.Printf("   Memory request: current=%s, desired=%s", currentMemRequest.String(), newMemRequest.String())
+			log.Printf("   Memory request: current=%s, desired=%s (decrease not allowed)", currentMemRequest.String(), newMemRequest.String())
 		}
 		log.Printf("   💡 Applying CPU changes only (memory decreases require pod restart)")
 
@@ -424,6 +442,7 @@ func (r *AdaptiveRightSizer) updatePodInPlace(ctx context.Context, update Resour
 		if currentMemRequest != nil {
 			update.NewResources.Requests[corev1.ResourceMemory] = currentMemRequest.DeepCopy()
 		}
+		cpuOnly = true
 	}
 
 	// Create the resize patch
@@ -454,7 +473,7 @@ func (r *AdaptiveRightSizer) updatePodInPlace(ctx context.Context, update Resour
 	// Marshal the patch
 	patchData, err := json.Marshal(resizePatch)
 	if err != nil {
-		return fmt.Errorf("failed to marshal resize patch: %w", err)
+		return "", fmt.Errorf("failed to marshal resize patch: %w", err)
 	}
 
 	// Use the Kubernetes client-go to patch with the resize subresource
@@ -473,13 +492,29 @@ func (r *AdaptiveRightSizer) updatePodInPlace(ctx context.Context, update Resour
 		if strings.Contains(err.Error(), "memory limits cannot be decreased") {
 			log.Printf("⚠️  Cannot decrease memory for pod %s/%s", update.Namespace, update.Name)
 			log.Printf("   💡 Pod needs RestartContainer policy for memory decreases. Skipping resize.")
-			// Return nil to not count this as an error
-			return nil
+			// Return empty string to not count this as an error
+			return "Skipped resize (memory decrease not allowed)", nil
 		}
-		return fmt.Errorf("failed to resize pod: %w", err)
+		return "", fmt.Errorf("failed to resize pod: %w", err)
 	}
 
-	return nil
+	// Build success message based on what was actually changed
+	var successMsg string
+	if cpuOnly {
+		cpuReq := update.NewResources.Requests[corev1.ResourceCPU]
+		oldCpuReq := update.OldResources.Requests[corev1.ResourceCPU]
+		successMsg = fmt.Sprintf("Successfully resized pod %s/%s (CPU only: %s→%s, memory decrease skipped)",
+			update.Namespace, update.Name, oldCpuReq.String(), cpuReq.String())
+	} else {
+		cpuReq := update.NewResources.Requests[corev1.ResourceCPU]
+		memReq := update.NewResources.Requests[corev1.ResourceMemory]
+		oldCpuReq := update.OldResources.Requests[corev1.ResourceCPU]
+		oldMemReq := update.OldResources.Requests[corev1.ResourceMemory]
+		successMsg = fmt.Sprintf("Successfully resized pod %s/%s (CPU: %s→%s, Memory: %s→%s)",
+			update.Namespace, update.Name, oldCpuReq.String(), cpuReq.String(), oldMemReq.String(), memReq.String())
+	}
+
+	return successMsg, nil
 }
 
 // Helper functions
@@ -622,12 +657,7 @@ func (r *AdaptiveRightSizer) checkScalingThresholds(usage metrics.Metrics, curre
 		memoryDecision = ScaleDown
 	}
 
-	// Log the decision if there's any change
-	if cpuDecision != ScaleNone || memoryDecision != ScaleNone {
-		logger.Info("🔍 Scaling analysis - CPU: %s (usage: %.0fm, limit: %.0fm, %.1f%%), Memory: %s (usage: %.0fMi, limit: %.0fMi, %.1f%%)",
-			scalingDecisionString(cpuDecision), usage.CPUMilli, cpuLimit, cpuUsagePercent*100,
-			scalingDecisionString(memoryDecision), usage.MemMB, memLimit, memUsagePercent*100)
-	}
+	// Don't log here to avoid duplication - logging happens in analyzeAllPods when resize is actually needed
 
 	return ResourceScalingDecision{CPU: cpuDecision, Memory: memoryDecision}
 }
@@ -847,7 +877,7 @@ func (r *AdaptiveRightSizer) logUpdate(update ResourceUpdate, dryRun bool) {
 	oldCpuReq := update.OldResources.Requests[corev1.ResourceCPU]
 	oldMemReq := update.OldResources.Requests[corev1.ResourceMemory]
 
-	log.Printf("%s%s %s/%s/%s - CPU: %s→%s, Memory: %s→%s (in-place)",
+	log.Printf("%s%s %s/%s/%s - Planned resize: CPU: %s→%s, Memory: %s→%s",
 		mode,
 		update.ResourceType,
 		update.Namespace,

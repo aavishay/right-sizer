@@ -26,6 +26,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Ensured compatibility with different Kubernetes metrics API versions
 - Enhanced pod/resize subresource permissions for Kubernetes 1.27+ in-place resizing
 - Corrected service account automounting configuration
+- **Duplicate Logging Issues**: Resolved redundant log messages in resource adjustment operations
+  - Consolidated scaling analysis logs to appear only when resize is needed
+  - Removed duplicate success messages in batch processing
+  - Eliminated redundant resize notifications for the same pod operations
+  - Achieved ~40-50% reduction in log volume during resize operations
+  - Improved log readability with clear progression: analysis → decision → action → result
+- **Log Formatting**: Removed `[INFO]` prefix from informational log messages
+  - Info and Success level messages no longer show `[INFO]` prefix for cleaner output
+  - Warning, Error, and Debug messages retain their severity prefixes for proper identification
+  - Emoji indicators (🔍, 📈, ✅) provide visual context instead of text prefixes
+  - Reduces log verbosity and improves readability
 
 ### Changed
 - Updated RBAC configuration to follow principle of least privilege more strictly

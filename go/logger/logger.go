@@ -114,10 +114,19 @@ func (l *Logger) Debug(format string, args ...interface{}) {
 	}
 }
 
-// Info logs an info message
+// Info logs an info message (without level prefix for cleaner output)
 func (l *Logger) Info(format string, args ...interface{}) {
 	if l.level <= INFO {
-		msg := l.formatMessage("INFO", colorBlue, format, args...)
+		timestamp := time.Now().Format("2006/01/02 15:04:05")
+		message := fmt.Sprintf(format, args...)
+
+		// Add prefix if set
+		if l.prefix != "" {
+			message = fmt.Sprintf("[%s] %s", l.prefix, message)
+		}
+
+		// Format without [INFO] prefix for cleaner logs
+		msg := fmt.Sprintf("%s %s", timestamp, message)
 		l.logger.Println(msg)
 	}
 }
@@ -138,10 +147,19 @@ func (l *Logger) Error(format string, args ...interface{}) {
 	}
 }
 
-// Success logs a success message (always shown, like Info but green)
+// Success logs a success message (always shown, without level prefix for cleaner output)
 func (l *Logger) Success(format string, args ...interface{}) {
 	if l.level <= INFO {
-		msg := l.formatMessage("INFO", colorGreen, format, args...)
+		timestamp := time.Now().Format("2006/01/02 15:04:05")
+		message := fmt.Sprintf(format, args...)
+
+		// Add prefix if set
+		if l.prefix != "" {
+			message = fmt.Sprintf("[%s] %s", l.prefix, message)
+		}
+
+		// Format without [INFO] prefix for cleaner logs
+		msg := fmt.Sprintf("%s %s", timestamp, message)
 		l.logger.Println(msg)
 	}
 }

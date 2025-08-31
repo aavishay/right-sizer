@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: test-app
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: test-app
+  template:
+    metadata:
+      labels:
+        app: test-app
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:alpine
+        resources:
+          requests:
+            cpu: "50m"
+            memory: "64Mi"
+          limits:
+            cpu: "200m"
+            memory: "256Mi"
+        command:
+          - sh
+          - -c
+          - |
+            # Generate some variable load
+            while true; do
+              # CPU load
+              for i in $(seq 1 10000); do
+                echo $i > /dev/null
+              done
+              # Memory allocation
+              dd if=/dev/zero of=/tmp/test bs=10M count=5 2>/dev/null
+              sleep 10
+              rm -f /tmp/test
+              sleep 10
+            done
