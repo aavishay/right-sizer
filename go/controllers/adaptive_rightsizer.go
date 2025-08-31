@@ -92,37 +92,52 @@ func (r *AdaptiveRightSizer) Start(ctx context.Context) error {
 
 // testInPlaceCapability checks if in-place resize is supported
 func (r *AdaptiveRightSizer) testInPlaceCapability(ctx context.Context) bool {
-	// Try to create a test pod with resizePolicy
-	testPod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "resize-capability-test-" + fmt.Sprintf("%d", time.Now().Unix()),
-			Namespace: "default",
-		},
-		Spec: corev1.PodSpec{
-			Containers: []corev1.Container{
-				{
-					Name:    "test",
-					Image:   "busybox:latest",
-					Command: []string{"sleep", "10"},
-					Resources: corev1.ResourceRequirements{
-						Requests: corev1.ResourceList{
-							corev1.ResourceCPU:    *resource.NewMilliQuantity(10, resource.DecimalSI),
-							corev1.ResourceMemory: *resource.NewQuantity(10*1024*1024, resource.BinarySI),
-						},
-					},
-				},
-			},
-		},
-	}
+	// Check if the resize subresource is available by checking server version
+	// In-place pod resize is available in Kubernetes 1.27+ (alpha), 1.29+ (beta), 1.31+ (stable)
 
-	// Create test pod
-	if err := r.Client.Create(ctx, testPod); err != nil {
+	if r.ClientSet == nil {
+		logger.Warn("ClientSet not available, cannot test for in-place resize capability")
 		return false
 	}
-	defer r.Client.Delete(ctx, testPod)
 
-	// In K8s 1.27+ with feature enabled, resize subresource would be available
-	// For now, we'll return false as the feature isn't fully available
+	// Get server version
+	serverVersion, err := r.ClientSet.Discovery().ServerVersion()
+	if err != nil {
+		logger.Warn("Failed to get server version: %v", err)
+		return false
+	}
+
+	// Parse the version
+	major := serverVersion.Major
+	minor := serverVersion.Minor
+
+	// Remove any non-numeric suffix from minor version (e.g., "33+" -> "33")
+	minorNum := 0
+	fmt.Sscanf(minor, "%d", &minorNum)
+
+	// Check if version supports in-place resize (K8s 1.27+)
+	if major == "1" && minorNum >= 27 {
+		logger.Info("Kubernetes version %s.%s supports in-place pod resizing", major, minor)
+
+		// Additional check: try to access the resize subresource
+		// This confirms the feature is actually available
+		_, err := r.ClientSet.CoreV1().RESTClient().Get().
+			Resource("pods").
+			SubResource("resize").
+			DoRaw(ctx)
+
+		// We expect an error here (no pod specified), but if the subresource
+		// doesn't exist, we'll get a different error
+		if err != nil && strings.Contains(err.Error(), "not found") &&
+			strings.Contains(err.Error(), "resize") {
+			logger.Warn("Resize subresource not found despite version support")
+			return false
+		}
+
+		return true
+	}
+
+	logger.Info("Kubernetes version %s.%s does not support in-place pod resizing (requires 1.27+)", major, minor)
 	return false
 }
 
