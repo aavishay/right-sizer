@@ -35,7 +35,7 @@ func TestCheckScalingThresholds(t *testing.T) {
 		memoryDownThresh float64
 		cpuUpThresh      float64
 		cpuDownThresh    float64
-		expectedDecision ScalingDecision
+		expectedDecision ResourceScalingDecision
 		description      string
 	}{
 		{
@@ -67,7 +67,7 @@ func TestCheckScalingThresholds(t *testing.T) {
 			memoryDownThresh: 0.3,
 			cpuUpThresh:      0.8,
 			cpuDownThresh:    0.3,
-			expectedDecision: ScaleUp,
+			expectedDecision: ResourceScalingDecision{CPU: ScaleNone, Memory: ScaleUp},
 			description:      "Should scale up when memory usage (85%) exceeds threshold (80%)",
 		},
 		{
@@ -99,7 +99,7 @@ func TestCheckScalingThresholds(t *testing.T) {
 			memoryDownThresh: 0.3,
 			cpuUpThresh:      0.8, // 80%
 			cpuDownThresh:    0.3,
-			expectedDecision: ScaleUp,
+			expectedDecision: ResourceScalingDecision{CPU: ScaleUp, Memory: ScaleNone},
 			description:      "Should scale up when CPU usage (90%) exceeds threshold (80%)",
 		},
 		{
@@ -131,7 +131,7 @@ func TestCheckScalingThresholds(t *testing.T) {
 			memoryDownThresh: 0.3,
 			cpuUpThresh:      0.8, // 80%
 			cpuDownThresh:    0.3,
-			expectedDecision: ScaleUp,
+			expectedDecision: ResourceScalingDecision{CPU: ScaleUp, Memory: ScaleUp},
 			description:      "Should scale up when both CPU (85%) and memory (85%) exceed thresholds",
 		},
 		{
@@ -163,7 +163,7 @@ func TestCheckScalingThresholds(t *testing.T) {
 			memoryDownThresh: 0.3, // 30%
 			cpuUpThresh:      0.8,
 			cpuDownThresh:    0.3, // 30%
-			expectedDecision: ScaleDown,
+			expectedDecision: ResourceScalingDecision{CPU: ScaleDown, Memory: ScaleDown},
 			description:      "Should scale down when both CPU (20%) and memory (20%) are below thresholds",
 		},
 		{
@@ -195,7 +195,7 @@ func TestCheckScalingThresholds(t *testing.T) {
 			memoryDownThresh: 0.3, // 30%
 			cpuUpThresh:      0.8, // 80%
 			cpuDownThresh:    0.3, // 30%
-			expectedDecision: ScaleNone,
+			expectedDecision: ResourceScalingDecision{CPU: ScaleNone, Memory: ScaleNone},
 			description:      "Should not scale when usage (50%) is between thresholds (30%-80%)",
 		},
 		{
@@ -227,8 +227,8 @@ func TestCheckScalingThresholds(t *testing.T) {
 			memoryDownThresh: 0.3, // 30%
 			cpuUpThresh:      0.8,
 			cpuDownThresh:    0.3, // 30%
-			expectedDecision: ScaleNone,
-			description:      "Should not scale down when only CPU (20%) is below threshold but memory (40%) is not",
+			expectedDecision: ResourceScalingDecision{CPU: ScaleDown, Memory: ScaleNone},
+			description:      "Should scale down CPU (20% < 30%) but not memory (40% > 30%)",
 		},
 		{
 			name: "scale_up_no_limits_uses_requests",
@@ -260,7 +260,7 @@ func TestCheckScalingThresholds(t *testing.T) {
 			memoryDownThresh: 0.3,
 			cpuUpThresh:      0.8, // 80%
 			cpuDownThresh:    0.3,
-			expectedDecision: ScaleUp,
+			expectedDecision: ResourceScalingDecision{CPU: ScaleUp, Memory: ScaleUp},
 			description:      "Should use requests as baseline when limits are not set",
 		},
 		{
@@ -287,7 +287,7 @@ func TestCheckScalingThresholds(t *testing.T) {
 			memoryDownThresh: 0.3,
 			cpuUpThresh:      0.8,
 			cpuDownThresh:    0.3,
-			expectedDecision: ScaleUp,
+			expectedDecision: ResourceScalingDecision{CPU: ScaleUp, Memory: ScaleUp},
 			description:      "Should scale up when no resources are set",
 		},
 		{
@@ -328,7 +328,7 @@ func TestCheckScalingThresholds(t *testing.T) {
 			memoryDownThresh: 0.3,
 			cpuUpThresh:      0.8, // 80%
 			cpuDownThresh:    0.3,
-			expectedDecision: ScaleUp,
+			expectedDecision: ResourceScalingDecision{CPU: ScaleUp, Memory: ScaleUp},
 			description:      "Should correctly aggregate limits from multiple containers",
 		},
 		{
@@ -360,8 +360,72 @@ func TestCheckScalingThresholds(t *testing.T) {
 			memoryDownThresh: 0.5,  // 50% - aggressive scale down
 			cpuUpThresh:      0.95, // 95% - very conservative
 			cpuDownThresh:    0.5,  // 50% - aggressive scale down
-			expectedDecision: ScaleNone,
+			expectedDecision: ResourceScalingDecision{CPU: ScaleNone, Memory: ScaleNone},
 			description:      "Should not scale up with conservative thresholds (95%) even at high usage (90-92%)",
+		},
+		{
+			name: "skip_resize_cpu_none_memory_down",
+			usage: metrics.Metrics{
+				CPUMilli: 500, // 50% of 1000m limit - between thresholds
+				MemMB:    400, // 20% of 2000MB limit - below scale down threshold
+			},
+			pod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-pod",
+					Namespace: "default",
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Name: "test-container",
+							Resources: corev1.ResourceRequirements{
+								Limits: corev1.ResourceList{
+									corev1.ResourceCPU:    resource.MustParse("1000m"),
+									corev1.ResourceMemory: resource.MustParse("2000Mi"),
+								},
+							},
+						},
+					},
+				},
+			},
+			memoryUpThresh:   0.8, // 80%
+			memoryDownThresh: 0.3, // 30%
+			cpuUpThresh:      0.8, // 80%
+			cpuDownThresh:    0.3, // 30%
+			expectedDecision: ResourceScalingDecision{CPU: ScaleNone, Memory: ScaleDown},
+			description:      "Should identify CPU no change (50% between 30-80%) and memory scale down (20% < 30%)",
+		},
+		{
+			name: "scale_cpu_up_memory_down",
+			usage: metrics.Metrics{
+				CPUMilli: 900, // 90% of 1000m limit - above scale up threshold
+				MemMB:    400, // 20% of 2000MB limit - below scale down threshold
+			},
+			pod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-pod",
+					Namespace: "default",
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Name: "test-container",
+							Resources: corev1.ResourceRequirements{
+								Limits: corev1.ResourceList{
+									corev1.ResourceCPU:    resource.MustParse("1000m"),
+									corev1.ResourceMemory: resource.MustParse("2000Mi"),
+								},
+							},
+						},
+					},
+				},
+			},
+			memoryUpThresh:   0.8, // 80%
+			memoryDownThresh: 0.3, // 30%
+			cpuUpThresh:      0.8, // 80%
+			cpuDownThresh:    0.3, // 30%
+			expectedDecision: ResourceScalingDecision{CPU: ScaleUp, Memory: ScaleDown},
+			description:      "Should identify CPU scale up (90% > 80%) and memory scale down (20% < 30%)",
 		},
 	}
 
@@ -381,8 +445,10 @@ func TestCheckScalingThresholds(t *testing.T) {
 			// Test the scaling decision
 			decision := r.checkScalingThresholds(tt.usage, tt.pod)
 
-			if decision != tt.expectedDecision {
-				t.Errorf("%s: expected %v, got %v", tt.description, tt.expectedDecision, decision)
+			if decision.CPU != tt.expectedDecision.CPU || decision.Memory != tt.expectedDecision.Memory {
+				t.Errorf("%s: expected CPU=%v Memory=%v, got CPU=%v Memory=%v",
+					tt.description, tt.expectedDecision.CPU, tt.expectedDecision.Memory,
+					decision.CPU, decision.Memory)
 			}
 		})
 	}
@@ -407,16 +473,16 @@ func TestCalculateOptimalResourcesWithScalingDecision(t *testing.T) {
 		name            string
 		cpuMilli        float64
 		memMB           float64
-		scalingDecision ScalingDecision
+		scalingDecision ResourceScalingDecision
 		expectedCPUReq  int64
 		expectedMemReq  int64
 		description     string
 	}{
 		{
-			name:            "scale_up_with_multipliers",
+			name:            "scale_up_with_standard_multipliers",
 			cpuMilli:        100,
 			memMB:           500,
-			scalingDecision: ScaleUp,
+			scalingDecision: ResourceScalingDecision{CPU: ScaleUp, Memory: ScaleUp},
 			expectedCPUReq:  170, // (100 * 1.2) + 50 = 170
 			expectedMemReq:  700, // (500 * 1.2) + 100 = 700
 			description:     "Should apply standard multipliers when scaling up",
@@ -425,27 +491,27 @@ func TestCalculateOptimalResourcesWithScalingDecision(t *testing.T) {
 			name:            "scale_down_with_reduced_multipliers",
 			cpuMilli:        100,
 			memMB:           500,
-			scalingDecision: ScaleDown,
+			scalingDecision: ResourceScalingDecision{CPU: ScaleDown, Memory: ScaleDown},
 			expectedCPUReq:  160, // (100 * 1.1) + 50 = 160
 			expectedMemReq:  650, // (500 * 1.1) + 100 = 650
 			description:     "Should use reduced multipliers when scaling down",
 		},
 		{
 			name:            "respect_minimum_values",
-			cpuMilli:        1,
-			memMB:           10,
-			scalingDecision: ScaleUp,
-			expectedCPUReq:  51,  // Would be (1 * 1.2) + 50 = 51
-			expectedMemReq:  112, // Would be (10 * 1.2) + 100 = 112
+			cpuMilli:        5,
+			memMB:           30,
+			scalingDecision: ResourceScalingDecision{CPU: ScaleUp, Memory: ScaleUp},
+			expectedCPUReq:  56,  // (5 * 1.2) + 50 = 56
+			expectedMemReq:  136, // (30 * 1.2) + 100 = 136
 			description:     "Should respect minimum values even with low usage",
 		},
 		{
-			name:            "respect_maximum_limits",
-			cpuMilli:        5000,
-			memMB:           10000,
-			scalingDecision: ScaleUp,
-			expectedCPUReq:  6050,  // (5000 * 1.2) + 50 = 6050, but not capped at request level
-			expectedMemReq:  12100, // (10000 * 1.2) + 100 = 12100, but not capped at request level
+			name:            "respect_maximum_values",
+			cpuMilli:        4000,
+			memMB:           9000,
+			scalingDecision: ResourceScalingDecision{CPU: ScaleUp, Memory: ScaleUp},
+			expectedCPUReq:  4850,  // (4000 * 1.2) + 50 = 4850, not capped at request level
+			expectedMemReq:  10900, // (9000 * 1.2) + 100 = 10900, not capped at request level
 			description:     "Should calculate requests without capping, limits will be capped",
 		},
 	}
@@ -535,8 +601,8 @@ func TestScalingDecisionIntegration(t *testing.T) {
 	// Check scaling thresholds
 	decision := r.checkScalingThresholds(mockProvider.metrics, pod)
 
-	if decision != ScaleUp {
-		t.Errorf("Expected ScaleUp decision for 85%% usage with 80%% threshold, got %v", decision)
+	if decision.CPU != ScaleUp || decision.Memory != ScaleUp {
+		t.Errorf("Expected ScaleUp decision for 85%% usage with 80%% threshold, got CPU=%v Memory=%v", decision.CPU, decision.Memory)
 	}
 
 	// Calculate new resources

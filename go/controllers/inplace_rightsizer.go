@@ -64,14 +64,7 @@ type ContainerResourcesPatch struct {
 	Resources corev1.ResourceRequirements `json:"resources"`
 }
 
-// ScalingDecision represents the type of scaling action to take
-type ScalingDecision int
-
-const (
-	ScaleNone ScalingDecision = iota
-	ScaleUp
-	ScaleDown
-)
+// ScalingDecision and ResourceScalingDecision types are defined in adaptive_rightsizer.go
 
 // Start begins the continuous monitoring and adjustment loop
 func (r *InPlaceRightSizer) Start(ctx context.Context) error {
@@ -223,7 +216,17 @@ func (r *InPlaceRightSizer) rightSizePod(ctx context.Context, pod *corev1.Pod) (
 
 	// Check if scaling is needed based on thresholds
 	scalingDecision := r.checkScalingThresholds(usage, pod)
-	if scalingDecision == ScaleNone {
+
+	// Skip if both resources don't need changes
+	if scalingDecision.CPU == ScaleNone && scalingDecision.Memory == ScaleNone {
+		return false, nil
+	}
+
+	// Skip if CPU should not be updated but memory should be reduced
+	// This prevents unnecessary pod disruptions when only memory reduction is needed
+	if scalingDecision.CPU == ScaleNone && scalingDecision.Memory == ScaleDown {
+		log.Printf("⏭️  Skipping resize for pod %s/%s: CPU doesn't need update and memory would be reduced",
+			pod.Namespace, pod.Name)
 		return false, nil
 	}
 
@@ -234,6 +237,23 @@ func (r *InPlaceRightSizer) rightSizePod(ctx context.Context, pod *corev1.Pod) (
 	needsUpdate, details := r.needsAdjustmentWithDetails(pod, newResourcesMap)
 	if !needsUpdate {
 		return false, nil
+	}
+
+	// Log the actual resource changes that will be made
+	for _, container := range pod.Spec.Containers {
+		if newResources, exists := newResourcesMap[container.Name]; exists {
+			oldCPUReq := container.Resources.Requests[corev1.ResourceCPU]
+			oldMemReq := container.Resources.Requests[corev1.ResourceMemory]
+			newCPUReq := newResources.Requests[corev1.ResourceCPU]
+			newMemReq := newResources.Requests[corev1.ResourceMemory]
+
+			if !oldCPUReq.Equal(newCPUReq) || !oldMemReq.Equal(newMemReq) {
+				log.Printf("📈 Container %s/%s/%s will be resized - CPU: %s→%s, Memory: %s→%s",
+					pod.Namespace, pod.Name, container.Name,
+					oldCPUReq.String(), newCPUReq.String(),
+					oldMemReq.String(), newMemReq.String())
+			}
+		}
 	}
 
 	// Log the resize operation with details
@@ -263,7 +283,7 @@ type ResourceChange struct {
 }
 
 // checkScalingThresholds determines if scaling is needed based on resource usage thresholds
-func (r *InPlaceRightSizer) checkScalingThresholds(usage metrics.Metrics, pod *corev1.Pod) ScalingDecision {
+func (r *InPlaceRightSizer) checkScalingThresholds(usage metrics.Metrics, pod *corev1.Pod) ResourceScalingDecision {
 	cfg := config.Get()
 
 	// Calculate total current limits for the pod
@@ -297,7 +317,7 @@ func (r *InPlaceRightSizer) checkScalingThresholds(usage metrics.Metrics, pod *c
 
 	// If still no resources set, default to scale up
 	if totalCPULimit == 0 && totalMemLimit == 0 {
-		return ScaleUp
+		return ResourceScalingDecision{CPU: ScaleUp, Memory: ScaleUp}
 	}
 
 	// Calculate usage percentages
@@ -311,29 +331,39 @@ func (r *InPlaceRightSizer) checkScalingThresholds(usage metrics.Metrics, pod *c
 		memUsagePercent = usage.MemMB / totalMemLimit
 	}
 
-	// Check if we need to scale up (if either CPU or memory exceeds threshold)
-	if memUsagePercent > cfg.MemoryScaleUpThreshold || cpuUsagePercent > cfg.CPUScaleUpThreshold {
-		log.Printf("📈 Pod %s/%s needs scale up - Memory: %.1f%% (threshold: %.0f%%), CPU: %.1f%% (threshold: %.0f%%)",
-			pod.Namespace, pod.Name,
-			memUsagePercent*100, cfg.MemoryScaleUpThreshold*100,
-			cpuUsagePercent*100, cfg.CPUScaleUpThreshold*100)
-		return ScaleUp
+	// Determine scaling decision for each resource independently
+	cpuDecision := ScaleNone
+	memoryDecision := ScaleNone
+
+	// Check CPU scaling
+	if cpuUsagePercent > cfg.CPUScaleUpThreshold {
+		cpuDecision = ScaleUp
+	} else if cpuUsagePercent < cfg.CPUScaleDownThreshold {
+		cpuDecision = ScaleDown
 	}
 
-	// Check if we can scale down (both CPU and memory must be below thresholds)
-	if memUsagePercent < cfg.MemoryScaleDownThreshold && cpuUsagePercent < cfg.CPUScaleDownThreshold {
-		log.Printf("📉 Pod %s/%s can scale down - Memory: %.1f%% (threshold: %.0f%%), CPU: %.1f%% (threshold: %.0f%%)",
-			pod.Namespace, pod.Name,
-			memUsagePercent*100, cfg.MemoryScaleDownThreshold*100,
-			cpuUsagePercent*100, cfg.CPUScaleDownThreshold*100)
-		return ScaleDown
+	// Check Memory scaling
+	if memUsagePercent > cfg.MemoryScaleUpThreshold {
+		memoryDecision = ScaleUp
+	} else if memUsagePercent < cfg.MemoryScaleDownThreshold {
+		memoryDecision = ScaleDown
 	}
 
-	return ScaleNone
+	// Log the decision
+	if cpuDecision != ScaleNone || memoryDecision != ScaleNone {
+		log.Printf("🔍 Scaling analysis for %s/%s - CPU: %s (usage: %.0fm, limit: %.0fm, %.1f%%), Memory: %s (usage: %.0fMi, limit: %.0fMi, %.1f%%)",
+			pod.Namespace, pod.Name,
+			scalingDecisionString(cpuDecision), usage.CPUMilli, totalCPULimit, cpuUsagePercent*100,
+			scalingDecisionString(memoryDecision), usage.MemMB, totalMemLimit, memUsagePercent*100)
+	}
+
+	return ResourceScalingDecision{CPU: cpuDecision, Memory: memoryDecision}
 }
 
+// scalingDecisionString is defined in adaptive_rightsizer.go
+
 // calculateOptimalResourcesForContainers determines optimal resource allocation for all containers
-func (r *InPlaceRightSizer) calculateOptimalResourcesForContainers(usage metrics.Metrics, pod *corev1.Pod, scalingDecision ScalingDecision) map[string]corev1.ResourceRequirements {
+func (r *InPlaceRightSizer) calculateOptimalResourcesForContainers(usage metrics.Metrics, pod *corev1.Pod, scalingDecision ResourceScalingDecision) map[string]corev1.ResourceRequirements {
 	resourcesMap := make(map[string]corev1.ResourceRequirements)
 
 	// For simplicity, apply the same resources to all containers based on total pod usage
@@ -361,24 +391,27 @@ func (r *InPlaceRightSizer) calculateOptimalResourcesForContainers(usage metrics
 }
 
 // calculateOptimalResources determines optimal resource allocation for a single container
-func (r *InPlaceRightSizer) calculateOptimalResources(cpuMilli float64, memMB float64, scalingDecision ScalingDecision) corev1.ResourceRequirements {
+func (r *InPlaceRightSizer) calculateOptimalResources(cpuMilli float64, memMB float64, scalingDecision ResourceScalingDecision) corev1.ResourceRequirements {
 	cfg := config.Get()
 
 	var cpuRequest, memRequest int64
 
-	// Apply different multipliers based on scaling decision
-	if scalingDecision == ScaleUp {
-		// When scaling up, apply standard multipliers to add buffer
+	// Apply different multipliers based on scaling decision for each resource
+	// CPU calculation
+	if scalingDecision.CPU == ScaleUp {
 		cpuRequest = int64(cpuMilli*cfg.CPURequestMultiplier) + cfg.CPURequestAddition
-		memRequest = int64(memMB*cfg.MemoryRequestMultiplier) + cfg.MemoryRequestAddition
-	} else if scalingDecision == ScaleDown {
-		// When scaling down, use lower multipliers to reclaim resources
-		// Use a reduced multiplier (e.g., 1.1 instead of 1.2) to still maintain some buffer
+	} else if scalingDecision.CPU == ScaleDown {
 		cpuRequest = int64(cpuMilli*1.1) + cfg.CPURequestAddition
+	} else {
+		cpuRequest = int64(cpuMilli*cfg.CPURequestMultiplier) + cfg.CPURequestAddition
+	}
+
+	// Memory calculation
+	if scalingDecision.Memory == ScaleUp {
+		memRequest = int64(memMB*cfg.MemoryRequestMultiplier) + cfg.MemoryRequestAddition
+	} else if scalingDecision.Memory == ScaleDown {
 		memRequest = int64(memMB*1.1) + cfg.MemoryRequestAddition
 	} else {
-		// Default case (shouldn't happen, but handle it)
-		cpuRequest = int64(cpuMilli*cfg.CPURequestMultiplier) + cfg.CPURequestAddition
 		memRequest = int64(memMB*cfg.MemoryRequestMultiplier) + cfg.MemoryRequestAddition
 	}
 
@@ -540,19 +573,7 @@ func formatResource(q resource.Quantity) string {
 }
 
 // formatMemory formats memory in a human-readable way
-func formatMemory(q resource.Quantity) string {
-	if q.IsZero() {
-		return "0Mi"
-	}
-	// Convert to MiB for display
-	bytes := q.Value()
-	mib := bytes / (1024 * 1024)
-	if mib < 1024 {
-		return fmt.Sprintf("%dMi", mib)
-	}
-	gib := float64(mib) / 1024
-	return fmt.Sprintf("%.1fGi", gib)
-}
+// formatMemory is defined in adaptive_rightsizer.go
 
 // applyInPlaceResize performs the actual in-place resource update using the resize subresource
 func (r *InPlaceRightSizer) applyInPlaceResize(ctx context.Context, pod *corev1.Pod, newResourcesMap map[string]corev1.ResourceRequirements) error {

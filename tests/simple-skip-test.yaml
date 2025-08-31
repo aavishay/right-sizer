@@ -1,0 +1,205 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: rightsizer-test
+---
+# Test Case 1: CPU moderate, Memory low - Should SKIP resize
+# Expected: CPU ~50% (no change needed), Memory ~20% (would scale down)
+# Result: Skip resize to avoid unnecessary disruption
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: test-skip-resize
+  namespace: rightsizer-test
+  labels:
+    test-case: "skip-resize"
+    rightsizer: "enabled"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: test-skip
+  template:
+    metadata:
+      labels:
+        app: test-skip
+        rightsizer: "enabled"
+      annotations:
+        expected-behavior: "should-skip-resize"
+        reason: "cpu-no-change-memory-down"
+    spec:
+      containers:
+      - name: app
+        image: busybox
+        command: ["/bin/sh"]
+        args:
+          - -c
+          - |
+            # Allocate ~50MB of memory (20% of 256Mi limit)
+            dd if=/dev/zero of=/tmp/mem bs=1M count=50
+            # Keep container running with moderate CPU usage
+            while true; do
+              # Simulate moderate CPU load (~50% of limit)
+              for i in $(seq 1 5000); do echo $i > /dev/null; done
+              sleep 0.1
+            done
+        resources:
+          requests:
+            cpu: "50m"
+            memory: "128Mi"
+          limits:
+            cpu: "100m"
+            memory: "256Mi"
+---
+# Test Case 2: CPU high, Memory low - Should RESIZE
+# Expected: CPU ~85% (scale up), Memory ~20% (scale down)
+# Result: Resize because CPU needs scaling up
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: test-resize-cpu-up
+  namespace: rightsizer-test
+  labels:
+    test-case: "resize-cpu-up"
+    rightsizer: "enabled"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: test-cpu-up
+  template:
+    metadata:
+      labels:
+        app: test-cpu-up
+        rightsizer: "enabled"
+      annotations:
+        expected-behavior: "should-resize"
+        reason: "cpu-scale-up"
+    spec:
+      containers:
+      - name: app
+        image: busybox
+        command: ["/bin/sh"]
+        args:
+          - -c
+          - |
+            # Allocate ~50MB of memory (20% of 256Mi limit)
+            dd if=/dev/zero of=/tmp/mem bs=1M count=50
+            # Keep container running with high CPU usage
+            while true; do
+              # Simulate high CPU load (~85% of limit)
+              for i in $(seq 1 50000); do echo $i > /dev/null; done
+            done
+        resources:
+          requests:
+            cpu: "50m"
+            memory: "128Mi"
+          limits:
+            cpu: "100m"
+            memory: "256Mi"
+---
+# Test Case 3: CPU low, Memory low - Should RESIZE
+# Expected: CPU ~25% (scale down), Memory ~25% (scale down)
+# Result: Resize because both can be scaled down
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: test-resize-both-down
+  namespace: rightsizer-test
+  labels:
+    test-case: "resize-both-down"
+    rightsizer: "enabled"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: test-both-down
+  template:
+    metadata:
+      labels:
+        app: test-both-down
+        rightsizer: "enabled"
+      annotations:
+        expected-behavior: "should-resize"
+        reason: "both-scale-down"
+    spec:
+      containers:
+      - name: app
+        image: busybox
+        command: ["/bin/sh"]
+        args:
+          - -c
+          - |
+            # Allocate ~64MB of memory (25% of 256Mi limit)
+            dd if=/dev/zero of=/tmp/mem bs=1M count=64
+            # Keep container running with low CPU usage
+            while true; do
+              # Simulate low CPU load (~25% of limit)
+              for i in $(seq 1 1000); do echo $i > /dev/null; done
+              sleep 1
+            done
+        resources:
+          requests:
+            cpu: "50m"
+            memory: "128Mi"
+          limits:
+            cpu: "100m"
+            memory: "256Mi"
+---
+# Test Case 4: CPU moderate, Memory high - Should RESIZE
+# Expected: CPU ~50% (no change), Memory ~85% (scale up)
+# Result: Resize because memory needs scaling up
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: test-resize-mem-up
+  namespace: rightsizer-test
+  labels:
+    test-case: "resize-mem-up"
+    rightsizer: "enabled"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: test-mem-up
+  template:
+    metadata:
+      labels:
+        app: test-mem-up
+        rightsizer: "enabled"
+      annotations:
+        expected-behavior: "should-resize"
+        reason: "memory-scale-up"
+    spec:
+      containers:
+      - name: app
+        image: nginx:alpine
+        resources:
+          requests:
+            cpu: "50m"
+            memory: "128Mi"
+          limits:
+            cpu: "100m"
+            memory: "256Mi"
+        env:
+        - name: NGINX_WORKER_PROCESSES
+          value: "1"
+        - name: NGINX_WORKER_CONNECTIONS
+          value: "512"
+---
+# ConfigMap to configure RightSizer for these tests
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rightsizer-test-config
+  namespace: rightsizer-test
+data:
+  config.yaml: |
+    # Test configuration with clear thresholds
+    cpuScaleUpThreshold: 0.8      # Scale up when CPU > 80%
+    cpuScaleDownThreshold: 0.3    # Scale down when CPU < 30%
+    memoryScaleUpThreshold: 0.8   # Scale up when memory > 80%
+    memoryScaleDownThreshold: 0.3 # Scale down when memory < 30%
+    resizeInterval: 30s
+    enableInPlaceResize: true
+    logLevel: debug

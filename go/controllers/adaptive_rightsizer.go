@@ -37,6 +37,21 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
+// ScalingDecision represents the scaling action to take
+type ScalingDecision int
+
+const (
+	ScaleNone ScalingDecision = iota
+	ScaleUp
+	ScaleDown
+)
+
+// ResourceScalingDecision tracks scaling decisions for individual resources
+type ResourceScalingDecision struct {
+	CPU    ScalingDecision
+	Memory ScalingDecision
+}
+
 // AdaptiveRightSizer performs resource optimization with support for both
 // in-place updates (when available) and deployment updates as fallback
 type AdaptiveRightSizer struct {
@@ -208,12 +223,37 @@ func (r *AdaptiveRightSizer) analyzeAllPods(ctx context.Context) ([]ResourceUpda
 
 		// Check each container in the pod
 		for i, container := range pod.Spec.Containers {
-			// Calculate optimal resources based on actual usage
+			// Check scaling thresholds first
+			scalingDecision := r.checkScalingThresholds(podMetrics, container.Resources)
+
+			// Skip if CPU should not be updated but memory should be reduced
+			if scalingDecision.CPU == ScaleNone && scalingDecision.Memory == ScaleDown {
+				logger.Info("⏭️  Skipping resize for pod %s/%s container %s: CPU doesn't need update and memory would be reduced",
+					pod.Namespace, pod.Name, container.Name)
+				continue
+			}
+
+			// Skip if both resources don't need changes
+			if scalingDecision.CPU == ScaleNone && scalingDecision.Memory == ScaleNone {
+				continue
+			}
+
+			// Calculate optimal resources based on actual usage and scaling decision
 			// Note: metrics-server provides pod-level metrics, not per-container
 			// So we'll use the pod metrics for all containers
-			newResources := r.calculateOptimalResources(podMetrics)
+			newResources := r.calculateOptimalResourcesWithDecision(podMetrics, scalingDecision)
 
-			if r.needsAdjustment(container.Resources, newResources) {
+			if r.needsAdjustmentWithDecision(container.Resources, newResources, scalingDecision) {
+				// Log the actual resource changes that will be made
+				oldCPUReq := container.Resources.Requests[corev1.ResourceCPU]
+				oldMemReq := container.Resources.Requests[corev1.ResourceMemory]
+				newCPUReq := newResources.Requests[corev1.ResourceCPU]
+				newMemReq := newResources.Requests[corev1.ResourceMemory]
+
+				logger.Info("📈 Container %s/%s/%s will be resized - CPU: %s→%s, Memory: %s→%s",
+					pod.Namespace, pod.Name, container.Name,
+					oldCPUReq.String(), newCPUReq.String(),
+					oldMemReq.String(), newMemReq.String())
 				updates = append(updates, ResourceUpdate{
 					Namespace:      pod.Namespace,
 					Name:           pod.Name,
@@ -222,7 +262,7 @@ func (r *AdaptiveRightSizer) analyzeAllPods(ctx context.Context) ([]ResourceUpda
 					ContainerIndex: i,
 					OldResources:   container.Resources,
 					NewResources:   newResources,
-					Reason:         r.getAdjustmentReason(container.Resources, newResources),
+					Reason:         r.getAdjustmentReasonWithDecision(container.Resources, newResources, scalingDecision),
 				})
 			}
 		}
@@ -527,6 +567,212 @@ func (r *AdaptiveRightSizer) calculateOptimalResources(usage metrics.Metrics) co
 			corev1.ResourceMemory: *resource.NewQuantity(memLimit*1024*1024, resource.BinarySI),
 		},
 	}
+}
+
+// checkScalingThresholds determines if scaling is needed based on resource usage thresholds
+func (r *AdaptiveRightSizer) checkScalingThresholds(usage metrics.Metrics, current corev1.ResourceRequirements) ResourceScalingDecision {
+	cfg := config.Get()
+
+	// Get current limits (or requests if limits not set)
+	var cpuLimit, memLimit float64
+
+	if limit, exists := current.Limits[corev1.ResourceCPU]; exists && !limit.IsZero() {
+		cpuLimit = float64(limit.MilliValue())
+	} else if req, exists := current.Requests[corev1.ResourceCPU]; exists && !req.IsZero() {
+		cpuLimit = float64(req.MilliValue())
+	}
+
+	if limit, exists := current.Limits[corev1.ResourceMemory]; exists && !limit.IsZero() {
+		memLimit = float64(limit.Value()) / (1024 * 1024) // Convert to MB
+	} else if req, exists := current.Requests[corev1.ResourceMemory]; exists && !req.IsZero() {
+		memLimit = float64(req.Value()) / (1024 * 1024)
+	}
+
+	// If no resources set, default to scale up
+	if cpuLimit == 0 && memLimit == 0 {
+		return ResourceScalingDecision{CPU: ScaleUp, Memory: ScaleUp}
+	}
+
+	// Calculate usage percentages
+	cpuUsagePercent := float64(0)
+	memUsagePercent := float64(0)
+
+	if cpuLimit > 0 {
+		cpuUsagePercent = usage.CPUMilli / cpuLimit
+	}
+	if memLimit > 0 {
+		memUsagePercent = usage.MemMB / memLimit
+	}
+
+	// Determine scaling decision for each resource independently
+	cpuDecision := ScaleNone
+	memoryDecision := ScaleNone
+
+	// Check CPU scaling
+	if cpuUsagePercent > cfg.CPUScaleUpThreshold {
+		cpuDecision = ScaleUp
+	} else if cpuUsagePercent < cfg.CPUScaleDownThreshold {
+		cpuDecision = ScaleDown
+	}
+
+	// Check Memory scaling
+	if memUsagePercent > cfg.MemoryScaleUpThreshold {
+		memoryDecision = ScaleUp
+	} else if memUsagePercent < cfg.MemoryScaleDownThreshold {
+		memoryDecision = ScaleDown
+	}
+
+	// Log the decision if there's any change
+	if cpuDecision != ScaleNone || memoryDecision != ScaleNone {
+		logger.Info("🔍 Scaling analysis - CPU: %s (usage: %.0fm, limit: %.0fm, %.1f%%), Memory: %s (usage: %.0fMi, limit: %.0fMi, %.1f%%)",
+			scalingDecisionString(cpuDecision), usage.CPUMilli, cpuLimit, cpuUsagePercent*100,
+			scalingDecisionString(memoryDecision), usage.MemMB, memLimit, memUsagePercent*100)
+	}
+
+	return ResourceScalingDecision{CPU: cpuDecision, Memory: memoryDecision}
+}
+
+// Helper function to convert ScalingDecision to string
+func scalingDecisionString(d ScalingDecision) string {
+	switch d {
+	case ScaleUp:
+		return "scale up"
+	case ScaleDown:
+		return "scale down"
+	default:
+		return "no change"
+	}
+}
+
+// calculateOptimalResourcesWithDecision calculates resources based on scaling decision
+func (r *AdaptiveRightSizer) calculateOptimalResourcesWithDecision(usage metrics.Metrics, decision ResourceScalingDecision) corev1.ResourceRequirements {
+	cfg := config.Get()
+
+	var cpuRequest, memRequest int64
+
+	// CPU calculation based on decision
+	if decision.CPU == ScaleUp {
+		cpuRequest = int64(usage.CPUMilli*cfg.CPURequestMultiplier) + cfg.CPURequestAddition
+	} else if decision.CPU == ScaleDown {
+		cpuRequest = int64(usage.CPUMilli*1.1) + cfg.CPURequestAddition // Use reduced multiplier
+	} else {
+		cpuRequest = int64(usage.CPUMilli*cfg.CPURequestMultiplier) + cfg.CPURequestAddition
+	}
+
+	// Memory calculation based on decision
+	if decision.Memory == ScaleUp {
+		memRequest = int64(usage.MemMB*cfg.MemoryRequestMultiplier) + cfg.MemoryRequestAddition
+	} else if decision.Memory == ScaleDown {
+		memRequest = int64(usage.MemMB*1.1) + cfg.MemoryRequestAddition // Use reduced multiplier
+	} else {
+		memRequest = int64(usage.MemMB*cfg.MemoryRequestMultiplier) + cfg.MemoryRequestAddition
+	}
+
+	// Ensure minimum values
+	if cpuRequest < cfg.MinCPURequest {
+		cpuRequest = cfg.MinCPURequest
+	}
+	if memRequest < cfg.MinMemoryRequest {
+		memRequest = cfg.MinMemoryRequest // Already in MB
+	}
+
+	// Calculate limits
+	cpuLimit := int64(float64(cpuRequest)*cfg.CPULimitMultiplier) + cfg.CPULimitAddition
+	memLimit := int64(float64(memRequest)*cfg.MemoryLimitMultiplier) + cfg.MemoryLimitAddition
+
+	// Apply maximum caps
+	if cpuLimit > cfg.MaxCPULimit {
+		cpuLimit = cfg.MaxCPULimit
+	}
+	if memLimit > cfg.MaxMemoryLimit { // MaxMemoryLimit is already in MB
+		memLimit = cfg.MaxMemoryLimit
+	}
+
+	// Ensure memory limit is never 0 or less than request
+	if memLimit <= 0 {
+		memLimit = memRequest * 2 // Default to 2x the request if limit calculation fails
+	}
+	if memLimit < memRequest {
+		memLimit = memRequest // Limit should never be less than request
+	}
+	if memLimit <= 0 {
+		memLimit = 256 // Fallback to 256MB if still 0
+	}
+
+	return corev1.ResourceRequirements{
+		Requests: corev1.ResourceList{
+			corev1.ResourceCPU:    *resource.NewMilliQuantity(cpuRequest, resource.DecimalSI),
+			corev1.ResourceMemory: *resource.NewQuantity(memRequest*1024*1024, resource.BinarySI),
+		},
+		Limits: corev1.ResourceList{
+			corev1.ResourceCPU:    *resource.NewMilliQuantity(cpuLimit, resource.DecimalSI),
+			corev1.ResourceMemory: *resource.NewQuantity(memLimit*1024*1024, resource.BinarySI),
+		},
+	}
+}
+
+// needsAdjustmentWithDecision checks if adjustment is needed based on scaling decision
+func (r *AdaptiveRightSizer) needsAdjustmentWithDecision(current, new corev1.ResourceRequirements, decision ResourceScalingDecision) bool {
+	// If we already determined no scaling is needed, skip
+	if decision.CPU == ScaleNone && decision.Memory == ScaleNone {
+		return false
+	}
+
+	// Get current values
+	currentCPU := current.Requests[corev1.ResourceCPU]
+	currentMem := current.Requests[corev1.ResourceMemory]
+	newCPU := new.Requests[corev1.ResourceCPU]
+	newMem := new.Requests[corev1.ResourceMemory]
+
+	// Skip if not set
+	if currentCPU.IsZero() || currentMem.IsZero() {
+		return true
+	}
+
+	// Calculate percentage difference
+	cpuDiff := float64(newCPU.MilliValue()-currentCPU.MilliValue()) / float64(currentCPU.MilliValue()) * 100
+	memDiff := float64(newMem.Value()-currentMem.Value()) / float64(currentMem.Value()) * 100
+
+	// Adjust if difference > 10% (lower threshold since we already checked scaling thresholds)
+	threshold := 10.0
+	return (cpuDiff > threshold || cpuDiff < -threshold) ||
+		(memDiff > threshold || memDiff < -threshold)
+}
+
+// getAdjustmentReasonWithDecision provides reason based on scaling decision
+func (r *AdaptiveRightSizer) getAdjustmentReasonWithDecision(current, new corev1.ResourceRequirements, decision ResourceScalingDecision) string {
+	currentCPU := current.Requests[corev1.ResourceCPU]
+	currentMem := current.Requests[corev1.ResourceMemory]
+	newCPU := new.Requests[corev1.ResourceCPU]
+	newMem := new.Requests[corev1.ResourceMemory]
+
+	reasons := []string{}
+
+	if decision.CPU == ScaleUp {
+		reasons = append(reasons, fmt.Sprintf("CPU scale up from %s to %s", currentCPU.String(), newCPU.String()))
+	} else if decision.CPU == ScaleDown {
+		reasons = append(reasons, fmt.Sprintf("CPU scale down from %s to %s", currentCPU.String(), newCPU.String()))
+	}
+
+	if decision.Memory == ScaleUp {
+		reasons = append(reasons, fmt.Sprintf("Memory scale up from %s to %s", formatMemory(currentMem), formatMemory(newMem)))
+	} else if decision.Memory == ScaleDown {
+		reasons = append(reasons, fmt.Sprintf("Memory scale down from %s to %s", formatMemory(currentMem), formatMemory(newMem)))
+	}
+
+	if len(reasons) == 0 {
+		return "Resource optimization"
+	}
+
+	return strings.Join(reasons, ", ")
+}
+
+// formatMemory formats memory quantity for display
+func formatMemory(q resource.Quantity) string {
+	// Convert to Mi for better readability
+	valueInBytes := q.Value()
+	valueInMi := valueInBytes / (1024 * 1024)
+	return fmt.Sprintf("%dMi", valueInMi)
 }
 
 func (r *AdaptiveRightSizer) needsAdjustment(current, new corev1.ResourceRequirements) bool {
