@@ -1,0 +1,152 @@
+apiVersion: rightsizer.io/v1alpha1
+kind: RightSizerConfig
+metadata:
+  name: default
+  namespace: default
+spec:
+  # Operator configuration including rate limiting
+  operatorConfig:
+    # API Server Rate Limiting Configuration
+    # These settings control how the operator interacts with the Kubernetes API server
+
+    # QPS (Queries Per Second) - Maximum sustained request rate to API server
+    # Default: 20 (Kubernetes client-go default is 5)
+    # For small clusters (< 100 pods): 10-20
+    # For medium clusters (100-500 pods): 20-50
+    # For large clusters (> 500 pods): 50-100
+    qps: 20
+
+    # Burst - Maximum burst for throttle, allows short bursts above QPS
+    # Default: 30 (Kubernetes client-go default is 10)
+    # Should be 1.5-2x the QPS value
+    # For small clusters: 15-30
+    # For medium clusters: 30-75
+    # For large clusters: 75-150
+    burst: 30
+
+    # MaxConcurrentReconciles - How many pods to process simultaneously per controller
+    # Default: 3
+    # Lower values = less API server load but slower processing
+    # Higher values = more API server load but faster processing
+    # For small clusters: 1-3
+    # For medium clusters: 3-5
+    # For large clusters: 5-10
+    maxConcurrentReconciles: 3
+
+    # Other operator settings
+    logLevel: "info"
+    enableLeaderElection: false
+    leaderElectionNamespace: "default"
+    leaderElectionID: "right-sizer-leader"
+    maxRetries: 3
+    retryInterval: "5s"
+    reconcileInterval: "10m"
+    workerThreads: 5
+
+  # Resource calculation defaults
+  defaults:
+    cpuRequestMultiplier: 1.2
+    memoryRequestMultiplier: 1.2
+    cpuLimitMultiplier: 2.0
+    memoryLimitMultiplier: 2.0
+    maxCpuLimit: "4000m"
+    maxMemoryLimit: "8Gi"
+    minCpuRequest: "10m"
+    minMemoryRequest: "64Mi"
+
+  # Global constraints to prevent excessive changes
+  globalConstraints:
+    maxChangePercentage: 50
+    minChangeThreshold: 5
+    cooldownPeriod: "5m"
+    maxConcurrentResizes: 10  # Different from maxConcurrentReconciles - this is for actual resize operations
+    maxRestartsPerHour: 5
+
+  # Monitoring configuration
+  monitoring:
+    interval: "30s"
+    enableMetrics: true
+    metricsPort: 9090
+    enablePrometheus: false
+
+---
+# Example configurations for different cluster sizes
+---
+# Small Cluster Configuration (< 100 pods)
+apiVersion: rightsizer.io/v1alpha1
+kind: RightSizerConfig
+metadata:
+  name: small-cluster
+  namespace: default
+spec:
+  operatorConfig:
+    qps: 10                      # Lower QPS for small clusters
+    burst: 15                    # 1.5x QPS
+    maxConcurrentReconciles: 2   # Process fewer pods concurrently
+    workerThreads: 3
+
+---
+# Medium Cluster Configuration (100-500 pods)
+apiVersion: rightsizer.io/v1alpha1
+kind: RightSizerConfig
+metadata:
+  name: medium-cluster
+  namespace: default
+spec:
+  operatorConfig:
+    qps: 30                      # Moderate QPS
+    burst: 50                    # ~1.7x QPS
+    maxConcurrentReconciles: 5   # Process more pods concurrently
+    workerThreads: 8
+
+---
+# Large Cluster Configuration (> 500 pods)
+apiVersion: rightsizer.io/v1alpha1
+kind: RightSizerConfig
+metadata:
+  name: large-cluster
+  namespace: default
+spec:
+  operatorConfig:
+    qps: 50                      # Higher QPS for large clusters
+    burst: 100                   # 2x QPS for handling spikes
+    maxConcurrentReconciles: 10  # Process many pods concurrently
+    workerThreads: 15
+    reconcileInterval: "15m"     # Less frequent reconciliation to reduce load
+
+---
+# High-Performance Configuration (for clusters with powerful API servers)
+apiVersion: rightsizer.io/v1alpha1
+kind: RightSizerConfig
+metadata:
+  name: high-performance
+  namespace: default
+spec:
+  operatorConfig:
+    qps: 100                     # High QPS for fast processing
+    burst: 200                   # 2x QPS
+    maxConcurrentReconciles: 15  # Many concurrent operations
+    workerThreads: 20
+    maxRetries: 5                # More retries for reliability
+    retryInterval: "3s"          # Shorter retry interval
+
+---
+# Conservative Configuration (for shared/multi-tenant clusters)
+apiVersion: rightsizer.io/v1alpha1
+kind: RightSizerConfig
+metadata:
+  name: conservative
+  namespace: default
+spec:
+  operatorConfig:
+    qps: 5                       # Very low QPS to minimize impact
+    burst: 10                    # 2x QPS but still low
+    maxConcurrentReconciles: 1   # Process one pod at a time
+    workerThreads: 2
+    reconcileInterval: "30m"     # Infrequent reconciliation
+    maxRetries: 2                # Fewer retries to reduce load
+    retryInterval: "10s"         # Longer wait between retries
+
+  globalConstraints:
+    maxConcurrentResizes: 3      # Limit concurrent resize operations
+    cooldownPeriod: "10m"        # Longer cooldown between changes

@@ -114,8 +114,8 @@ func main() {
 	// Configure rate limiting for the Kubernetes client
 	// QPS: Queries Per Second allowed to the API server
 	// Burst: Maximum burst for throttle
-	kubeConfig.QPS = 20   // Default is 5, we allow slightly more for operator needs
-	kubeConfig.Burst = 30 // Default is 10, allow some burst for batch operations
+	kubeConfig.QPS = float32(cfg.QPS) // Use configured value (default: 20)
+	kubeConfig.Burst = cfg.Burst      // Use configured value (default: 30)
 
 	// Print Kubernetes client and server versions
 	clientset, err := kubernetes.NewForConfig(kubeConfig)
@@ -149,6 +149,7 @@ func main() {
 		fmt.Println("----------------------------------------")
 		logger.Info("🔍 Checking API Resources:")
 		logger.Info("   Rate Limiting: QPS=%v, Burst=%v", kubeConfig.QPS, kubeConfig.Burst)
+		logger.Info("   Concurrency: MaxConcurrentReconciles=%v", cfg.MaxConcurrentReconciles)
 
 		apiResourceList, err := discoveryClient.ServerResourcesForGroupVersion("v1")
 		if err == nil {
@@ -195,7 +196,7 @@ func main() {
 		// Limit the number of concurrent reconciles per controller
 		// This prevents overwhelming the API server with too many concurrent operations
 		Controller: ctrlconfig.Controller{
-			MaxConcurrentReconciles: 3, // Process max 3 resources concurrently per controller
+			MaxConcurrentReconciles: cfg.MaxConcurrentReconciles, // Use configured value (default: 3)
 		},
 
 		// Graceful shutdown timeout

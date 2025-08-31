@@ -381,6 +381,24 @@ type OperatorConfigSpec struct {
 	// +kubebuilder:validation:Minimum=1
 	// +kubebuilder:validation:Maximum=50
 	WorkerThreads int32 `json:"workerThreads,omitempty"`
+
+	// QPS (Queries Per Second) for Kubernetes API client rate limiting
+	// +kubebuilder:default=20
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=1000
+	QPS float32 `json:"qps,omitempty"`
+
+	// Burst for Kubernetes API client rate limiting
+	// +kubebuilder:default=30
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=1000
+	Burst int32 `json:"burst,omitempty"`
+
+	// MaxConcurrentReconciles per controller
+	// +kubebuilder:default=3
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=20
+	MaxConcurrentReconciles int32 `json:"maxConcurrentReconciles,omitempty"`
 }
 
 // NamespaceConfigSpec defines namespace inclusion/exclusion

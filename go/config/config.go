@@ -52,15 +52,20 @@ type Config struct {
 	MinMemoryRequest int64 // in MB
 
 	// Operational configuration
-	ResizeInterval  time.Duration // How often to check and resize resources
-	LogLevel        string        // Log level: debug, info, warn, error
-	MaxRetries      int           // Maximum retry attempts for operations
-	RetryInterval   time.Duration // Interval between retries
-	MetricsEnabled  bool          // Enable Prometheus metrics
-	MetricsPort     int           // Port for metrics endpoint
-	AuditEnabled    bool          // Enable audit logging for resource changes
-	DryRun          bool          // Only log recommendations without applying changes
-	SafetyThreshold float64       // Safety threshold for resource changes (0-1)
+	ResizeInterval time.Duration // How often to check and resize resources
+	LogLevel       string        // Log level: debug, info, warn, error
+	MaxRetries     int           // Maximum retry attempts for operations
+	RetryInterval  time.Duration // Interval between retries
+	MetricsEnabled bool          // Enable Prometheus metrics
+	MetricsPort    int           // Port for metrics endpoint
+
+	// Rate limiting and concurrency control
+	QPS                     float32 // Queries Per Second for K8s API client
+	Burst                   int     // Burst capacity for K8s API client
+	MaxConcurrentReconciles int     // Max concurrent reconciles per controller
+	AuditEnabled            bool    // Enable audit logging for resource changes
+	DryRun                  bool    // Only log recommendations without applying changes
+	SafetyThreshold         float64 // Safety threshold for resource changes (0-1)
 
 	// Namespace filters
 	NamespaceInclude []string // Namespaces to include
@@ -107,15 +112,20 @@ func GetDefaults() *Config {
 		MinMemoryRequest:        64,
 
 		// Default operational settings
-		ResizeInterval:  30 * time.Second,
-		LogLevel:        "info",
-		MaxRetries:      3,
-		RetryInterval:   5 * time.Second,
-		MetricsEnabled:  true,
-		MetricsPort:     9090,
-		AuditEnabled:    true,
-		DryRun:          false,
-		SafetyThreshold: 0.5, // 50% change threshold
+		ResizeInterval: 30 * time.Second,
+		LogLevel:       "info",
+		MaxRetries:     3,
+		RetryInterval:  5 * time.Second,
+		MetricsEnabled: true,
+		MetricsPort:    9090,
+
+		// Default rate limiting values
+		QPS:                     20,
+		Burst:                   30,
+		MaxConcurrentReconciles: 3,
+		AuditEnabled:            true,
+		DryRun:                  false,
+		SafetyThreshold:         0.5, // 50% change threshold
 
 		// Default advanced features
 		HistoryDays:         7,
@@ -183,6 +193,7 @@ func (c *Config) UpdateFromCRD(
 	retryInterval time.Duration,
 	metricsProvider, prometheusURL string,
 	enableInPlaceResize bool,
+	qps float32, burst, maxConcurrentReconciles int,
 ) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -243,7 +254,18 @@ func (c *Config) UpdateFromCRD(
 	}
 	c.AuditEnabled = auditEnabled
 
-	// Update retry configuration
+	// Update rate limiting configuration
+	if qps > 0 {
+		c.QPS = qps
+	}
+	if burst > 0 {
+		c.Burst = burst
+	}
+	if maxConcurrentReconciles > 0 {
+		c.MaxConcurrentReconciles = maxConcurrentReconciles
+	}
+
+	// Update metrics configuration
 	if maxRetries > 0 {
 		c.MaxRetries = maxRetries
 	}
@@ -435,6 +457,9 @@ func (c *Config) Clone() *Config {
 		MetricsEnabled:          c.MetricsEnabled,
 		MetricsPort:             c.MetricsPort,
 		AuditEnabled:            c.AuditEnabled,
+		QPS:                     c.QPS,
+		Burst:                   c.Burst,
+		MaxConcurrentReconciles: c.MaxConcurrentReconciles,
 		DryRun:                  c.DryRun,
 		SafetyThreshold:         c.SafetyThreshold,
 		HistoryDays:             c.HistoryDays,

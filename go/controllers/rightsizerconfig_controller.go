@@ -246,6 +246,9 @@ func (r *RightSizerConfigReconciler) applyConfiguration(ctx context.Context, rsc
 		metricsProvider,
 		prometheusURL,
 		enableInPlaceResize,
+		rsc.Spec.OperatorConfig.QPS,
+		int(rsc.Spec.OperatorConfig.Burst),
+		int(rsc.Spec.OperatorConfig.MaxConcurrentReconciles),
 	)
 
 	// Update logger level if changed
