@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"sync"
 	"time"
 
 	"right-sizer/config"
@@ -44,8 +45,9 @@ type AdaptiveRightSizer struct {
 	RestConfig      *rest.Config
 	MetricsProvider metrics.Provider
 	Interval        time.Duration
-	InPlaceEnabled  bool // Will be auto-detected
-	DryRun          bool // If true, only log recommendations without applying
+	InPlaceEnabled  bool       // Will be auto-detected
+	DryRun          bool       // If true, only log recommendations without applying
+	updateMutex     sync.Mutex // Prevents concurrent update operations
 }
 
 // ResourceUpdate represents a pending resource update
@@ -167,7 +169,16 @@ func (r *AdaptiveRightSizer) analyzeAllPods(ctx context.Context) ([]ResourceUpda
 
 	updates := []ResourceUpdate{}
 
+	// Limit the number of pods to process in a single cycle to prevent overload
+	const maxPodsPerCycle = 50
+	podsProcessed := 0
+
 	for _, pod := range podList.Items {
+		// Limit pods processed per cycle
+		if podsProcessed >= maxPodsPerCycle {
+			log.Printf("📊 Reached maximum pods per cycle (%d), will process remaining pods in next cycle", maxPodsPerCycle)
+			break
+		}
 		// Skip pods that are not running
 		if pod.Status.Phase != corev1.PodRunning {
 			continue
@@ -215,6 +226,8 @@ func (r *AdaptiveRightSizer) analyzeAllPods(ctx context.Context) ([]ResourceUpda
 				})
 			}
 		}
+
+		podsProcessed++
 	}
 
 	return updates, nil
@@ -227,7 +240,7 @@ func (r *AdaptiveRightSizer) analyzeStandalonePods(ctx context.Context) ([]Resou
 
 }
 
-// applyUpdates applies the calculated resource updates
+// applyUpdates applies the calculated resource updates with batching and rate limiting
 func (r *AdaptiveRightSizer) applyUpdates(ctx context.Context, updates []ResourceUpdate) {
 	if len(updates) == 0 {
 		return
@@ -235,29 +248,93 @@ func (r *AdaptiveRightSizer) applyUpdates(ctx context.Context, updates []Resourc
 
 	log.Printf("📊 Found %d resources needing adjustment", len(updates))
 
-	for _, update := range updates {
-		if r.DryRun {
-			r.logUpdate(update, true)
-			continue
-		}
+	// Configuration for batching to prevent API server overload
+	const (
+		batchSize           = 5                      // Process max 5 pods per batch
+		delayBetweenBatches = 2 * time.Second        // Wait 2 seconds between batches
+		delayBetweenPods    = 200 * time.Millisecond // Small delay between individual pods
+	)
 
+	// Log all updates first if in dry-run mode
+	if r.DryRun {
+		for _, update := range updates {
+			r.logUpdate(update, true)
+		}
+		return
+	}
+
+	// Log all updates that will be applied
+	for _, update := range updates {
 		r.logUpdate(update, false)
 	}
 
-	// Apply all pod updates using in-place resize
+	// Apply pod updates in batches with rate limiting
+	podUpdates := []ResourceUpdate{}
 	for _, update := range updates {
 		if update.ResourceType == "Pod" {
+			podUpdates = append(podUpdates, update)
+		}
+	}
+
+	if len(podUpdates) == 0 {
+		return
+	}
+
+	// Process updates in batches
+	totalBatches := (len(podUpdates) + batchSize - 1) / batchSize
+	log.Printf("🔄 Processing %d pod updates in %d batches (batch size: %d)",
+		len(podUpdates), totalBatches, batchSize)
+
+	for i := 0; i < len(podUpdates); i += batchSize {
+		// Calculate batch boundaries
+		end := i + batchSize
+		if end > len(podUpdates) {
+			end = len(podUpdates)
+		}
+
+		batchNum := (i / batchSize) + 1
+		batch := podUpdates[i:end]
+
+		log.Printf("📦 Processing batch %d/%d (%d pods)", batchNum, totalBatches, len(batch))
+
+		// Process pods in current batch
+		for j, update := range batch {
+			// Check context cancellation
+			select {
+			case <-ctx.Done():
+				log.Printf("⚠️  Context cancelled, stopping pod updates")
+				return
+			default:
+			}
+
 			if err := r.updatePodInPlace(ctx, update); err != nil {
 				log.Printf("Error updating pod %s/%s: %v", update.Namespace, update.Name, err)
 			} else {
 				log.Printf("✅ Successfully resized pod %s/%s using in-place resize", update.Namespace, update.Name)
 			}
+
+			// Add small delay between pods within a batch to avoid rapid-fire API calls
+			if j < len(batch)-1 {
+				time.Sleep(delayBetweenPods)
+			}
+		}
+
+		// Add delay between batches (except after the last batch)
+		if i+batchSize < len(podUpdates) {
+			log.Printf("⏳ Waiting %v before next batch to avoid API server overload", delayBetweenBatches)
+			time.Sleep(delayBetweenBatches)
 		}
 	}
+
+	log.Printf("✅ Completed processing all %d pod updates", len(podUpdates))
 }
 
-// updatePodInPlace attempts to update pod resources in-place
+// updatePodInPlace attempts to update pod resources in-place with mutex protection
 func (r *AdaptiveRightSizer) updatePodInPlace(ctx context.Context, update ResourceUpdate) error {
+	// Use mutex to prevent concurrent API calls that could overwhelm the server
+	r.updateMutex.Lock()
+	defer r.updateMutex.Unlock()
+
 	// Get the current pod
 	var pod corev1.Pod
 	if err := r.Client.Get(ctx, types.NamespacedName{

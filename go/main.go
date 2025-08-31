@@ -39,8 +39,10 @@ import (
 	"k8s.io/apimachinery/pkg/version"
 	"k8s.io/client-go/kubernetes"
 	ctrl "sigs.k8s.io/controller-runtime"
+	ctrlconfig "sigs.k8s.io/controller-runtime/pkg/config"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/metrics/server"
 )
 
 // StartHealthServer starts a simple HTTP server on :8081 for health checks
@@ -106,8 +108,14 @@ func main() {
 	// Start health server
 	StartHealthServer()
 
-	// Get Kubernetes config
+	// Get Kubernetes config with rate limiting to prevent API server overload
 	kubeConfig := ctrl.GetConfigOrDie()
+
+	// Configure rate limiting for the Kubernetes client
+	// QPS: Queries Per Second allowed to the API server
+	// Burst: Maximum burst for throttle
+	kubeConfig.QPS = 20   // Default is 5, we allow slightly more for operator needs
+	kubeConfig.Burst = 30 // Default is 10, allow some burst for batch operations
 
 	// Print Kubernetes client and server versions
 	clientset, err := kubernetes.NewForConfig(kubeConfig)
@@ -140,6 +148,7 @@ func main() {
 		// Check API resources including resize subresource
 		fmt.Println("----------------------------------------")
 		logger.Info("🔍 Checking API Resources:")
+		logger.Info("   Rate Limiting: QPS=%v, Burst=%v", kubeConfig.QPS, kubeConfig.Burst)
 
 		apiResourceList, err := discoveryClient.ServerResourcesForGroupVersion("v1")
 		if err == nil {
@@ -181,7 +190,30 @@ func main() {
 
 	fmt.Println("========================================")
 
-	mgr, err := manager.New(kubeConfig, manager.Options{})
+	// Create controller manager with rate limiting and resource protection
+	mgr, err := manager.New(kubeConfig, manager.Options{
+		// Limit the number of concurrent reconciles per controller
+		// This prevents overwhelming the API server with too many concurrent operations
+		Controller: ctrlconfig.Controller{
+			MaxConcurrentReconciles: 3, // Process max 3 resources concurrently per controller
+		},
+
+		// Graceful shutdown timeout
+		GracefulShutdownTimeout: &[]time.Duration{30 * time.Second}[0],
+
+		// Leader election helps prevent multiple instances from making changes simultaneously
+		LeaderElection:          false, // Enable this in production with multiple replicas
+		LeaderElectionID:        "right-sizer-leader-election",
+		LeaderElectionNamespace: "default",
+
+		// Health and readiness probes
+		HealthProbeBindAddress: ":8081",
+
+		// Metrics server configuration
+		Metrics: server.Options{
+			BindAddress: ":8080",
+		},
+	})
 	if err != nil {
 		logger.Error("unable to start manager: %v", err)
 		os.Exit(1)
@@ -301,8 +333,9 @@ func main() {
 	// The controller will use configuration from CRDs
 	logger.Info("Setting up main RightSizer controller...")
 
-	// Use AdaptiveRightSizer as the default implementation
+	// Use AdaptiveRightSizer as the default implementation with rate limiting
 	// It will check for in-place resize capability based on CRD configuration
+	// The controller will respect the manager's rate limiting configuration
 	if err := controllers.SetupAdaptiveRightSizer(mgr, provider, cfg.DryRun); err != nil {
 		logger.Error("unable to setup AdaptiveRightSizer: %v", err)
 		os.Exit(1)
