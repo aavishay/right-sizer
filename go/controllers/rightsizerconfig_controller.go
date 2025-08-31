@@ -24,6 +24,7 @@ import (
 	"right-sizer/api/v1alpha1"
 	"right-sizer/audit"
 	"right-sizer/config"
+	"right-sizer/health"
 	"right-sizer/logger"
 	"right-sizer/metrics"
 
@@ -43,6 +44,7 @@ type RightSizerConfigReconciler struct {
 	MetricsProvider *metrics.Provider
 	AuditLogger     *audit.AuditLogger
 	WebhookManager  *admission.WebhookManager
+	HealthChecker   *health.OperatorHealthChecker
 }
 
 // +kubebuilder:rbac:groups=rightsizer.io,resources=rightsizerconfigs,verbs=get;list;watch;create;update;patch;delete
@@ -289,9 +291,15 @@ func (r *RightSizerConfigReconciler) updateMetricsProvider(ctx context.Context, 
 		if desiredProvider == "prometheus" && rsc.Spec.MetricsConfig.PrometheusEndpoint != "" {
 			newProvider = metrics.NewPrometheusProvider(rsc.Spec.MetricsConfig.PrometheusEndpoint)
 			log.Info("Switched to Prometheus metrics provider", "endpoint", rsc.Spec.MetricsConfig.PrometheusEndpoint)
+			if r.HealthChecker != nil {
+				r.HealthChecker.UpdateComponentStatus("metrics-provider", true, "Prometheus provider initialized")
+			}
 		} else {
 			newProvider = metrics.NewMetricsServerProvider(r.Client)
 			log.Info("Switched to metrics-server provider")
+			if r.HealthChecker != nil {
+				r.HealthChecker.UpdateComponentStatus("metrics-provider", true, "Metrics-server provider initialized")
+			}
 		}
 
 		*r.MetricsProvider = newProvider
@@ -318,8 +326,14 @@ func (r *RightSizerConfigReconciler) updateFeatureComponents(ctx context.Context
 		if rsc.Spec.SecurityConfig.EnableAdmissionController {
 			log.Info("Admission controller is enabled")
 			// The webhook manager will be started in main.go based on config
+			if r.HealthChecker != nil {
+				r.HealthChecker.UpdateComponentStatus("webhook", false, "Webhook enabled, waiting to start")
+			}
 		} else {
 			log.Info("Admission controller is disabled")
+			if r.HealthChecker != nil {
+				r.HealthChecker.UpdateComponentStatus("webhook", false, "Not enabled")
+			}
 		}
 	}
 
@@ -372,8 +386,8 @@ func (r *RightSizerConfigReconciler) updateSystemMetrics(ctx context.Context, rs
 // getSystemHealth returns the current system health status
 func (r *RightSizerConfigReconciler) getSystemHealth(ctx context.Context) *v1alpha1.SystemHealthStatus {
 	health := &v1alpha1.SystemHealthStatus{
-		MetricsProviderHealthy: true,  // Simplified - you'd actually check the provider
-		WebhookHealthy:         true,  // Simplified - you'd actually check the webhook
+		MetricsProviderHealthy: false,
+		WebhookHealthy:         false,
 		LeaderElectionActive:   false, // Not implemented in this example
 		IsLeader:               true,  // Assuming single instance
 		LastHealthCheck:        &metav1.Time{Time: time.Now()},
@@ -381,16 +395,39 @@ func (r *RightSizerConfigReconciler) getSystemHealth(ctx context.Context) *v1alp
 		Warnings:               0,
 	}
 
-	// Check metrics provider health
-	if r.MetricsProvider != nil && *r.MetricsProvider != nil {
-		// In production, you'd actually test the provider
-		health.MetricsProviderHealthy = true
-	}
+	// Get actual health status from health checker if available
+	if r.HealthChecker != nil {
+		// Check metrics provider health
+		if status, exists := r.HealthChecker.GetComponentStatus("metrics-provider"); exists {
+			health.MetricsProviderHealthy = status.Healthy
+			if !status.Healthy && status.Message != "Not enabled" && status.Message != "Not initialized" {
+				health.Errors++
+			}
+		}
 
-	// Check webhook health
-	if r.WebhookManager != nil && r.Config.AdmissionController {
-		// In production, you'd actually test the webhook
-		health.WebhookHealthy = true
+		// Check webhook health
+		if status, exists := r.HealthChecker.GetComponentStatus("webhook"); exists {
+			health.WebhookHealthy = status.Healthy
+			if !status.Healthy && status.Message != "Not enabled" {
+				health.Warnings++
+			}
+		}
+
+		// Check controller health
+		if status, exists := r.HealthChecker.GetComponentStatus("controller"); exists {
+			if !status.Healthy {
+				health.Errors++
+			}
+		}
+	} else {
+		// Fallback if health checker is not available
+		if r.MetricsProvider != nil && *r.MetricsProvider != nil {
+			health.MetricsProviderHealthy = true
+		}
+
+		if r.WebhookManager != nil && r.Config.AdmissionController {
+			health.WebhookHealthy = true
+		}
 	}
 
 	return health

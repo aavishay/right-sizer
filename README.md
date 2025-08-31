@@ -28,8 +28,38 @@ A Kubernetes operator for automatic pod resource right-sizing with comprehensive
 ### Observability & Reliability
 - **Prometheus Metrics**: Extensive metrics for monitoring operator performance and decisions
 - **Circuit Breakers**: Automatic failure handling with exponential backoff and retry logic
-- **Health Checks**: Multiple health endpoints for monitoring and alerting
+- **Health Checks**: Comprehensive health monitoring system with liveness/readiness probes
+  - `/healthz` - Liveness probe for Kubernetes health checks
+  - `/readyz` - Readiness probe to ensure operator is fully operational
+  - `/readyz/detailed` - Detailed component health status for debugging
+  - Automatic component monitoring (controller, metrics provider, webhook)
+  - Periodic health checks with configurable intervals
 - **High Availability**: Multi-replica deployment with pod disruption budgets
+
+---
+
+## Health Monitoring
+
+The operator includes a comprehensive health check system:
+
+- **Liveness Probe** (`/healthz`): Ensures the operator is running and responsive
+- **Readiness Probe** (`/readyz`): Validates all critical components are operational
+- **Detailed Health** (`/readyz/detailed`): Provides component-level health information
+- **Component Monitoring**: Tracks health of controller, metrics provider, and webhook server
+- **Automatic Recovery**: Kubernetes automatically restarts unhealthy pods based on probe configuration
+
+For detailed health check documentation, see [Health Checks Guide](docs/HEALTH_CHECKS.md).
+
+To test health endpoints:
+```bash
+# Run the health check test script
+./tests/scripts/test-health.sh
+
+# Or manually check endpoints
+kubectl port-forward -n default pod/right-sizer-xxx 8081:8081
+curl http://localhost:8081/healthz
+curl http://localhost:8081/readyz
+```
 
 ---
 

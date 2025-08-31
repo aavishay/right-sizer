@@ -25,6 +25,7 @@ import (
 	"right-sizer/audit"
 	"right-sizer/config"
 	"right-sizer/controllers"
+	"right-sizer/health"
 	"right-sizer/logger"
 	"right-sizer/metrics"
 	"right-sizer/retry"
@@ -84,6 +85,10 @@ func main() {
 
 	// Initialize enhanced components
 	operatorMetrics := metrics.NewOperatorMetrics()
+
+	// Initialize health checker
+	healthChecker := health.NewOperatorHealthChecker()
+	logger.Info("✅ Health checker initialized")
 
 	// Get Kubernetes config with rate limiting to prevent API server overload
 	kubeConfig := ctrl.GetConfigOrDie()
@@ -197,6 +202,24 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Add health check endpoints with custom health checker
+	if err := mgr.AddHealthzCheck("healthz", healthChecker.LivenessCheck); err != nil {
+		logger.Error("unable to set up health check: %v", err)
+		os.Exit(1)
+	}
+	if err := mgr.AddReadyzCheck("readyz", healthChecker.ReadinessCheck); err != nil {
+		logger.Error("unable to set up ready check: %v", err)
+		os.Exit(1)
+	}
+	// Add a detailed health check endpoint
+	if err := mgr.AddReadyzCheck("detailed", healthChecker.DetailedHealthCheck()); err != nil {
+		logger.Warn("unable to set up detailed health check: %v", err)
+	}
+	logger.Info("✅ Health and readiness probes configured on :8081")
+	logger.Info("   - /healthz for liveness probe")
+	logger.Info("   - /readyz for readiness probe")
+	logger.Info("   - /readyz/detailed for detailed health status")
+
 	// Register CRD schemes
 	if err := v1alpha1.AddToScheme(mgr.GetScheme()); err != nil {
 		logger.Error("unable to add CRD schemes: %v", err)
@@ -249,6 +272,7 @@ func main() {
 	var provider metrics.Provider
 	logger.Info("Using default metrics-server provider (can be changed via RightSizerConfig CRD)")
 	provider = metrics.NewMetricsServerProvider(mgr.GetClient())
+	healthChecker.UpdateComponentStatus("metrics-provider", true, "Metrics provider initialized")
 
 	// Initialize retry configuration
 	retryConfig := retry.Config{
@@ -287,6 +311,7 @@ func main() {
 		MetricsProvider: &provider,
 		AuditLogger:     auditLogger,
 		WebhookManager:  webhookManager,
+		HealthChecker:   healthChecker,
 	}
 	if err := configController.SetupWithManager(mgr); err != nil {
 		logger.Error("unable to setup RightSizerConfig controller: %v", err)
@@ -343,11 +368,23 @@ func main() {
 			defer cancel()
 
 			logger.Info("🛡️  Starting admission webhook...")
+			healthChecker.UpdateComponentStatus("webhook", false, "Webhook starting...")
 			if err := webhookManager.Start(ctx); err != nil {
 				logger.Error("admission webhook error: %v", err)
+				healthChecker.UpdateComponentStatus("webhook", false, fmt.Sprintf("Webhook error: %v", err))
+			} else {
+				healthChecker.UpdateComponentStatus("webhook", true, "Webhook server is running")
 			}
+		} else {
+			healthChecker.UpdateComponentStatus("webhook", false, "Not enabled")
 		}
 	}()
+
+	// Start periodic health checks
+	healthCheckCtx, healthCheckCancel := context.WithCancel(context.Background())
+	defer healthCheckCancel()
+	healthChecker.StartPeriodicHealthChecks(healthCheckCtx)
+	logger.Info("🔍 Started periodic health checks")
 
 	// Start manager in a goroutine
 	managerDone := make(chan error, 1)
@@ -355,6 +392,7 @@ func main() {
 		logger.Info("🚀 Starting right-sizer operator manager...")
 		logger.Info("📋 Configuration will be loaded from RightSizerConfig CRDs")
 		logger.Info("📋 Policies will be loaded from RightSizerPolicy CRDs")
+		healthChecker.UpdateComponentStatus("controller", true, "Controller manager started")
 		managerDone <- mgr.Start(ctrl.SetupSignalHandler())
 	}()
 
