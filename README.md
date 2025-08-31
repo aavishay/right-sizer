@@ -47,9 +47,9 @@ A Kubernetes operator for automatic pod resource right-sizing with comprehensive
 ```bash
 # For local development, build the Docker image first
 # (Skip this step if using a published image)
-docker build -t ghcr.io/right-sizer/right-sizer:latest .
+docker build -t right-sizer:latest .
 # If using Minikube, load the image:
-# minikube image load ghcr.io/right-sizer/right-sizer:latest
+# minikube image load right-sizer:latest
 
 # Install from local Helm chart (CRDs are automatically installed)
 helm install right-sizer ./helm \
@@ -64,7 +64,7 @@ helm install right-sizer ./helm \
 ```
 
 > **Note**: CRDs are automatically installed as part of the Helm chart. The `crds.install` value is set to `true` by default.
-> 
+>
 > **Local Development**: If the pod shows `ErrImagePull`, you need to build the Docker image locally first or use a custom image repository.
 
 ### Verify Installation
@@ -144,7 +144,7 @@ spec:
   defaultMode: balanced
   resizeInterval: 30s
   dryRun: false
-  
+
   resourceStrategy:
     cpu:
       requestMultiplier: 1.2
@@ -156,18 +156,18 @@ spec:
       limitMultiplier: 2.0
       minRequest: 64
       maxLimit: 8192
-      
+
   constraints:
     maxChangePercentage: 50
     cooldownPeriod: 5m
     respectPDB: true
     respectHPA: true
-    
+
   observability:
     logLevel: info
     enableAuditLog: true
     enableMetricsExport: true
-    
+
   security:
     enableAdmissionController: true
     enableValidatingWebhook: true
@@ -187,14 +187,14 @@ spec:
   enabled: true
   priority: 100
   mode: conservative
-  
+
   targetRef:
     kind: Deployment
     namespaces: ["production"]
     labelSelector:
       matchLabels:
         tier: critical
-        
+
   resourceStrategy:
     cpu:
       requestMultiplier: 1.5
@@ -204,14 +204,14 @@ spec:
       requestMultiplier: 1.4
       limitMultiplier: 2.0
       targetUtilization: 70
-      
+
   schedule:
     interval: 15m
     timeWindows:
       - start: "08:00"
         end: "20:00"
         daysOfWeek: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
-        
+
   constraints:
     maxChangePercentage: 20
     cooldownPeriod: 30m
@@ -229,7 +229,7 @@ See [examples/](examples/) for more comprehensive CRD configurations.
 | Parameter | Description | Default |
 |-----------|-------------|---------|
 | `replicaCount` | Number of operator replicas | `1` |
-| `image.repository` | Operator image repository | `ghcr.io/right-sizer/right-sizer` |
+| `image.repository` | Operator image repository | `right-sizer` |
 | `image.tag` | Operator image tag | `latest` |
 | `image.pullPolicy` | Image pull policy | `IfNotPresent` |
 | `resources.requests.cpu` | CPU request for operator | `100m` |
