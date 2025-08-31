@@ -61,7 +61,7 @@ type RightSizerPolicyReconciler struct {
 // Reconcile is part of the main kubernetes reconciliation loop
 func (r *RightSizerPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := logger.GetLogger()
-	log.Info("Reconciling RightSizerPolicy", "name", req.Name, "namespace", req.Namespace)
+	log.Info("Reconciling RightSizerPolicy: name=%s, namespace=%s", req.Name, req.Namespace)
 
 	// Fetch the RightSizerPolicy instance
 	policy := &v1alpha1.RightSizerPolicy{}
@@ -80,7 +80,7 @@ func (r *RightSizerPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	// Check if the policy is enabled
 	if !policy.Spec.Enabled {
-		log.Info("RightSizerPolicy is disabled, skipping reconciliation", "name", policy.Name)
+		log.Info("RightSizerPolicy is disabled, skipping reconciliation: name=%s", policy.Name)
 		return r.updatePolicyStatus(ctx, policy, "Disabled", "Policy is disabled")
 	}
 
@@ -97,7 +97,7 @@ func (r *RightSizerPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	// Check if this policy should be processed based on global namespace filters
 	if !r.shouldProcessPolicy(ctx, policy) {
-		log.Info("Policy skipped due to namespace filters", "name", policy.Name)
+		log.Info("Policy skipped due to namespace filters: name=%s", policy.Name)
 		return r.updatePolicyStatus(ctx, policy, "Skipped", "Policy namespace not included in global configuration")
 	}
 
@@ -131,7 +131,7 @@ func (r *RightSizerPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	// Requeue based on schedule
 	requeueAfter := r.getRequeueInterval(policy)
-	log.Info("Successfully reconciled RightSizerPolicy", "name", policy.Name, "requeueAfter", requeueAfter)
+	log.Info("Successfully reconciled RightSizerPolicy: name=%s, requeueAfter=%v", req.Name, requeueAfter)
 	return ctrl.Result{RequeueAfter: requeueAfter}, nil
 }
 

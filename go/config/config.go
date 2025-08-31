@@ -84,6 +84,12 @@ type Config struct {
 	// Feature flags
 	EnableInPlaceResize bool // Enable in-place pod resizing (Kubernetes 1.33+)
 
+	// Scaling thresholds
+	MemoryScaleUpThreshold   float64 // Memory usage percentage to trigger scale up (0-1)
+	MemoryScaleDownThreshold float64 // Memory usage percentage to trigger scale down (0-1)
+	CPUScaleUpThreshold      float64 // CPU usage percentage to trigger scale up (0-1)
+	CPUScaleDownThreshold    float64 // CPU usage percentage to trigger scale down (0-1)
+
 	// Configuration source tracking
 	ConfigSource string // "default" or "crd"
 }
@@ -138,6 +144,12 @@ func GetDefaults() *Config {
 
 		// Default feature flags
 		EnableInPlaceResize: false,
+
+		// Default scaling thresholds
+		MemoryScaleUpThreshold:   0.8, // Scale up when memory usage exceeds 80%
+		MemoryScaleDownThreshold: 0.3, // Scale down when memory usage is below 30%
+		CPUScaleUpThreshold:      0.8, // Scale up when CPU usage exceeds 80%
+		CPUScaleDownThreshold:    0.3, // Scale down when CPU usage is below 30%
 
 		// Mark as default configuration
 		ConfigSource: "default",
@@ -194,6 +206,8 @@ func (c *Config) UpdateFromCRD(
 	metricsProvider, prometheusURL string,
 	enableInPlaceResize bool,
 	qps float32, burst, maxConcurrentReconciles int,
+	memoryScaleUpThreshold, memoryScaleDownThreshold float64,
+	cpuScaleUpThreshold, cpuScaleDownThreshold float64,
 ) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -284,6 +298,20 @@ func (c *Config) UpdateFromCRD(
 	// Update feature flags
 	c.EnableInPlaceResize = enableInPlaceResize
 
+	// Update scaling thresholds
+	if memoryScaleUpThreshold > 0 && memoryScaleUpThreshold <= 1 {
+		c.MemoryScaleUpThreshold = memoryScaleUpThreshold
+	}
+	if memoryScaleDownThreshold > 0 && memoryScaleDownThreshold <= 1 {
+		c.MemoryScaleDownThreshold = memoryScaleDownThreshold
+	}
+	if cpuScaleUpThreshold > 0 && cpuScaleUpThreshold <= 1 {
+		c.CPUScaleUpThreshold = cpuScaleUpThreshold
+	}
+	if cpuScaleDownThreshold > 0 && cpuScaleDownThreshold <= 1 {
+		c.CPUScaleDownThreshold = cpuScaleDownThreshold
+	}
+
 	// Mark configuration as coming from CRD
 	c.ConfigSource = "crd"
 }
@@ -370,6 +398,26 @@ func (c *Config) Validate() error {
 		errors = append(errors, fmt.Sprintf("invalid metrics provider: %s (must be metrics-server or prometheus)", c.MetricsProvider))
 	}
 
+	// Validate scaling thresholds
+	if c.MemoryScaleUpThreshold <= 0 || c.MemoryScaleUpThreshold > 1 {
+		errors = append(errors, "memory scale up threshold must be between 0 and 1")
+	}
+	if c.MemoryScaleDownThreshold <= 0 || c.MemoryScaleDownThreshold > 1 {
+		errors = append(errors, "memory scale down threshold must be between 0 and 1")
+	}
+	if c.MemoryScaleDownThreshold >= c.MemoryScaleUpThreshold {
+		errors = append(errors, "memory scale down threshold must be less than scale up threshold")
+	}
+	if c.CPUScaleUpThreshold <= 0 || c.CPUScaleUpThreshold > 1 {
+		errors = append(errors, "CPU scale up threshold must be between 0 and 1")
+	}
+	if c.CPUScaleDownThreshold <= 0 || c.CPUScaleDownThreshold > 1 {
+		errors = append(errors, "CPU scale down threshold must be between 0 and 1")
+	}
+	if c.CPUScaleDownThreshold >= c.CPUScaleUpThreshold {
+		errors = append(errors, "CPU scale down threshold must be less than scale up threshold")
+	}
+
 	if len(errors) > 0 {
 		return fmt.Errorf("configuration validation errors: %s", strings.Join(errors, "; "))
 	}
@@ -438,37 +486,41 @@ func (c *Config) Clone() *Config {
 	defer c.mu.RUnlock()
 
 	clone := &Config{
-		CPURequestMultiplier:    c.CPURequestMultiplier,
-		MemoryRequestMultiplier: c.MemoryRequestMultiplier,
-		CPURequestAddition:      c.CPURequestAddition,
-		MemoryRequestAddition:   c.MemoryRequestAddition,
-		CPULimitMultiplier:      c.CPULimitMultiplier,
-		MemoryLimitMultiplier:   c.MemoryLimitMultiplier,
-		CPULimitAddition:        c.CPULimitAddition,
-		MemoryLimitAddition:     c.MemoryLimitAddition,
-		MaxCPULimit:             c.MaxCPULimit,
-		MaxMemoryLimit:          c.MaxMemoryLimit,
-		MinCPURequest:           c.MinCPURequest,
-		MinMemoryRequest:        c.MinMemoryRequest,
-		ResizeInterval:          c.ResizeInterval,
-		LogLevel:                c.LogLevel,
-		MaxRetries:              c.MaxRetries,
-		RetryInterval:           c.RetryInterval,
-		MetricsEnabled:          c.MetricsEnabled,
-		MetricsPort:             c.MetricsPort,
-		AuditEnabled:            c.AuditEnabled,
-		QPS:                     c.QPS,
-		Burst:                   c.Burst,
-		MaxConcurrentReconciles: c.MaxConcurrentReconciles,
-		DryRun:                  c.DryRun,
-		SafetyThreshold:         c.SafetyThreshold,
-		HistoryDays:             c.HistoryDays,
-		AdmissionController:     c.AdmissionController,
-		MetricsProvider:         c.MetricsProvider,
-		PrometheusURL:           c.PrometheusURL,
-		MetricsServerEndpoint:   c.MetricsServerEndpoint,
-		EnableInPlaceResize:     c.EnableInPlaceResize,
-		ConfigSource:            c.ConfigSource,
+		CPURequestMultiplier:     c.CPURequestMultiplier,
+		MemoryRequestMultiplier:  c.MemoryRequestMultiplier,
+		CPURequestAddition:       c.CPURequestAddition,
+		MemoryRequestAddition:    c.MemoryRequestAddition,
+		CPULimitMultiplier:       c.CPULimitMultiplier,
+		MemoryLimitMultiplier:    c.MemoryLimitMultiplier,
+		CPULimitAddition:         c.CPULimitAddition,
+		MemoryLimitAddition:      c.MemoryLimitAddition,
+		MaxCPULimit:              c.MaxCPULimit,
+		MaxMemoryLimit:           c.MaxMemoryLimit,
+		MinCPURequest:            c.MinCPURequest,
+		MinMemoryRequest:         c.MinMemoryRequest,
+		ResizeInterval:           c.ResizeInterval,
+		LogLevel:                 c.LogLevel,
+		MaxRetries:               c.MaxRetries,
+		RetryInterval:            c.RetryInterval,
+		MetricsEnabled:           c.MetricsEnabled,
+		MetricsPort:              c.MetricsPort,
+		AuditEnabled:             c.AuditEnabled,
+		QPS:                      c.QPS,
+		Burst:                    c.Burst,
+		MaxConcurrentReconciles:  c.MaxConcurrentReconciles,
+		DryRun:                   c.DryRun,
+		SafetyThreshold:          c.SafetyThreshold,
+		HistoryDays:              c.HistoryDays,
+		AdmissionController:      c.AdmissionController,
+		MetricsProvider:          c.MetricsProvider,
+		PrometheusURL:            c.PrometheusURL,
+		MetricsServerEndpoint:    c.MetricsServerEndpoint,
+		EnableInPlaceResize:      c.EnableInPlaceResize,
+		MemoryScaleUpThreshold:   c.MemoryScaleUpThreshold,
+		MemoryScaleDownThreshold: c.MemoryScaleDownThreshold,
+		CPUScaleUpThreshold:      c.CPUScaleUpThreshold,
+		CPUScaleDownThreshold:    c.CPUScaleDownThreshold,
+		ConfigSource:             c.ConfigSource,
 	}
 
 	// Deep copy slices

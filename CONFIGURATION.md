@@ -86,6 +86,33 @@ This dual approach allows you to:
 - Use additions for fixed overhead (e.g., always add 100m CPU for background tasks)
 - Combine both for sophisticated sizing strategies
 
+### Scaling Thresholds
+
+| Variable | Default | Description | Example |
+|----------|---------|-------------|---------|
+| `MEMORY_SCALE_UP_THRESHOLD` | `0.8` | Memory usage percentage (0-1) that triggers scale up | `0.8` = Scale up when memory usage exceeds 80% of limit |
+| `MEMORY_SCALE_DOWN_THRESHOLD` | `0.3` | Memory usage percentage (0-1) that triggers scale down | `0.3` = Scale down when memory usage is below 30% of limit |
+| `CPU_SCALE_UP_THRESHOLD` | `0.8` | CPU usage percentage (0-1) that triggers scale up | `0.8` = Scale up when CPU usage exceeds 80% of limit |
+| `CPU_SCALE_DOWN_THRESHOLD` | `0.3` | CPU usage percentage (0-1) that triggers scale down | `0.3` = Scale down when CPU usage is below 30% of limit |
+
+**How Scaling Decisions Work:**
+
+The right-sizer monitors resource usage and makes scaling decisions based on these thresholds:
+
+1. **Scale Up**: Triggered when either CPU or memory usage exceeds their respective scale-up thresholds
+2. **Scale Down**: Triggered when both CPU and memory usage are below their respective scale-down thresholds
+3. **No Change**: When usage is between the thresholds, resources remain unchanged
+
+**Example:**
+- Pod has 1000m CPU limit and 2048MB memory limit
+- Current usage: 850m CPU (85%), 1600MB memory (78%)
+- With default thresholds: Scale up triggered because CPU usage (85%) > CPU_SCALE_UP_THRESHOLD (80%)
+
+This threshold-based approach ensures:
+- Resources are increased proactively before hitting limits
+- Resources are decreased only when significantly underutilized
+- Hysteresis prevents constant resizing (gap between up/down thresholds)
+
 ### Namespace Filtering
 
 | Variable | Default | Description | Example |

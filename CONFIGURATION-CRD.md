@@ -82,6 +82,12 @@ spec:
     maxMemoryLimit: "8Gi"         # Maximum 8GB
     minCpuRequest: "10m"          # Minimum 10 millicores
     minMemoryRequest: "64Mi"      # Minimum 64MB
+    
+    # Scaling thresholds (NEW)
+    cpuScaleUpThreshold: 0.8      # Scale up when CPU usage exceeds 80% of limit
+    cpuScaleDownThreshold: 0.3    # Scale down when CPU usage is below 30% of limit
+    memoryScaleUpThreshold: 0.8   # Scale up when memory usage exceeds 80% of limit
+    memoryScaleDownThreshold: 0.3 # Scale down when memory usage is below 30% of limit
 ```
 
 ### Feature Flags
@@ -151,6 +157,10 @@ spec:
     maxMemoryLimit: "8Gi"
     minCpuRequest: "10m"
     minMemoryRequest: "64Mi"
+    cpuScaleUpThreshold: 0.8
+    cpuScaleDownThreshold: 0.3
+    memoryScaleUpThreshold: 0.8
+    memoryScaleDownThreshold: 0.3
   features:
     enableInPlaceResize: true
     policyBasedSizing: true

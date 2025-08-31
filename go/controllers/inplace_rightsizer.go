@@ -64,6 +64,15 @@ type ContainerResourcesPatch struct {
 	Resources corev1.ResourceRequirements `json:"resources"`
 }
 
+// ScalingDecision represents the type of scaling action to take
+type ScalingDecision int
+
+const (
+	ScaleNone ScalingDecision = iota
+	ScaleUp
+	ScaleDown
+)
+
 // Start begins the continuous monitoring and adjustment loop
 func (r *InPlaceRightSizer) Start(ctx context.Context) error {
 	ticker := time.NewTicker(r.Interval)
@@ -212,8 +221,14 @@ func (r *InPlaceRightSizer) rightSizePod(ctx context.Context, pod *corev1.Pod) (
 		return false, nil
 	}
 
-	// Calculate new resources based on usage
-	newResourcesMap := r.calculateOptimalResourcesForContainers(usage, pod)
+	// Check if scaling is needed based on thresholds
+	scalingDecision := r.checkScalingThresholds(usage, pod)
+	if scalingDecision == ScaleNone {
+		return false, nil
+	}
+
+	// Calculate new resources based on usage and scaling decision
+	newResourcesMap := r.calculateOptimalResourcesForContainers(usage, pod, scalingDecision)
 
 	// Check if adjustment is needed
 	needsUpdate, details := r.needsAdjustmentWithDetails(pod, newResourcesMap)
@@ -247,8 +262,78 @@ type ResourceChange struct {
 	NewMem     string
 }
 
+// checkScalingThresholds determines if scaling is needed based on resource usage thresholds
+func (r *InPlaceRightSizer) checkScalingThresholds(usage metrics.Metrics, pod *corev1.Pod) ScalingDecision {
+	cfg := config.Get()
+
+	// Calculate total current limits for the pod
+	var totalCPULimit float64
+	var totalMemLimit float64
+
+	for _, container := range pod.Spec.Containers {
+		if cpuLimit, exists := container.Resources.Limits[corev1.ResourceCPU]; exists && !cpuLimit.IsZero() {
+			totalCPULimit += float64(cpuLimit.MilliValue())
+		}
+		if memLimit, exists := container.Resources.Limits[corev1.ResourceMemory]; exists && !memLimit.IsZero() {
+			totalMemLimit += float64(memLimit.Value()) / (1024 * 1024) // Convert to MB
+		}
+	}
+
+	// If no limits are set, use requests as baseline
+	if totalCPULimit == 0 || totalMemLimit == 0 {
+		for _, container := range pod.Spec.Containers {
+			if totalCPULimit == 0 {
+				if cpuReq, exists := container.Resources.Requests[corev1.ResourceCPU]; exists && !cpuReq.IsZero() {
+					totalCPULimit += float64(cpuReq.MilliValue())
+				}
+			}
+			if totalMemLimit == 0 {
+				if memReq, exists := container.Resources.Requests[corev1.ResourceMemory]; exists && !memReq.IsZero() {
+					totalMemLimit += float64(memReq.Value()) / (1024 * 1024)
+				}
+			}
+		}
+	}
+
+	// If still no resources set, default to scale up
+	if totalCPULimit == 0 && totalMemLimit == 0 {
+		return ScaleUp
+	}
+
+	// Calculate usage percentages
+	cpuUsagePercent := float64(0)
+	memUsagePercent := float64(0)
+
+	if totalCPULimit > 0 {
+		cpuUsagePercent = usage.CPUMilli / totalCPULimit
+	}
+	if totalMemLimit > 0 {
+		memUsagePercent = usage.MemMB / totalMemLimit
+	}
+
+	// Check if we need to scale up (if either CPU or memory exceeds threshold)
+	if memUsagePercent > cfg.MemoryScaleUpThreshold || cpuUsagePercent > cfg.CPUScaleUpThreshold {
+		log.Printf("📈 Pod %s/%s needs scale up - Memory: %.1f%% (threshold: %.0f%%), CPU: %.1f%% (threshold: %.0f%%)",
+			pod.Namespace, pod.Name,
+			memUsagePercent*100, cfg.MemoryScaleUpThreshold*100,
+			cpuUsagePercent*100, cfg.CPUScaleUpThreshold*100)
+		return ScaleUp
+	}
+
+	// Check if we can scale down (both CPU and memory must be below thresholds)
+	if memUsagePercent < cfg.MemoryScaleDownThreshold && cpuUsagePercent < cfg.CPUScaleDownThreshold {
+		log.Printf("📉 Pod %s/%s can scale down - Memory: %.1f%% (threshold: %.0f%%), CPU: %.1f%% (threshold: %.0f%%)",
+			pod.Namespace, pod.Name,
+			memUsagePercent*100, cfg.MemoryScaleDownThreshold*100,
+			cpuUsagePercent*100, cfg.CPUScaleDownThreshold*100)
+		return ScaleDown
+	}
+
+	return ScaleNone
+}
+
 // calculateOptimalResourcesForContainers determines optimal resource allocation for all containers
-func (r *InPlaceRightSizer) calculateOptimalResourcesForContainers(usage metrics.Metrics, pod *corev1.Pod) map[string]corev1.ResourceRequirements {
+func (r *InPlaceRightSizer) calculateOptimalResourcesForContainers(usage metrics.Metrics, pod *corev1.Pod, scalingDecision ScalingDecision) map[string]corev1.ResourceRequirements {
 	resourcesMap := make(map[string]corev1.ResourceRequirements)
 
 	// For simplicity, apply the same resources to all containers based on total pod usage
@@ -263,7 +348,7 @@ func (r *InPlaceRightSizer) calculateOptimalResourcesForContainers(usage metrics
 	memPerContainer := usage.MemMB / float64(numContainers)
 
 	for _, container := range pod.Spec.Containers {
-		newResources := r.calculateOptimalResources(cpuPerContainer, memPerContainer)
+		newResources := r.calculateOptimalResources(cpuPerContainer, memPerContainer, scalingDecision)
 
 		// Check if we can safely apply these resources
 		currentResources := container.Resources
@@ -276,12 +361,26 @@ func (r *InPlaceRightSizer) calculateOptimalResourcesForContainers(usage metrics
 }
 
 // calculateOptimalResources determines optimal resource allocation for a single container
-func (r *InPlaceRightSizer) calculateOptimalResources(cpuMilli float64, memMB float64) corev1.ResourceRequirements {
+func (r *InPlaceRightSizer) calculateOptimalResources(cpuMilli float64, memMB float64, scalingDecision ScalingDecision) corev1.ResourceRequirements {
 	cfg := config.Get()
 
-	// Add buffer for requests using configurable multipliers and additions
-	cpuRequest := int64(cpuMilli*cfg.CPURequestMultiplier) + cfg.CPURequestAddition
-	memRequest := int64(memMB*cfg.MemoryRequestMultiplier) + cfg.MemoryRequestAddition
+	var cpuRequest, memRequest int64
+
+	// Apply different multipliers based on scaling decision
+	if scalingDecision == ScaleUp {
+		// When scaling up, apply standard multipliers to add buffer
+		cpuRequest = int64(cpuMilli*cfg.CPURequestMultiplier) + cfg.CPURequestAddition
+		memRequest = int64(memMB*cfg.MemoryRequestMultiplier) + cfg.MemoryRequestAddition
+	} else if scalingDecision == ScaleDown {
+		// When scaling down, use lower multipliers to reclaim resources
+		// Use a reduced multiplier (e.g., 1.1 instead of 1.2) to still maintain some buffer
+		cpuRequest = int64(cpuMilli*1.1) + cfg.CPURequestAddition
+		memRequest = int64(memMB*1.1) + cfg.MemoryRequestAddition
+	} else {
+		// Default case (shouldn't happen, but handle it)
+		cpuRequest = int64(cpuMilli*cfg.CPURequestMultiplier) + cfg.CPURequestAddition
+		memRequest = int64(memMB*cfg.MemoryRequestMultiplier) + cfg.MemoryRequestAddition
+	}
 
 	// Ensure minimum values
 	if cpuRequest < cfg.MinCPURequest {

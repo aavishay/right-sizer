@@ -142,6 +142,18 @@ type DefaultCPUStrategy struct {
 	// +kubebuilder:default=4000
 	// +kubebuilder:validation:Minimum=0
 	MaxLimit int64 `json:"maxLimit,omitempty"`
+
+	// ScaleUpThreshold is the CPU usage percentage (0-1) that triggers scale up
+	// +kubebuilder:default=0.8
+	// +kubebuilder:validation:Minimum=0.1
+	// +kubebuilder:validation:Maximum=1.0
+	ScaleUpThreshold float64 `json:"scaleUpThreshold,omitempty"`
+
+	// ScaleDownThreshold is the CPU usage percentage (0-1) that triggers scale down
+	// +kubebuilder:default=0.3
+	// +kubebuilder:validation:Minimum=0.1
+	// +kubebuilder:validation:Maximum=1.0
+	ScaleDownThreshold float64 `json:"scaleDownThreshold,omitempty"`
 }
 
 // DefaultMemoryStrategy defines default Memory resource calculation
@@ -177,6 +189,18 @@ type DefaultMemoryStrategy struct {
 	// +kubebuilder:default=8192
 	// +kubebuilder:validation:Minimum=0
 	MaxLimit int64 `json:"maxLimit,omitempty"`
+
+	// ScaleUpThreshold is the memory usage percentage (0-1) that triggers scale up
+	// +kubebuilder:default=0.8
+	// +kubebuilder:validation:Minimum=0.1
+	// +kubebuilder:validation:Maximum=1.0
+	ScaleUpThreshold float64 `json:"scaleUpThreshold,omitempty"`
+
+	// ScaleDownThreshold is the memory usage percentage (0-1) that triggers scale down
+	// +kubebuilder:default=0.3
+	// +kubebuilder:validation:Minimum=0.1
+	// +kubebuilder:validation:Maximum=1.0
+	ScaleDownThreshold float64 `json:"scaleDownThreshold,omitempty"`
 }
 
 // GlobalConstraintsSpec defines global constraints for the operator

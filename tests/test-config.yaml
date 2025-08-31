@@ -1,0 +1,11 @@
+apiVersion: rightsizer.io/v1alpha1
+kind: RightSizerConfig
+metadata:
+  name: test-config
+  namespace: right-sizer
+spec:
+  enabled: true
+  dryRun: false
+  namespaceConfig:
+    includeNamespaces:
+      - default

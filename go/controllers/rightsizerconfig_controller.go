@@ -57,7 +57,7 @@ type RightSizerConfigReconciler struct {
 // Reconcile is part of the main kubernetes reconciliation loop
 func (r *RightSizerConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := logger.GetLogger()
-	log.Info("Reconciling RightSizerConfig", "name", req.Name, "namespace", req.Namespace)
+	log.Info("Reconciling RightSizerConfig: name=%s, namespace=%s", req.Name, req.Namespace)
 
 	// Fetch the RightSizerConfig instance
 	rsc := &v1alpha1.RightSizerConfig{}
@@ -130,7 +130,7 @@ func (r *RightSizerConfigReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		}
 	}
 
-	log.Info("Successfully reconciled RightSizerConfig", "name", req.Name, "requeueAfter", requeueAfter)
+	log.Info("Successfully reconciled RightSizerConfig: name=%s, requeueAfter=%v", req.Name, requeueAfter)
 	return ctrl.Result{RequeueAfter: requeueAfter}, nil
 }
 
@@ -204,6 +204,27 @@ func (r *RightSizerConfigReconciler) applyConfiguration(ctx context.Context, rsc
 		maxMemoryLimit = rsc.Spec.DefaultResourceStrategy.Memory.MaxLimit
 	}
 
+	// Extract scaling thresholds
+	memoryScaleUpThreshold := 0.8
+	if rsc.Spec.DefaultResourceStrategy.Memory.ScaleUpThreshold != 0 {
+		memoryScaleUpThreshold = rsc.Spec.DefaultResourceStrategy.Memory.ScaleUpThreshold
+	}
+
+	memoryScaleDownThreshold := 0.3
+	if rsc.Spec.DefaultResourceStrategy.Memory.ScaleDownThreshold != 0 {
+		memoryScaleDownThreshold = rsc.Spec.DefaultResourceStrategy.Memory.ScaleDownThreshold
+	}
+
+	cpuScaleUpThreshold := 0.8
+	if rsc.Spec.DefaultResourceStrategy.CPU.ScaleUpThreshold != 0 {
+		cpuScaleUpThreshold = rsc.Spec.DefaultResourceStrategy.CPU.ScaleUpThreshold
+	}
+
+	cpuScaleDownThreshold := 0.3
+	if rsc.Spec.DefaultResourceStrategy.CPU.ScaleDownThreshold != 0 {
+		cpuScaleDownThreshold = rsc.Spec.DefaultResourceStrategy.CPU.ScaleDownThreshold
+	}
+
 	// Extract metrics provider configuration
 	metricsProvider := "metrics-server"
 	if rsc.Spec.MetricsConfig.Provider != "" {
@@ -251,6 +272,10 @@ func (r *RightSizerConfigReconciler) applyConfiguration(ctx context.Context, rsc
 		rsc.Spec.OperatorConfig.QPS,
 		int(rsc.Spec.OperatorConfig.Burst),
 		int(rsc.Spec.OperatorConfig.MaxConcurrentReconciles),
+		memoryScaleUpThreshold,
+		memoryScaleDownThreshold,
+		cpuScaleUpThreshold,
+		cpuScaleDownThreshold,
 	)
 
 	// Update logger level if changed
@@ -285,12 +310,12 @@ func (r *RightSizerConfigReconciler) updateMetricsProvider(ctx context.Context, 
 	}
 
 	if currentProviderType != desiredProvider {
-		log.Info("Switching metrics provider", "from", currentProviderType, "to", desiredProvider)
+		log.Info("Switching metrics provider from %s to %s", currentProviderType, desiredProvider)
 
 		var newProvider metrics.Provider
 		if desiredProvider == "prometheus" && rsc.Spec.MetricsConfig.PrometheusEndpoint != "" {
 			newProvider = metrics.NewPrometheusProvider(rsc.Spec.MetricsConfig.PrometheusEndpoint)
-			log.Info("Switched to Prometheus metrics provider", "endpoint", rsc.Spec.MetricsConfig.PrometheusEndpoint)
+			log.Info("Switched to Prometheus metrics provider: endpoint=%s", rsc.Spec.MetricsConfig.PrometheusEndpoint)
 			if r.HealthChecker != nil {
 				r.HealthChecker.UpdateComponentStatus("metrics-provider", true, "Prometheus provider initialized")
 			}
@@ -339,7 +364,7 @@ func (r *RightSizerConfigReconciler) updateFeatureComponents(ctx context.Context
 
 	// Update metrics export
 	if rsc.Spec.ObservabilityConfig.EnableMetricsExport {
-		log.Info("Metrics export enabled on port", "port", rsc.Spec.ObservabilityConfig.MetricsPort)
+		log.Info("Metrics export enabled on port %d", rsc.Spec.ObservabilityConfig.MetricsPort)
 		// Metrics server will be started in main.go based on config
 	} else {
 		log.Info("Metrics export disabled")
@@ -376,9 +401,8 @@ func (r *RightSizerConfigReconciler) updateSystemMetrics(ctx context.Context, rs
 	// Update status counts
 	rsc.Status.TotalResourcesMonitored = int32(deployments + statefulsets + daemonsets)
 
-	log.Info("System metrics updated",
-		"activePolicies", activePolicies,
-		"resourcesMonitored", rsc.Status.TotalResourcesMonitored)
+	log.Info("System metrics updated: activePolicies=%d, resourcesMonitored=%d",
+		activePolicies, rsc.Status.TotalResourcesMonitored)
 
 	return nil
 }

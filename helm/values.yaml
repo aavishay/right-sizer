@@ -131,6 +131,8 @@ defaultConfig:
       limitAddition: 0
       minRequest: 10
       maxLimit: 4000
+      scaleUpThreshold: 0.8
+      scaleDownThreshold: 0.3
     memory:
       requestMultiplier: 1.2
       requestAddition: 0
@@ -138,6 +140,8 @@ defaultConfig:
       limitAddition: 0
       minRequest: 64
       maxLimit: 8192
+      scaleUpThreshold: 0.8
+      scaleDownThreshold: 0.3
 
   # Global constraints
   constraints:
