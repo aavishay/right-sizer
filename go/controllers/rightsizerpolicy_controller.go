@@ -766,32 +766,36 @@ func (r *RightSizerPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 
 	// Watch target resources and enqueue policies that target them
-	// Watch Deployments
-	err = c.Watch(source.Kind(mgr.GetCache(), &appsv1.Deployment{},
-		handler.TypedEnqueueRequestsFromMapFunc(func(ctx context.Context, obj *appsv1.Deployment) []reconcile.Request {
-			return r.findPoliciesForResource(obj)
-		})))
-	if err != nil {
-		return err
-	}
+	// NOTE: Commented out Deployment, StatefulSet, and DaemonSet watchers
+	// since we're doing in-place pod resizing directly on pods
+	// instead of updating the parent controllers
 
-	// Watch StatefulSets
-	err = c.Watch(source.Kind(mgr.GetCache(), &appsv1.StatefulSet{},
-		handler.TypedEnqueueRequestsFromMapFunc(func(ctx context.Context, obj *appsv1.StatefulSet) []reconcile.Request {
-			return r.findPoliciesForResource(obj)
-		})))
-	if err != nil {
-		return err
-	}
+	// // Watch Deployments
+	// err = c.Watch(source.Kind(mgr.GetCache(), &appsv1.Deployment{},
+	// 	handler.TypedEnqueueRequestsFromMapFunc(func(ctx context.Context, obj *appsv1.Deployment) []reconcile.Request {
+	// 		return r.findPoliciesForResource(obj)
+	// 	})))
+	// if err != nil {
+	// 	return err
+	// }
 
-	// Watch DaemonSets
-	err = c.Watch(source.Kind(mgr.GetCache(), &appsv1.DaemonSet{},
-		handler.TypedEnqueueRequestsFromMapFunc(func(ctx context.Context, obj *appsv1.DaemonSet) []reconcile.Request {
-			return r.findPoliciesForResource(obj)
-		})))
-	if err != nil {
-		return err
-	}
+	// // Watch StatefulSets
+	// err = c.Watch(source.Kind(mgr.GetCache(), &appsv1.StatefulSet{},
+	// 	handler.TypedEnqueueRequestsFromMapFunc(func(ctx context.Context, obj *appsv1.StatefulSet) []reconcile.Request {
+	// 		return r.findPoliciesForResource(obj)
+	// 	})))
+	// if err != nil {
+	// 	return err
+	// }
+
+	// // Watch DaemonSets
+	// err = c.Watch(source.Kind(mgr.GetCache(), &appsv1.DaemonSet{},
+	// 	handler.TypedEnqueueRequestsFromMapFunc(func(ctx context.Context, obj *appsv1.DaemonSet) []reconcile.Request {
+	// 		return r.findPoliciesForResource(obj)
+	// 	})))
+	// if err != nil {
+	// 	return err
+	// }
 
 	return nil
 }
