@@ -322,7 +322,45 @@ func (c *Config) ResetToDefaults() {
 	defer c.mu.Unlock()
 
 	defaults := GetDefaults()
-	*c = *defaults
+	// Copy fields individually to avoid copying the mutex
+	c.CPURequestMultiplier = defaults.CPURequestMultiplier
+	c.MemoryRequestMultiplier = defaults.MemoryRequestMultiplier
+	c.CPURequestAddition = defaults.CPURequestAddition
+	c.MemoryRequestAddition = defaults.MemoryRequestAddition
+	c.CPULimitMultiplier = defaults.CPULimitMultiplier
+	c.MemoryLimitMultiplier = defaults.MemoryLimitMultiplier
+	c.CPULimitAddition = defaults.CPULimitAddition
+	c.MemoryLimitAddition = defaults.MemoryLimitAddition
+	c.MinCPURequest = defaults.MinCPURequest
+	c.MinMemoryRequest = defaults.MinMemoryRequest
+	c.MaxCPULimit = defaults.MaxCPULimit
+	c.MaxMemoryLimit = defaults.MaxMemoryLimit
+	c.ResizeInterval = defaults.ResizeInterval
+	c.LogLevel = defaults.LogLevel
+	c.MaxRetries = defaults.MaxRetries
+	c.RetryInterval = defaults.RetryInterval
+	c.MetricsEnabled = defaults.MetricsEnabled
+	c.MetricsPort = defaults.MetricsPort
+	c.QPS = defaults.QPS
+	c.Burst = defaults.Burst
+	c.MaxConcurrentReconciles = defaults.MaxConcurrentReconciles
+	c.AuditEnabled = defaults.AuditEnabled
+	c.DryRun = defaults.DryRun
+	c.SafetyThreshold = defaults.SafetyThreshold
+	c.NamespaceInclude = defaults.NamespaceInclude
+	c.NamespaceExclude = defaults.NamespaceExclude
+	c.HistoryDays = defaults.HistoryDays
+	c.CustomMetrics = defaults.CustomMetrics
+	c.AdmissionController = defaults.AdmissionController
+	c.MetricsProvider = defaults.MetricsProvider
+	c.PrometheusURL = defaults.PrometheusURL
+	c.MetricsServerEndpoint = defaults.MetricsServerEndpoint
+	c.EnableInPlaceResize = defaults.EnableInPlaceResize
+	c.MemoryScaleUpThreshold = defaults.MemoryScaleUpThreshold
+	c.MemoryScaleDownThreshold = defaults.MemoryScaleDownThreshold
+	c.CPUScaleUpThreshold = defaults.CPUScaleUpThreshold
+	c.CPUScaleDownThreshold = defaults.CPUScaleDownThreshold
+	c.ConfigSource = defaults.ConfigSource
 }
 
 // Validate checks the configuration for consistency and validity

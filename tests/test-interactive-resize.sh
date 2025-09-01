@@ -59,7 +59,7 @@ cleanup() {
   echo "kubectl delete namespace $NAMESPACE $TEST_NAMESPACE"
   echo ""
   print_color $YELLOW "Or run this script with 'cleanup' argument:"
-  echo "./tests/interactive-test.sh cleanup"
+  echo "./tests/test-interactive-resize.sh cleanup"
 }
 
 do_cleanup() {
