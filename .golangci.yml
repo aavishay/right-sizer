@@ -1,0 +1,324 @@
+# Copyright (C) 2024 right-sizer contributors
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+# golangci-lint configuration
+# Reference: https://golangci-lint.run/usage/configuration/
+
+run:
+  # Timeout for analysis
+  timeout: 5m
+
+  # Exit code when at least one issue was found
+  issues-exit-code: 1
+
+  # Include test files
+  tests: true
+
+  # List of build tags
+  build-tags:
+    - integration
+
+  # Which dirs to skip
+  skip-dirs:
+    - vendor
+    - third_party
+    - testdata
+    - examples
+    - docs
+
+  # Which files to skip
+  skip-files:
+    - ".*\\.pb\\.go$"
+    - ".*\\.generated\\.go$"
+    - "zz_generated\\..*.go$"
+
+  # By default, list of stable checks is used
+  modules-download-mode: readonly
+
+  # Allow parallel runners
+  allow-parallel-runners: true
+
+output:
+  # Format of the output
+  format: colored-line-number
+
+  # Print lines of code with issue
+  print-issued-lines: true
+
+  # Print linter name in the end of issue text
+  print-linter-name: true
+
+  # Make issues output unique by line
+  uniq-by-line: true
+
+  # Sort results by: filepath, line and column
+  sort-results: true
+
+linters-settings:
+  dupl:
+    # Minimum tokens count to trigger issue
+    threshold: 100
+
+  errcheck:
+    # Report about not checking of errors in type assertions
+    check-type-assertions: true
+    # Report about assignment of errors to blank identifier
+    check-blank: true
+
+  exhaustive:
+    # Check switch statements in generated files also
+    check-generated: false
+    # Presence of "default" case in switch statements satisfies exhaustiveness
+    default-signifies-exhaustive: true
+
+  funlen:
+    # Maximum number of lines in a function
+    lines: 100
+    # Maximum number of statements in a function
+    statements: 50
+
+  gocognit:
+    # Minimal cognitive complexity to report
+    min-complexity: 20
+
+  goconst:
+    # Minimal length of string constant
+    min-len: 3
+    # Minimum occurrences of constant to trigger issue
+    min-occurrences: 3
+
+  gocritic:
+    enabled-tags:
+      - diagnostic
+      - experimental
+      - opinionated
+      - performance
+      - style
+    disabled-checks:
+      - dupImport
+      - ifElseChain
+      - octalLiteral
+      - whyNoLint
+      - wrapperFunc
+
+  gocyclo:
+    # Minimal cyclomatic complexity to report
+    min-complexity: 15
+
+  gofmt:
+    # Simplify code
+    simplify: true
+
+  goimports:
+    # Put local imports after 3rd-party packages
+    local-prefixes: right-sizer
+
+  golint:
+    # Minimal confidence for issues
+    min-confidence: 0.8
+
+  gomnd:
+    settings:
+      mnd:
+        # Don't include the "operation" and "assign" checks
+        checks: [argument, case, condition, return]
+
+  govet:
+    # Report about shadowed variables
+    check-shadowing: true
+    settings:
+      printf:
+        funcs:
+          - (github.com/go-logr/logr.Logger).Info
+          - (github.com/go-logr/logr.Logger).Error
+
+  lll:
+    # Max line length
+    line-length: 140
+
+  maligned:
+    # Print struct with more effective memory layout
+    suggest-new: true
+
+  misspell:
+    # Locale to use
+    locale: US
+
+  nolintlint:
+    # Enable to ensure that nolint directives are all used
+    allow-unused: false
+    # Require specific reason for nolint directives
+    require-explanation: true
+    # Require nolint directives to be specific about which linter is being skipped
+    require-specific: true
+
+  revive:
+    # See https://github.com/mgechev/revive#available-rules for available rules
+    ignore-generated-header: true
+    severity: warning
+    rules:
+      - name: blank-imports
+      - name: context-as-argument
+      - name: context-keys-type
+      - name: dot-imports
+      - name: error-return
+      - name: error-strings
+      - name: error-naming
+      - name: exported
+      - name: if-return
+      - name: increment-decrement
+      - name: var-naming
+      - name: var-declaration
+      - name: package-comments
+      - name: range
+      - name: receiver-naming
+      - name: time-naming
+      - name: unexported-return
+      - name: indent-error-flow
+      - name: errorf
+      - name: empty-block
+      - name: superfluous-else
+      - name: unused-parameter
+      - name: unreachable-code
+      - name: redefines-builtin-id
+
+  staticcheck:
+    # Go version to target
+    go: "1.23"
+    # https://staticcheck.io/docs/options#checks
+    checks: ["all"]
+
+  stylecheck:
+    # Go version to target
+    go: "1.23"
+    # https://staticcheck.io/docs/options#checks
+    checks: ["all", "-ST1000", "-ST1003", "-ST1016", "-ST1020", "-ST1021", "-ST1022"]
+    # https://staticcheck.io/docs/options#dot_import_whitelist
+    dot-import-whitelist:
+      - fmt
+    # https://staticcheck.io/docs/options#initialisms
+    initialisms: ["ACL", "API", "ASCII", "CPU", "CSS", "DNS", "EOF", "GUID", "HTML", "HTTP", "HTTPS", "ID", "IP", "JSON", "QPS", "RAM", "RPC", "SLA", "SMTP", "SQL", "SSH", "TCP", "TLS", "TTL", "UDP", "UI", "GID", "UID", "UUID", "URI", "URL", "UTF8", "VM", "XML", "XMPP", "XSRF", "XSS", "K8s"]
+
+  unparam:
+    # Report preallocation suggestions on for loops
+    check-exported: false
+
+  unused:
+    # Go version to target
+    go: "1.23"
+
+  whitespace:
+    multi-if: false
+    multi-func: false
+
+linters:
+  enable-all: true
+  disable:
+    # Deprecated linters
+    - deadcode
+    - exhaustivestruct
+    - golint
+    - ifshort
+    - interfacer
+    - maligned
+    - nosnakecase
+    - scopelint
+    - structcheck
+    - varcheck
+
+    # Disabled by choice
+    - depguard       # Too strict about imports
+    - wsl            # Too opinionated about whitespace
+    - nlreturn       # Too opinionated about newlines
+    - paralleltest   # Not always necessary
+    - exhaustruct    # Too strict for all structs
+    - gochecknoglobals # We need some globals
+    - gochecknoinits # Init functions are sometimes needed
+    - godox          # We want to allow TODO/FIXME comments
+    - goerr113       # Too strict about error handling
+    - wrapcheck      # Too strict about error wrapping
+    - testpackage    # Tests in same package are fine
+    - varnamelen     # Short variable names are sometimes OK
+    - ireturn        # Returning interfaces is sometimes necessary
+    - tagliatelle    # Enforces specific case for struct tags
+    - nonamedreturns # Named returns can be useful sometimes
+    - forcetypeassert # Type assertions are sometimes needed
+    - godot          # Not all comments need periods
+    - cyclop         # Duplicate of gocyclo
+    - maintidx       # Maintainability index is too opinionated
+    - musttag        # Not all structs need all tags
+
+issues:
+  # List of regexps of issue texts to exclude
+  exclude:
+    - "Error return value of .((os\\.)?std(out|err)\\..*|.*Close|.*Flush|os\\.Remove(All)?|.*print(f|ln)?|os\\.(Un)?Setenv). is not checked"
+    - "exported (type|method|function) (.+) should have comment or be unexported"
+    - "ST1000: at least one file in a package should have a package comment"
+
+  # Excluding configuration per-path, per-linter, per-text and per-source
+  exclude-rules:
+    # Exclude some linters from running on tests files
+    - path: _test\.go
+      linters:
+        - gocyclo
+        - errcheck
+        - dupl
+        - gosec
+        - gomnd
+        - funlen
+        - gocognit
+        - goconst
+
+    # Exclude known issues in generated files
+    - path: zz_generated\.*.go
+      linters:
+        - goimports
+        - lll
+        - gocyclo
+        - funlen
+
+    # Exclude lll issues for long lines with go:generate
+    - linters:
+        - lll
+      source: "^//go:generate "
+
+    # Exclude some linters from running on main packages
+    - path: main\.go
+      linters:
+        - gochecknoglobals
+
+    # Allow use of fmt.Println in main package
+    - path: main\.go
+      text: "use of fmt.Print"
+      linters:
+        - forbidigo
+
+  # Independently from option `exclude` we use default exclude patterns
+  exclude-use-default: false
+
+  # Maximum issues count per one linter
+  max-issues-per-linter: 0
+
+  # Maximum count of issues with the same text
+  max-same-issues: 0
+
+  # Show only new issues created after git revision
+  new: false
+
+  # Fix found issues (if it's supported by the linter)
+  fix: false
+
+severity:
+  # Set the default severity for issues
+  default-severity: warning
+
+  # The default value is an empty list, which means all
+  # severities are considered
+  rules:
+    - linters:
+        - dupl
+      severity: info
+    - linters:
+        - gomnd
+        - goconst
+      severity: info
