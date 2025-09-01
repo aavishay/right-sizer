@@ -84,8 +84,10 @@ jobs:
           push: false
           load: true
           tags: ${{ env.IMAGE_NAME }}:test-amd64
-          cache-from: type=gha,scope=buildkit-amd64
-          cache-to: type=gha,mode=max,scope=buildkit-amd64
+          cache-from: |
+            type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache
+          cache-to: |
+            type=inline
           build-args: |
             VERSION=${{ github.sha }}
             BUILD_DATE=${{ github.event.repository.updated_at }}
@@ -103,8 +105,10 @@ jobs:
           push: false
           load: true
           tags: ${{ env.IMAGE_NAME }}:test-amd64
-          cache-from: type=gha,scope=buildkit-amd64
-          cache-to: type=gha,mode=max,scope=buildkit-amd64
+          cache-from: |
+            type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache
+          cache-to: |
+            type=inline
           build-args: |
             VERSION=${{ github.sha }}
             BUILD_DATE=${{ github.event.repository.updated_at }}
@@ -134,11 +138,8 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: |
-            type=gha,scope=buildkit-amd64
-            type=gha,scope=buildkit-arm64
             type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache
           cache-to: |
-            type=gha,mode=max,scope=buildkit-arm64
             type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache,mode=max
           build-args: |
             VERSION=${{ github.sha }}
@@ -157,8 +158,10 @@ jobs:
           push: false
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha,scope=buildkit-amd64
-          cache-to: type=gha,mode=max,scope=buildkit-amd64
+          cache-from: |
+            type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache
+          cache-to: |
+            type=inline
           build-args: |
             VERSION=${{ github.sha }}
             BUILD_DATE=${{ github.event.repository.updated_at }}
@@ -280,10 +283,8 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-arm64
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}-arm64
           cache-from: |
-            type=gha,scope=buildkit-arm64
             type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache-arm64
           cache-to: |
-            type=gha,mode=max,scope=buildkit-arm64
             type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache-arm64,mode=max
           build-args: |
             VERSION=${{ github.sha }}
