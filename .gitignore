@@ -104,3 +104,4 @@ debug.test
 *.tar.gz
 *.zip
 *.tgz
+.build-number
