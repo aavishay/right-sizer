@@ -247,66 +247,6 @@ else
   echo -e "${RED}Manual deployment not supported. Please use Helm deployment.${NC}"
   echo -e "${YELLOW}Run with --helm flag or install Helm: https://helm.sh/docs/intro/install/${NC}"
   exit 1
-
-  # Legacy deployment code (kept for reference)
-  : <<'LEGACY_DEPLOYMENT'
-  # Create temporary deployment manifest with correct image
-  cat >/tmp/right-sizer-deployment.yaml <<EOF
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: ${OPERATOR_NAME}
-  namespace: ${NAMESPACE}
-  labels:
-    app: ${OPERATOR_NAME}
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: ${OPERATOR_NAME}
-  template:
-    metadata:
-      labels:
-        app: ${OPERATOR_NAME}
-    spec:
-      serviceAccountName: ${OPERATOR_NAME}
-      containers:
-      - name: ${OPERATOR_NAME}
-        image: ${OPERATOR_NAME}:${IMAGE_TAG}
-        imagePullPolicy: IfNotPresent
-        env:
-        - name: OPERATOR_NAMESPACE
-          valueFrom:
-            fieldRef:
-              fieldPath: metadata.namespace
-        - name: ENABLE_INPLACE_RESIZE
-          value: "true"
-        resources:
-          requests:
-            cpu: 100m
-            memory: 128Mi
-          limits:
-            cpu: 500m
-            memory: 512Mi
-        ports:
-        - containerPort: 8080
-          name: metrics
-        livenessProbe:
-          httpGet:
-            path: /healthz
-            port: 8080
-          initialDelaySeconds: 15
-          periodSeconds: 20
-        readinessProbe:
-          httpGet:
-            path: /ready
-            port: 8080
-          initialDelaySeconds: 10
-          periodSeconds: 10
-EOF
-LEGACY_DEPLOYMENT
-
-  echo -e "${GREEN}✓ Manifest deployment complete${NC}"
 fi
 
 # Wait for deployment to be ready

@@ -74,6 +74,7 @@ local-test/
 .local/
 *.local.yaml
 *-local.yaml
+custom-values.yaml
 
 # Docker files
 .dockerignore.local

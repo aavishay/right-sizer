@@ -295,8 +295,9 @@ metadata:
 spec:
   enabled: true
   dryRun: true
-  logLevel: info
-  resourceLimits:
+  defaultMode: balanced
+  resizeInterval: "30s"
+  globalConstraints:
     cpu:
       min: "10m"
       max: "2000m"
@@ -305,7 +306,6 @@ spec:
       max: "2Gi"
   metricsConfig:
     provider: metrics-server
-    collectionInterval: 30s
   observabilityConfig:
     enableMetricsExport: true
     metricsPort: 9090

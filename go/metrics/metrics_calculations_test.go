@@ -486,7 +486,7 @@ func TestMetricsProviderFetchErrors(t *testing.T) {
 					Namespace: "default",
 				},
 			},
-			expectedError: "timeout",
+			expectedError: "context deadline exceeded",
 			shouldRetry:   true,
 		},
 		{
