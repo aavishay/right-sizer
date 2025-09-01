@@ -483,7 +483,7 @@ func TestCompleteResourceCalculation(t *testing.T) {
 	}
 
 	for i := range tests {
-		tt := tests[i]
+		tt := &tests[i]
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := &tt.config
 
@@ -617,7 +617,7 @@ func TestScalingDecisionImpact(t *testing.T) {
 	}
 
 	for i := range tests {
-		tt := tests[i]
+		tt := &tests[i]
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := &tt.config
 
