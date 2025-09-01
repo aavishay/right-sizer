@@ -2,7 +2,7 @@ apiVersion: rightsizer.io/v1alpha1
 kind: RightSizerConfig
 metadata:
   name: right-sizer-config-with-thresholds
-  namespace: right-sizer-system
+  namespace: right-sizer
 spec:
   # Enable the operator
   enabled: true
@@ -101,7 +101,7 @@ apiVersion: rightsizer.io/v1alpha1
 kind: RightSizerConfig
 metadata:
   name: production-config
-  namespace: right-sizer-system
+  namespace: right-sizer
 spec:
   enabled: true
   defaultMode: "conservative"
@@ -141,7 +141,7 @@ apiVersion: rightsizer.io/v1alpha1
 kind: RightSizerConfig
 metadata:
   name: development-config
-  namespace: right-sizer-system
+  namespace: right-sizer
 spec:
   enabled: true
   defaultMode: "aggressive"

@@ -8,7 +8,7 @@ apiVersion: rightsizer.io/v1alpha1
 kind: RightSizerPolicy
 metadata:
   name: production-web-apps
-  namespace: production
+  namespace: right-sizer
 spec:
   enabled: true
   priority: 200  # Higher priority than default
@@ -97,7 +97,7 @@ apiVersion: rightsizer.io/v1alpha1
 kind: RightSizerPolicy
 metadata:
   name: dev-environments
-  namespace: development
+  namespace: right-sizer
 spec:
   enabled: true
   priority: 50  # Lower priority
@@ -155,7 +155,7 @@ apiVersion: rightsizer.io/v1alpha1
 kind: RightSizerPolicy
 metadata:
   name: batch-jobs
-  namespace: data-processing
+  namespace: right-sizer
 spec:
   enabled: true
   priority: 150
@@ -214,7 +214,7 @@ apiVersion: rightsizer.io/v1alpha1
 kind: RightSizerPolicy
 metadata:
   name: stateful-databases
-  namespace: databases
+  namespace: right-sizer
 spec:
   enabled: true
   priority: 300  # Very high priority
@@ -278,7 +278,7 @@ apiVersion: rightsizer.io/v1alpha1
 kind: RightSizerPolicy
 metadata:
   name: ml-workloads
-  namespace: ml-platform
+  namespace: right-sizer
 spec:
   enabled: true
   priority: 250
@@ -340,7 +340,7 @@ apiVersion: rightsizer.io/v1alpha1
 kind: RightSizerPolicy
 metadata:
   name: microservices-mesh
-  namespace: microservices
+  namespace: right-sizer
 spec:
   enabled: true
   priority: 100
@@ -402,7 +402,7 @@ apiVersion: rightsizer.io/v1alpha1
 kind: RightSizerPolicy
 metadata:
   name: cross-namespace-optimization
-  namespace: right-sizer-system  # Policy in system namespace
+  namespace: right-sizer  # Policy in system namespace
 spec:
   enabled: true
   priority: 75

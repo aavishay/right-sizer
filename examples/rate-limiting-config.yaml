@@ -2,7 +2,7 @@ apiVersion: rightsizer.io/v1alpha1
 kind: RightSizerConfig
 metadata:
   name: default
-  namespace: default
+  namespace: right-sizer
 spec:
   # Operator configuration including rate limiting
   operatorConfig:
@@ -77,7 +77,7 @@ apiVersion: rightsizer.io/v1alpha1
 kind: RightSizerConfig
 metadata:
   name: small-cluster
-  namespace: default
+  namespace: right-sizer
 spec:
   operatorConfig:
     qps: 10                      # Lower QPS for small clusters
@@ -91,7 +91,7 @@ apiVersion: rightsizer.io/v1alpha1
 kind: RightSizerConfig
 metadata:
   name: medium-cluster
-  namespace: default
+  namespace: right-sizer
 spec:
   operatorConfig:
     qps: 30                      # Moderate QPS
@@ -105,7 +105,7 @@ apiVersion: rightsizer.io/v1alpha1
 kind: RightSizerConfig
 metadata:
   name: large-cluster
-  namespace: default
+  namespace: right-sizer
 spec:
   operatorConfig:
     qps: 50                      # Higher QPS for large clusters
@@ -120,7 +120,7 @@ apiVersion: rightsizer.io/v1alpha1
 kind: RightSizerConfig
 metadata:
   name: high-performance
-  namespace: default
+  namespace: right-sizer
 spec:
   operatorConfig:
     qps: 100                     # High QPS for fast processing
@@ -136,7 +136,7 @@ apiVersion: rightsizer.io/v1alpha1
 kind: RightSizerConfig
 metadata:
   name: conservative
-  namespace: default
+  namespace: right-sizer
 spec:
   operatorConfig:
     qps: 5                       # Very low QPS to minimize impact

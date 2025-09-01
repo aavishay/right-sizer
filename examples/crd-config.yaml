@@ -89,7 +89,7 @@ spec:
   # Operator behavior configuration
   operatorConfig:
     leaderElection: true
-    leaderElectionNamespace: "right-sizer-system"
+    leaderElectionNamespace: "right-sizer"
     leaderElectionID: "right-sizer-leader"
     maxRetries: 3
     retryInterval: "5s"
@@ -113,7 +113,7 @@ spec:
       - kube-system
       - kube-public
       - kube-node-lease
-      - right-sizer-system
+      - right-sizer
     # Select namespaces by labels
     namespaceLabels:
       environment: production

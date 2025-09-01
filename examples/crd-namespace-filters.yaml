@@ -37,7 +37,7 @@ spec:
       - kube-system
       - kube-public
       - kube-node-lease
-      - right-sizer-system
+      - right-sizer
 
     # Select namespaces by labels (additional filter)
     namespaceLabels:
@@ -79,7 +79,7 @@ spec:
     excludeNamespaces:
       - kube-system
       - kube-public
-      - right-sizer-system
+      - right-sizer
 
     systemNamespaces:
       - kube-system
@@ -125,7 +125,7 @@ spec:
       - kube-system
       - kube-public
       - kube-node-lease
-      - right-sizer-system
+      - right-sizer
 
 ---
 # Example 4: Policy with Namespace Override
@@ -134,7 +134,7 @@ apiVersion: rightsizer.io/v1alpha1
 kind: RightSizerPolicy
 metadata:
   name: cross-namespace-policy
-  namespace: right-sizer-system
+  namespace: right-sizer
 spec:
   enabled: true
   priority: 200
@@ -167,7 +167,7 @@ apiVersion: rightsizer.io/v1alpha1
 kind: RightSizerPolicy
 metadata:
   name: inherit-global-namespaces
-  namespace: right-sizer-system
+  namespace: right-sizer
 spec:
   enabled: true
   priority: 100
@@ -251,7 +251,7 @@ spec:
       - kube-system
       - kube-public
       - kube-node-lease
-      - right-sizer-system
+      - right-sizer
 
 ---
 # Production policy - conservative
@@ -259,7 +259,7 @@ apiVersion: rightsizer.io/v1alpha1
 kind: RightSizerPolicy
 metadata:
   name: production-conservative
-  namespace: right-sizer-system
+  namespace: right-sizer
 spec:
   enabled: true
   priority: 300  # Highest priority
@@ -289,7 +289,7 @@ apiVersion: rightsizer.io/v1alpha1
 kind: RightSizerPolicy
 metadata:
   name: staging-balanced
-  namespace: right-sizer-system
+  namespace: right-sizer
 spec:
   enabled: true
   priority: 200
@@ -319,7 +319,7 @@ apiVersion: rightsizer.io/v1alpha1
 kind: RightSizerPolicy
 metadata:
   name: development-aggressive
-  namespace: right-sizer-system
+  namespace: right-sizer
 spec:
   enabled: true
   priority: 100  # Lowest priority
@@ -350,7 +350,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: namespace-filtering-rules
-  namespace: right-sizer-system
+  namespace: right-sizer
 data:
   rules.md: |
     # Namespace Filtering Rules in Right-Sizer
