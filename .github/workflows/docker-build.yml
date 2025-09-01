@@ -60,14 +60,14 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=raw,value=build-${{ github.run_number }}
-            type=raw,value=build-${{ github.run_number }}-${{ github.sha }}
-            type=ref,event=branch,suffix=-build-${{ github.run_number }}
-            type=ref,event=pr,suffix=-build-${{ github.run_number }}
-            type=semver,pattern={{version}},suffix=-build-${{ github.run_number }}
+            type=raw,value=v${{ github.run_number }}
+            type=raw,value=v${{ github.run_number }}-${{ github.sha }}
+            type=ref,event=branch,suffix=-v${{ github.run_number }}
+            type=ref,event=pr,suffix=-v${{ github.run_number }}
+            type=semver,pattern={{version}},suffix=-v${{ github.run_number }}
             type=raw,value=latest,enable={{is_default_branch}}
             type=sha,prefix=sha-,format=short
-            type=raw,value={{date 'YYYYMMDD'}}-build-${{ github.run_number }}
+            type=raw,value={{date 'YYYYMMDD'}}-v${{ github.run_number }}
           labels: |
             org.opencontainers.image.title=Right-Sizer
             org.opencontainers.image.description=Kubernetes operator for automatic pod resource right-sizing
@@ -226,12 +226,12 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**For AMD64:**" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
-          echo "docker pull --platform linux/amd64 ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:build-${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
+          echo "docker pull --platform linux/amd64 ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:v${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**For ARM64:**" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
-          echo "docker pull --platform linux/arm64 ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:build-${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
+          echo "docker pull --platform linux/arm64 ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:v${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Auto-detect platform:**" >> $GITHUB_STEP_SUMMARY
@@ -282,7 +282,7 @@ jobs:
           platforms: linux/arm64
           push: true
           tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:build-${{ github.run_number }}-arm64
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:v${{ github.run_number }}-arm64
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}-arm64
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-arm64
           cache-from: |

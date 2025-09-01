@@ -11,13 +11,13 @@ on:
   workflow_dispatch:
     inputs:
       push_image:
-        description: 'Push image to registry'
+        description: "Push image to registry"
         required: false
-        default: 'false'
+        default: "false"
         type: choice
         options:
-          - 'true'
-          - 'false'
+          - "true"
+          - "false"
 
 env:
   REGISTRY: docker.io
@@ -62,13 +62,13 @@ jobs:
           GIT_BRANCH="${{ github.ref_name }}"
 
           # Generate tags
-          TAGS="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:build-${BUILD_NUM}"
-          TAGS="${TAGS},${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:build-${BUILD_NUM}-${GIT_SHA}"
+          TAGS="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:v${BUILD_NUM}"
+          TAGS="${TAGS},${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:v${BUILD_NUM}-${GIT_SHA}"
           TAGS="${TAGS},${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${GIT_SHA}"
 
           # Add branch tag
           if [ "$GIT_BRANCH" != "" ]; then
-            TAGS="${TAGS},${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${GIT_BRANCH}-build-${BUILD_NUM}"
+            TAGS="${TAGS},${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${GIT_BRANCH}-v${BUILD_NUM}"
           fi
 
           # Add latest tag for main branch
@@ -78,7 +78,7 @@ jobs:
 
           # Add date tag
           DATE_TAG=$(date +%Y%m%d)
-          TAGS="${TAGS},${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${DATE_TAG}-build-${BUILD_NUM}"
+          TAGS="${TAGS},${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${DATE_TAG}-v${BUILD_NUM}"
 
           echo "tags=${TAGS}" >> $GITHUB_OUTPUT
           echo "build_num=${BUILD_NUM}" >> $GITHUB_OUTPUT
@@ -114,15 +114,15 @@ jobs:
           docker build \
             ${BUILD_ARGS} \
             -f ${DOCKERFILE} \
-            -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:build-${{ steps.meta.outputs.build_num }} \
+            -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:v${{ steps.meta.outputs.build_num }} \
             .
 
           # Tag additional names
           IFS=',' read -ra TAG_ARRAY <<< "${{ steps.meta.outputs.tags }}"
           for tag in "${TAG_ARRAY[@]}"; do
-            if [ "$tag" != "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:build-${{ steps.meta.outputs.build_num }}" ]; then
+            if [ "$tag" != "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:v${{ steps.meta.outputs.build_num }}" ]; then
               echo "Tagging: $tag"
-              docker tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:build-${{ steps.meta.outputs.build_num }} $tag
+              docker tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:v${{ steps.meta.outputs.build_num }} $tag
             fi
           done
 
@@ -131,7 +131,7 @@ jobs:
       - name: Test Docker image
         run: |
           echo "Testing Docker image..."
-          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:build-${{ steps.meta.outputs.build_num }}"
+          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:v${{ steps.meta.outputs.build_num }}"
 
           # Test 1: Image exists
           docker image inspect $IMAGE > /dev/null
@@ -193,7 +193,7 @@ jobs:
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "Pull the latest image:" >> $GITHUB_STEP_SUMMARY
             echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
-            echo "docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:build-${{ steps.meta.outputs.build_num }}" >> $GITHUB_STEP_SUMMARY
+            echo "docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:v${{ steps.meta.outputs.build_num }}" >> $GITHUB_STEP_SUMMARY
             echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
           else
             echo "**Images built locally (not pushed)**" >> $GITHUB_STEP_SUMMARY

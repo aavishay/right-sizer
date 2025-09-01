@@ -148,10 +148,10 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
             type=semver,pattern={{version}},value=${{ steps.version.outputs.VERSION }}
-            type=semver,pattern={{version}}-build-${{ github.run_number }},value=${{ steps.version.outputs.VERSION }}
+            type=semver,pattern={{version}}-v${{ github.run_number }},value=${{ steps.version.outputs.VERSION }}
             type=semver,pattern={{major}}.{{minor}},value=${{ steps.version.outputs.VERSION }}
             type=semver,pattern={{major}},value=${{ steps.version.outputs.VERSION }}
-            type=raw,value=build-${{ github.run_number }}
+            type=raw,value=v${{ github.run_number }}
             type=raw,value=latest,enable={{is_default_branch}}
             type=sha,prefix=sha-,format=short
 
@@ -262,10 +262,10 @@ jobs:
           echo "docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.VERSION }}" >> changelog.md
           echo "" >> changelog.md
           echo "# With build ID" >> changelog.md
-          echo "docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.VERSION }}-build-${{ github.run_number }}" >> changelog.md
+          echo "docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.VERSION }}-v${{ github.run_number }}" >> changelog.md
           echo "" >> changelog.md
           echo "# By build number" >> changelog.md
-          echo "docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:build-${{ github.run_number }}" >> changelog.md
+          echo "docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:v${{ github.run_number }}" >> changelog.md
           echo '```' >> changelog.md
           echo "" >> changelog.md
           echo "## Helm Installation" >> changelog.md
@@ -307,8 +307,8 @@ jobs:
           echo "### 🐳 Docker Images" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "- \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.VERSION }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "- \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.VERSION }}-build-${{ github.run_number }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "- \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:build-${{ github.run_number }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.VERSION }}-v${{ github.run_number }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:v${{ github.run_number }}\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### 📝 Release Page" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY

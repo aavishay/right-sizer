@@ -142,16 +142,16 @@ generate_tags() {
   local tags=()
 
   # Build ID based tags
-  tags+=("${REGISTRY}/${IMAGE_NAME}:build-${build_num}")
-  tags+=("${REGISTRY}/${IMAGE_NAME}:build-${build_num}-${GIT_COMMIT}")
+  tags+=("${REGISTRY}/${IMAGE_NAME}:v${build_num}")
+  tags+=("${REGISTRY}/${IMAGE_NAME}:v${build_num}-${GIT_COMMIT}")
 
   # Date-based tag
   local date_tag=$(date +%Y%m%d)
-  tags+=("${REGISTRY}/${IMAGE_NAME}:${date_tag}-build-${build_num}")
+  tags+=("${REGISTRY}/${IMAGE_NAME}:${date_tag}-v${build_num}")
 
   # Branch-based tags
   if [ "${GIT_BRANCH}" != "unknown" ]; then
-    tags+=("${REGISTRY}/${IMAGE_NAME}:${GIT_BRANCH}-build-${build_num}")
+    tags+=("${REGISTRY}/${IMAGE_NAME}:${GIT_BRANCH}-v${build_num}")
     tags+=("${REGISTRY}/${IMAGE_NAME}:${GIT_BRANCH}-${GIT_COMMIT}")
 
     # Latest tag for main branch
@@ -166,12 +166,12 @@ generate_tags() {
   # Version tag if on a git tag
   if [ -n "${GIT_TAG}" ]; then
     tags+=("${REGISTRY}/${IMAGE_NAME}:${GIT_TAG}")
-    tags+=("${REGISTRY}/${IMAGE_NAME}:${GIT_TAG}-build-${build_num}")
+    tags+=("${REGISTRY}/${IMAGE_NAME}:${GIT_TAG}-v${build_num}")
   fi
 
   # Add dirty suffix if working directory is dirty
   if [ -n "${GIT_DIRTY}" ]; then
-    tags+=("${REGISTRY}/${IMAGE_NAME}:local-build-${build_num}")
+    tags+=("${REGISTRY}/${IMAGE_NAME}:local-v${build_num}")
   fi
 
   echo "${tags[@]}"
