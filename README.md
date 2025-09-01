@@ -65,7 +65,7 @@ Right-Sizer is a Kubernetes operator that automatically optimizes pod resource a
 ## ✨ Key Features
 
 ### 🚀 Core Functionality
-- **In-Place Pod Resizing** (Kubernetes 1.33+): Zero-downtime resource adjustments
+- **In-Place Pod Resizing** (Kubernetes 1.33+): Zero-downtime resource adjustments - **right-sizer does not restart any pods**
 - **Multiple Sizing Strategies**: Adaptive, conservative, aggressive, and custom modes
 - **Multi-Source Metrics**: Supports Metrics Server and Prometheus
 - **Intelligent Validation**: Respects node capacity, quotas, and limit ranges
@@ -394,7 +394,6 @@ spec:
 | Limitation | Description | Workaround |
 |------------|-------------|------------|
 | **K8s Version** | Requires 1.33+ for in-place resize | Use restart-based resizing |
-| **Memory Decrease** | Requires pod restart | Schedule during maintenance |
 | **Init Containers** | Not supported | Exclude pods with init containers |
 | **Ephemeral Containers** | Not supported | Exclude debug pods |
 | **Max Concurrent** | 10 resize operations | Increase in config if needed |
@@ -446,7 +445,7 @@ kubectl create configmap grafana-dashboard \
 ### General Questions
 
 **Q: Will Right-Sizer cause downtime?**
-A: With Kubernetes 1.33+, CPU adjustments use in-place resizing without downtime. Memory decreases still require pod restarts.
+A: With Kubernetes 1.33+, CPU adjustments use in-place resizing without downtime.
 
 **Q: How does it differ from VPA (Vertical Pod Autoscaler)?**
 A: Right-Sizer offers more control, custom policies, better production safety features, and works alongside HPA. It's designed for production use with extensive safety mechanisms.
@@ -469,7 +468,7 @@ A: Yes, Right-Sizer adjusts vertical resources while HPA handles horizontal scal
 A: Existing pod resources remain unchanged. The operator resumes monitoring when it restarts.
 
 **Q: Can it handle stateful workloads?**
-A: Yes, with appropriate conservative policies and restart windows configured.
+A: Yes, with appropriate policies.
 
 **Q: Is there a rollback mechanism?**
 A: Yes, you can enable dry-run mode, use audit logs to track changes, and manually revert if needed.
