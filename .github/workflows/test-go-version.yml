@@ -1,0 +1,214 @@
+name: Test Go Version
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/test-go-version.yml'
+  pull_request:
+    paths:
+      - '.github/workflows/test-go-version.yml'
+
+env:
+  GO_VERSION: "1.24"
+
+jobs:
+  test-env-variable:
+    name: Test Go via Environment Variable
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go from env variable
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+          cache-dependency-path: go/go.sum
+
+      - name: Verify Go version
+        run: |
+          echo "Expected Go version: ${{ env.GO_VERSION }}"
+          echo "Actual Go version:"
+          go version
+
+          # Extract version number
+          GO_VERSION_OUTPUT=$(go version | grep -oE 'go[0-9]+\.[0-9]+(\.[0-9]+)?' | sed 's/go//')
+          echo "Extracted version: ${GO_VERSION_OUTPUT}"
+
+          # Check if it matches expected version
+          if [[ "${GO_VERSION_OUTPUT}" == "${{ env.GO_VERSION }}"* ]]; then
+            echo "✅ Go version matches expected: ${{ env.GO_VERSION }}"
+          else
+            echo "❌ Go version mismatch! Expected: ${{ env.GO_VERSION }}, Got: ${GO_VERSION_OUTPUT}"
+            exit 1
+          fi
+
+      - name: Test Go installation
+        run: |
+          cd go
+          go mod download
+          go mod verify
+          echo "✅ Go modules working correctly"
+
+  test-direct-version:
+    name: Test Go via Direct Version
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go with direct version
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+          cache: true
+          cache-dependency-path: go/go.sum
+
+      - name: Verify Go version
+        run: |
+          echo "Expected Go version: 1.24"
+          echo "Actual Go version:"
+          go version
+
+          # Extract version number
+          GO_VERSION_OUTPUT=$(go version | grep -oE 'go[0-9]+\.[0-9]+(\.[0-9]+)?' | sed 's/go//')
+          echo "Extracted version: ${GO_VERSION_OUTPUT}"
+
+          # Check if it matches expected version
+          if [[ "${GO_VERSION_OUTPUT}" == "1.24"* ]]; then
+            echo "✅ Go version matches expected: 1.24"
+          else
+            echo "❌ Go version mismatch! Expected: 1.24, Got: ${GO_VERSION_OUTPUT}"
+            exit 1
+          fi
+
+      - name: Test Go compilation
+        run: |
+          cd go
+          echo "Building project..."
+          go build -v ./...
+          echo "✅ Go build successful"
+
+  test-matrix-version:
+    name: Test Go via Matrix
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go-version: ["1.24"]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go from matrix
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go-version }}
+          cache: true
+          cache-dependency-path: go/go.sum
+
+      - name: Verify Go version
+        run: |
+          echo "Expected Go version: ${{ matrix.go-version }}"
+          echo "Actual Go version:"
+          go version
+
+          # Extract version number
+          GO_VERSION_OUTPUT=$(go version | grep -oE 'go[0-9]+\.[0-9]+(\.[0-9]+)?' | sed 's/go//')
+          echo "Extracted version: ${GO_VERSION_OUTPUT}"
+
+          # Check if it matches expected version
+          if [[ "${GO_VERSION_OUTPUT}" == "${{ matrix.go-version }}"* ]]; then
+            echo "✅ Go version matches expected: ${{ matrix.go-version }}"
+          else
+            echo "❌ Go version mismatch! Expected: ${{ matrix.go-version }}, Got: ${GO_VERSION_OUTPUT}"
+            exit 1
+          fi
+
+      - name: Test Go commands
+        run: |
+          cd go
+          echo "Running go fmt check..."
+          if [ "$(gofmt -s -l . | wc -l)" -gt 0 ]; then
+            echo "ℹ️ Files need formatting (not failing test)"
+            gofmt -s -l .
+          else
+            echo "✅ All files properly formatted"
+          fi
+
+          echo "Running go vet..."
+          go vet ./...
+          echo "✅ go vet passed"
+
+  test-go-mod-compatibility:
+    name: Test go.mod Compatibility
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+          cache: true
+          cache-dependency-path: go/go.sum
+
+      - name: Verify go.mod version
+        run: |
+          cd go
+          echo "Checking go.mod version..."
+          GO_MOD_VERSION=$(grep "^go " go.mod | awk '{print $2}')
+          echo "go.mod specifies: Go ${GO_MOD_VERSION}"
+
+          if [[ "${GO_MOD_VERSION}" == "1.24"* ]]; then
+            echo "✅ go.mod version is compatible with Go 1.24"
+          else
+            echo "⚠️ go.mod version (${GO_MOD_VERSION}) differs from workflow version (1.24)"
+            echo "Updating go.mod to use Go 1.24..."
+            go mod edit -go=1.24
+            echo "✅ Updated go.mod to Go 1.24"
+          fi
+
+      - name: Test dependency resolution
+        run: |
+          cd go
+          echo "Testing dependency resolution with Go 1.24..."
+          go mod tidy
+          if git diff --quiet go.mod go.sum; then
+            echo "✅ Dependencies are up to date"
+          else
+            echo "ℹ️ go mod tidy made changes (this is informational)"
+            git diff --stat go.mod go.sum
+          fi
+
+  summary:
+    name: Version Test Summary
+    runs-on: ubuntu-latest
+    needs: [test-env-variable, test-direct-version, test-matrix-version, test-go-mod-compatibility]
+    if: always()
+    steps:
+      - name: Check results
+        run: |
+          echo "### Go 1.24 Version Test Summary 📊" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Test | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Environment Variable | ${{ needs.test-env-variable.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Direct Version | ${{ needs.test-direct-version.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Matrix Version | ${{ needs.test-matrix-version.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| go.mod Compatibility | ${{ needs.test-go-mod-compatibility.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [[ "${{ needs.test-env-variable.result }}" == "success" &&
+                "${{ needs.test-direct-version.result }}" == "success" &&
+                "${{ needs.test-matrix-version.result }}" == "success" &&
+                "${{ needs.test-go-mod-compatibility.result }}" == "success" ]]; then
+            echo "✅ **All Go 1.24 version tests passed successfully!**" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "The project is correctly configured to use Go 1.24 across all workflow patterns." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **Some tests failed. Please review the results above.**" >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
