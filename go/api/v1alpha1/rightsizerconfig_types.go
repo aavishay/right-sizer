@@ -226,11 +226,6 @@ type GlobalConstraintsSpec struct {
 	// +kubebuilder:validation:Minimum=1
 	MaxConcurrentResizes int32 `json:"maxConcurrentResizes,omitempty"`
 
-	// MaxRestartsPerHour global limit for pod restarts
-	// +kubebuilder:default=5
-	// +kubebuilder:validation:Minimum=0
-	MaxRestartsPerHour int32 `json:"maxRestartsPerHour,omitempty"`
-
 	// RespectPDB globally ensures PodDisruptionBudgets are respected
 	// +kubebuilder:default=true
 	RespectPDB bool `json:"respectPDB,omitempty"`

@@ -277,7 +277,6 @@ spec:
     maxChangePercentage: 50
     cooldownPeriod: "5m"
     maxConcurrentResizes: 10
-    maxRestartsPerHour: 5
     respectPDB: true
     respectHPA: true
 ```
@@ -314,7 +313,6 @@ spec:
   constraints:
     maxChangePercentage: 25
     cooldownPeriod: "30m"
-    maxRestartsPerHour: 2
 ```
 
 ### Configuration Modes
@@ -393,7 +391,7 @@ spec:
 
 | Limitation | Description | Workaround |
 |------------|-------------|------------|
-| **K8s Version** | Requires 1.33+ for in-place resize | Use restart-based resizing |
+| **K8s Version** | Requires 1.33+ for in-place resize | No workaround - operator requires K8s 1.33+ |
 | **Init Containers** | Not supported | Exclude pods with init containers |
 | **Ephemeral Containers** | Not supported | Exclude debug pods |
 | **Max Concurrent** | 10 resize operations | Increase in config if needed |
@@ -465,7 +463,7 @@ A: By default, it evaluates every 30 seconds with a 5-minute cooldown between ch
 A: Yes, Right-Sizer adjusts vertical resources while HPA handles horizontal scaling. They complement each other.
 
 **Q: What happens during operator downtime?**
-A: Existing pod resources remain unchanged. The operator resumes monitoring when it restarts.
+A: Existing pod resources remain unchanged. The operator resumes monitoring when it starts again.
 
 **Q: Can it handle stateful workloads?**
 A: Yes, with appropriate policies.
@@ -502,13 +500,12 @@ kubectl apply -f helm/crds/
 kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
 ```
 
-#### 3. Too many pod restarts
+#### 3. Too many resize operations
 ```yaml
-# Adjust configuration
 spec:
   globalConstraints:
-    maxRestartsPerHour: 2  # Reduce from default
-    cooldownPeriod: "15m"  # Increase from default
+    maxConcurrentResizes: 5  # Reduce concurrent operations
+    cooldownPeriod: "15m"   # Increase cooldown between resizes
 ```
 
 ### Debug Commands

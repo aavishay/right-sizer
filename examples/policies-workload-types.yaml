@@ -11,7 +11,7 @@ metadata:
   namespace: right-sizer
 spec:
   enabled: true
-  priority: 200  # Higher priority than default
+  priority: 200 # Higher priority than default
   mode: conservative
   dryRun: false
 
@@ -26,34 +26,34 @@ spec:
         tier: web
         environment: production
     excludeNames:
-      - legacy-app  # Exclude legacy application
+      - legacy-app # Exclude legacy application
 
   # Conservative resource strategy for production
   resourceStrategy:
     cpu:
-      requestMultiplier: 1.5       # 50% buffer for stability
-      requestAddition: 200         # 200m baseline for web servers
-      limitMultiplier: 3.0         # 3x headroom for traffic spikes
-      limitAddition: 500           # Extra 500m for burst capacity
-      minRequest: 100              # Minimum 100m CPU
-      maxLimit: 8000               # Max 8 cores
-      targetUtilization: 70        # Target 70% CPU utilization
+      requestMultiplier: 1.5 # 50% buffer for stability
+      requestAddition: 200 # 200m baseline for web servers
+      limitMultiplier: 3.0 # 3x headroom for traffic spikes
+      limitAddition: 500 # Extra 500m for burst capacity
+      minRequest: 100 # Minimum 100m CPU
+      maxLimit: 8000 # Max 8 cores
+      targetUtilization: 70 # Target 70% CPU utilization
     memory:
-      requestMultiplier: 1.4       # 40% buffer
-      requestAddition: 512         # 512MB baseline for web processes
-      limitMultiplier: 2.5         # 2.5x headroom
-      limitAddition: 1024          # Extra 1GB for caching
-      minRequest: 256              # Minimum 256MB
-      maxLimit: 16384              # Max 16GB
-      targetUtilization: 75        # Target 75% memory utilization
+      requestMultiplier: 1.4 # 40% buffer
+      requestAddition: 512 # 512MB baseline for web processes
+      limitMultiplier: 2.5 # 2.5x headroom
+      limitAddition: 1024 # Extra 1GB for caching
+      minRequest: 256 # Minimum 256MB
+      maxLimit: 16384 # Max 16GB
+      targetUtilization: 75 # Target 75% memory utilization
     metricsSource: prometheus
     prometheusConfig:
       url: "http://prometheus.monitoring:9090"
       cpuQuery: 'avg_over_time(container_cpu_usage_seconds_total{namespace="production",pod=~"{{ .PodName }}"}[7d])'
       memoryQuery: 'avg_over_time(container_memory_working_set_bytes{namespace="production",pod=~"{{ .PodName }}"}[7d])'
     historyWindow: "7d"
-    percentile: 99                # Use 99th percentile for production
-    updateMode: rolling            # Rolling updates only
+    percentile: 99 # Use 99th percentile for production
+    updateMode: rolling # Rolling updates only
 
   # Schedule for business hours optimization
   schedule:
@@ -66,13 +66,12 @@ spec:
 
   # Strict constraints for production
   constraints:
-    maxChangePercentage: 30       # Max 30% change at once
-    minChangeThreshold: 10         # Don't apply changes less than 10%
-    cooldownPeriod: "10m"          # 10 minute cooldown
-    maxRestartsPerHour: 2          # Max 2 restarts per hour
-    respectPDB: true               # Always respect PDBs
-    respectHPA: true               # Don't conflict with HPA
-    respectVPA: false              # We're replacing VPA
+    maxChangePercentage: 30 # Max 30% change at once
+    minChangeThreshold: 10 # Don't apply changes less than 10%
+    cooldownPeriod: "10m" # 10 minute cooldown
+    respectPDB: true # Always respect PDBs
+    respectHPA: true # Don't conflict with HPA
+    respectVPA: false # We're replacing VPA
 
   # Webhook notifications for changes
   webhooks:
@@ -100,7 +99,7 @@ metadata:
   namespace: right-sizer
 spec:
   enabled: true
-  priority: 50  # Lower priority
+  priority: 50 # Lower priority
   mode: aggressive
   dryRun: false
 
@@ -119,34 +118,33 @@ spec:
 
   resourceStrategy:
     cpu:
-      requestMultiplier: 1.05      # Only 5% buffer
-      requestAddition: 0           # No baseline
-      limitMultiplier: 1.5         # 1.5x limit
+      requestMultiplier: 1.05 # Only 5% buffer
+      requestAddition: 0 # No baseline
+      limitMultiplier: 1.5 # 1.5x limit
       limitAddition: 0
-      minRequest: 10               # Very low minimum
-      maxLimit: 2000               # Max 2 cores in dev
+      minRequest: 10 # Very low minimum
+      maxLimit: 2000 # Max 2 cores in dev
     memory:
       requestMultiplier: 1.05
       requestAddition: 0
       limitMultiplier: 1.5
       limitAddition: 0
       minRequest: 32
-      maxLimit: 4096               # Max 4GB in dev
-    metricsSource: metrics-server  # Use simple metrics-server
-    historyWindow: "1d"            # Only consider 1 day
-    percentile: 90                 # 90th percentile is fine for dev
-    updateMode: immediate          # Apply immediately
+      maxLimit: 4096 # Max 4GB in dev
+    metricsSource: metrics-server # Use simple metrics-server
+    historyWindow: "1d" # Only consider 1 day
+    percentile: 90 # 90th percentile is fine for dev
+    updateMode: immediate # Apply immediately
 
   schedule:
-    interval: "30s"                # Check frequently
+    interval: "30s" # Check frequently
 
   constraints:
-    maxChangePercentage: 70        # Allow large changes
-    minChangeThreshold: 2          # Apply even tiny optimizations
-    cooldownPeriod: "1m"           # Short cooldown
-    maxRestartsPerHour: 10         # Allow frequent restarts
-    respectPDB: false              # Ignore PDBs in dev
-    respectHPA: false              # Ignore HPA in dev
+    maxChangePercentage: 70 # Allow large changes
+    minChangeThreshold: 2 # Apply even tiny optimizations
+    cooldownPeriod: "1m" # Short cooldown
+    respectPDB: false # Ignore PDBs in dev
+    respectHPA: false # Ignore HPA in dev
 
 ---
 # Policy 3: Batch Jobs
@@ -173,22 +171,22 @@ spec:
 
   resourceStrategy:
     cpu:
-      requestMultiplier: 1.2       # Some buffer
-      requestAddition: 500         # 500m base for batch processing
-      limitMultiplier: 4.0         # 4x for burst processing
-      limitAddition: 1000          # Extra 1 core for spikes
+      requestMultiplier: 1.2 # Some buffer
+      requestAddition: 500 # 500m base for batch processing
+      limitMultiplier: 4.0 # 4x for burst processing
+      limitAddition: 1000 # Extra 1 core for spikes
       minRequest: 500
-      maxLimit: 16000              # Allow up to 16 cores for batch
+      maxLimit: 16000 # Allow up to 16 cores for batch
     memory:
-      requestMultiplier: 1.3       # Memory buffer for data
-      requestAddition: 2048        # 2GB base for data loading
-      limitMultiplier: 3.0         # 3x for large datasets
-      limitAddition: 4096          # Extra 4GB for processing
+      requestMultiplier: 1.3 # Memory buffer for data
+      requestAddition: 2048 # 2GB base for data loading
+      limitMultiplier: 3.0 # 3x for large datasets
+      limitAddition: 4096 # Extra 4GB for processing
       minRequest: 1024
-      maxLimit: 65536              # Allow up to 64GB for large batches
+      maxLimit: 65536 # Allow up to 64GB for large batches
     historyWindow: "3d"
     percentile: 95
-    updateMode: immediate          # Jobs can be updated immediately
+    updateMode: immediate # Jobs can be updated immediately
 
   schedule:
     interval: "1m"
@@ -196,16 +194,24 @@ spec:
     timeWindows:
       - start: "00:00"
         end: "06:00"
-        daysOfWeek: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+        daysOfWeek:
+          [
+            "Monday",
+            "Tuesday",
+            "Wednesday",
+            "Thursday",
+            "Friday",
+            "Saturday",
+            "Sunday",
+          ]
         timezone: "UTC"
 
   constraints:
-    maxChangePercentage: 80        # Allow large changes for batch
+    maxChangePercentage: 80 # Allow large changes for batch
     minChangeThreshold: 5
     cooldownPeriod: "2m"
-    maxRestartsPerHour: 5          # Jobs can restart more often
-    respectPDB: false              # PDBs don't apply to jobs
-    respectHPA: false              # HPA doesn't apply to jobs
+    respectPDB: false # PDBs don't apply to jobs
+    respectHPA: false # HPA doesn't apply to jobs
 
 ---
 # Policy 4: StatefulSets (Databases)
@@ -217,9 +223,9 @@ metadata:
   namespace: right-sizer
 spec:
   enabled: true
-  priority: 300  # Very high priority
+  priority: 300 # Very high priority
   mode: conservative
-  dryRun: true   # Start with dry-run for databases
+  dryRun: true # Start with dry-run for databases
 
   targetRef:
     kind: StatefulSet
@@ -230,44 +236,43 @@ spec:
       matchLabels:
         tier: database
     annotationSelector:
-      rightsizer.io/enabled: "true"  # Require explicit opt-in
+      rightsizer.io/enabled: "true" # Require explicit opt-in
 
   resourceStrategy:
     cpu:
-      requestMultiplier: 1.8       # High buffer for databases
-      requestAddition: 1000        # 1 core baseline
-      limitMultiplier: 2.5         # Reasonable limit
-      limitAddition: 2000          # Extra 2 cores
-      minRequest: 1000             # Minimum 1 core
-      maxLimit: 32000              # Max 32 cores
-      targetUtilization: 60        # Keep utilization low
+      requestMultiplier: 1.8 # High buffer for databases
+      requestAddition: 1000 # 1 core baseline
+      limitMultiplier: 2.5 # Reasonable limit
+      limitAddition: 2000 # Extra 2 cores
+      minRequest: 1000 # Minimum 1 core
+      maxLimit: 32000 # Max 32 cores
+      targetUtilization: 60 # Keep utilization low
     memory:
-      requestMultiplier: 1.5       # Memory is critical for databases
-      requestAddition: 4096        # 4GB baseline
-      limitMultiplier: 2.0         # Don't overcommit memory
-      limitAddition: 8192          # Extra 8GB for cache
-      minRequest: 2048             # Minimum 2GB
-      maxLimit: 131072             # Max 128GB
+      requestMultiplier: 1.5 # Memory is critical for databases
+      requestAddition: 4096 # 4GB baseline
+      limitMultiplier: 2.0 # Don't overcommit memory
+      limitAddition: 8192 # Extra 8GB for cache
+      minRequest: 2048 # Minimum 2GB
+      maxLimit: 131072 # Max 128GB
       targetUtilization: 70
     metricsSource: prometheus
     prometheusConfig:
       url: "http://prometheus.monitoring:9090"
       cpuQuery: 'avg_over_time(container_cpu_usage_seconds_total{namespace="databases",pod=~"{{ .PodName }}"}[30d])'
       memoryQuery: 'avg_over_time(container_memory_working_set_bytes{namespace="databases",pod=~"{{ .PodName }}"}[30d])'
-    historyWindow: "30d"           # Long history for databases
-    percentile: 99                 # Very conservative percentile
-    updateMode: scheduled          # Only during maintenance windows
+    historyWindow: "30d" # Long history for databases
+    percentile: 99 # Very conservative percentile
+    updateMode: scheduled # Only during maintenance windows
 
   schedule:
-    interval: "1h"                 # Check hourly
-    cronSchedule: "0 2 * * 0"      # Apply changes Sunday 2 AM
+    interval: "1h" # Check hourly
+    cronSchedule: "0 2 * * 0" # Apply changes Sunday 2 AM
 
   constraints:
-    maxChangePercentage: 20        # Small changes only
-    minChangeThreshold: 15         # Don't apply tiny changes
-    cooldownPeriod: "1h"           # Long cooldown
-    maxRestartsPerHour: 1          # Minimize restarts
-    respectPDB: true               # Always respect PDBs
+    maxChangePercentage: 20 # Small changes only
+    minChangeThreshold: 15 # Don't apply tiny changes
+    cooldownPeriod: "1h" # Long cooldown
+    respectPDB: true # Always respect PDBs
     respectHPA: true
     respectVPA: true
 
@@ -298,19 +303,19 @@ spec:
 
   resourceStrategy:
     cpu:
-      requestMultiplier: 1.3       # CPU often underutilized with GPU
-      requestAddition: 2000        # 2 cores for data preprocessing
+      requestMultiplier: 1.3 # CPU often underutilized with GPU
+      requestAddition: 2000 # 2 cores for data preprocessing
       limitMultiplier: 2.0
-      limitAddition: 4000          # Extra for data loading spikes
-      minRequest: 2000             # Minimum 2 cores
-      maxLimit: 64000              # Max 64 cores
+      limitAddition: 4000 # Extra for data loading spikes
+      minRequest: 2000 # Minimum 2 cores
+      maxLimit: 64000 # Max 64 cores
     memory:
-      requestMultiplier: 1.4       # Memory for model and data
-      requestAddition: 8192        # 8GB baseline
+      requestMultiplier: 1.4 # Memory for model and data
+      requestAddition: 8192 # 8GB baseline
       limitMultiplier: 2.0
-      limitAddition: 16384         # Extra 16GB for large models
-      minRequest: 8192             # Minimum 8GB
-      maxLimit: 262144             # Max 256GB for large models
+      limitAddition: 16384 # Extra 16GB for large models
+      minRequest: 8192 # Minimum 8GB
+      maxLimit: 262144 # Max 256GB for large models
     metricsSource: custom
     historyWindow: "14d"
     percentile: 95
@@ -328,10 +333,9 @@ spec:
   constraints:
     maxChangePercentage: 40
     minChangeThreshold: 10
-    cooldownPeriod: "30m"          # Longer cooldown for ML
-    maxRestartsPerHour: 1          # Avoid interrupting training
+    cooldownPeriod: "30m" # Longer cooldown for ML
     respectPDB: true
-    respectHPA: false              # We handle scaling
+    respectHPA: false # We handle scaling
 
 ---
 # Policy 6: Microservices with Service Mesh
@@ -362,16 +366,16 @@ spec:
   resourceStrategy:
     cpu:
       requestMultiplier: 1.2
-      requestAddition: 100         # Account for sidecar overhead
+      requestAddition: 100 # Account for sidecar overhead
       limitMultiplier: 2.5
-      limitAddition: 200           # Extra for sidecar spikes
+      limitAddition: 200 # Extra for sidecar spikes
       minRequest: 50
       maxLimit: 4000
     memory:
       requestMultiplier: 1.3
-      requestAddition: 256         # Account for sidecar memory
+      requestAddition: 256 # Account for sidecar memory
       limitMultiplier: 2.0
-      limitAddition: 512           # Extra for sidecar buffers
+      limitAddition: 512 # Extra for sidecar buffers
       minRequest: 128
       maxLimit: 8192
     metricsSource: prometheus
@@ -391,7 +395,6 @@ spec:
     maxChangePercentage: 50
     minChangeThreshold: 8
     cooldownPeriod: "5m"
-    maxRestartsPerHour: 3
     respectPDB: true
     respectHPA: true
 
@@ -402,7 +405,7 @@ apiVersion: rightsizer.io/v1alpha1
 kind: RightSizerPolicy
 metadata:
   name: cross-namespace-optimization
-  namespace: right-sizer  # Policy in system namespace
+  namespace: right-sizer # Policy in system namespace
 spec:
   enabled: true
   priority: 75
@@ -455,6 +458,5 @@ spec:
     maxChangePercentage: 60
     minChangeThreshold: 5
     cooldownPeriod: "5m"
-    maxRestartsPerHour: 4
     respectPDB: true
     respectHPA: true

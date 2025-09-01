@@ -153,8 +153,8 @@ kubectl get events --sort-by='.lastTimestamp' | grep resize
 # Check pod resources before and after
 kubectl get pod demo-app-xxx -o jsonpath='{.spec.containers[0].resources}'
 
-# Verify no restarts during resize (in-place feature)
-kubectl get pod demo-app-xxx -o jsonpath='{.status.containerStatuses[0].restartCount}'
+# The operator uses in-place resizing - pods are NEVER restarted
+# Resources are adjusted dynamically without any pod disruption
 ```
 
 ## Minikube Development

@@ -300,10 +300,6 @@ type ResourceConstraints struct {
 	// +kubebuilder:default="5m"
 	CooldownPeriod string `json:"cooldownPeriod,omitempty"`
 
-	// MaxRestartsPerHour limits pod restarts due to resizing
-	// +kubebuilder:validation:Minimum=0
-	MaxRestartsPerHour *int32 `json:"maxRestartsPerHour,omitempty"`
-
 	// RespectPDB ensures PodDisruptionBudgets are respected
 	// +kubebuilder:default=true
 	RespectPDB bool `json:"respectPDB,omitempty"`

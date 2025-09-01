@@ -59,8 +59,7 @@ spec:
     maxChangePercentage: 50
     minChangeThreshold: 5
     cooldownPeriod: "5m"
-    maxConcurrentResizes: 10  # Different from maxConcurrentReconciles - this is for actual resize operations
-    maxRestartsPerHour: 5
+    maxConcurrentResizes: 10 # Different from maxConcurrentReconciles - this is for actual resize operations
 
   # Monitoring configuration
   monitoring:
@@ -80,9 +79,9 @@ metadata:
   namespace: right-sizer
 spec:
   operatorConfig:
-    qps: 10                      # Lower QPS for small clusters
-    burst: 15                    # 1.5x QPS
-    maxConcurrentReconciles: 2   # Process fewer pods concurrently
+    qps: 10 # Lower QPS for small clusters
+    burst: 15 # 1.5x QPS
+    maxConcurrentReconciles: 2 # Process fewer pods concurrently
     workerThreads: 3
 
 ---
@@ -94,9 +93,9 @@ metadata:
   namespace: right-sizer
 spec:
   operatorConfig:
-    qps: 30                      # Moderate QPS
-    burst: 50                    # ~1.7x QPS
-    maxConcurrentReconciles: 5   # Process more pods concurrently
+    qps: 30 # Moderate QPS
+    burst: 50 # ~1.7x QPS
+    maxConcurrentReconciles: 5 # Process more pods concurrently
     workerThreads: 8
 
 ---
@@ -108,11 +107,11 @@ metadata:
   namespace: right-sizer
 spec:
   operatorConfig:
-    qps: 50                      # Higher QPS for large clusters
-    burst: 100                   # 2x QPS for handling spikes
-    maxConcurrentReconciles: 10  # Process many pods concurrently
+    qps: 50 # Higher QPS for large clusters
+    burst: 100 # 2x QPS for handling spikes
+    maxConcurrentReconciles: 10 # Process many pods concurrently
     workerThreads: 15
-    reconcileInterval: "15m"     # Less frequent reconciliation to reduce load
+    reconcileInterval: "15m" # Less frequent reconciliation to reduce load
 
 ---
 # High-Performance Configuration (for clusters with powerful API servers)
@@ -123,12 +122,12 @@ metadata:
   namespace: right-sizer
 spec:
   operatorConfig:
-    qps: 100                     # High QPS for fast processing
-    burst: 200                   # 2x QPS
-    maxConcurrentReconciles: 15  # Many concurrent operations
+    qps: 100 # High QPS for fast processing
+    burst: 200 # 2x QPS
+    maxConcurrentReconciles: 15 # Many concurrent operations
     workerThreads: 20
-    maxRetries: 5                # More retries for reliability
-    retryInterval: "3s"          # Shorter retry interval
+    maxRetries: 5 # More retries for reliability
+    retryInterval: "3s" # Shorter retry interval
 
 ---
 # Conservative Configuration (for shared/multi-tenant clusters)
@@ -139,14 +138,14 @@ metadata:
   namespace: right-sizer
 spec:
   operatorConfig:
-    qps: 5                       # Very low QPS to minimize impact
-    burst: 10                    # 2x QPS but still low
-    maxConcurrentReconciles: 1   # Process one pod at a time
+    qps: 5 # Very low QPS to minimize impact
+    burst: 10 # 2x QPS but still low
+    maxConcurrentReconciles: 1 # Process one pod at a time
     workerThreads: 2
-    reconcileInterval: "30m"     # Infrequent reconciliation
-    maxRetries: 2                # Fewer retries to reduce load
-    retryInterval: "10s"         # Longer wait between retries
+    reconcileInterval: "30m" # Infrequent reconciliation
+    maxRetries: 2 # Fewer retries to reduce load
+    retryInterval: "10s" # Longer wait between retries
 
   globalConstraints:
-    maxConcurrentResizes: 3      # Limit concurrent resize operations
-    cooldownPeriod: "10m"        # Longer cooldown between changes
+    maxConcurrentResizes: 3 # Limit concurrent resize operations
+    cooldownPeriod: "10m" # Longer cooldown between changes
