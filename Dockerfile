@@ -2,45 +2,67 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
 # Build stage
-FROM golang:1.24-alpine AS builder
+FROM --platform=$BUILDPLATFORM golang:1.24-alpine AS builder
 
-WORKDIR /app
+# Build arguments for cross-compilation
+ARG TARGETOS
+ARG TARGETARCH
+ARG VERSION=dev
+ARG BUILD_DATE
+ARG GIT_COMMIT
 
-# Install git (needed for go mod)
-RUN apk add --no-cache git
+# Install build dependencies
+RUN apk add --no-cache git ca-certificates tzdata
 
-# Copy go mod and sum files
+WORKDIR /build
+
+# Copy go mod files first for better caching
 COPY go/go.mod go/go.sum ./
 
-# Download dependencies
-RUN go mod download
+# Download dependencies - this layer is cached as long as go.mod/go.sum don't change
+RUN --mount=type=cache,target=/go/pkg/mod \
+  go mod download && \
+  go mod verify
 
 # Copy source code
 COPY go/ .
 
-# Build the binary
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o right-sizer main.go
+# Build the binary with caching
+# Use cache mounts for faster builds
+RUN --mount=type=cache,target=/go/pkg/mod \
+  --mount=type=cache,target=/root/.cache/go-build \
+  CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} \
+  go build -a -installsuffix cgo \
+  -ldflags="-w -s -X main.Version=${VERSION} -X main.BuildDate=${BUILD_DATE} -X main.GitCommit=${GIT_COMMIT}" \
+  -o right-sizer main.go && \
+  chmod +x right-sizer
 
-# Final stage
-FROM alpine:3.18
+# Final stage - use distroless for minimal size and security
+FROM gcr.io/distroless/static:nonroot
 
-# Install ca-certificates for HTTPS requests
-RUN apk --no-cache add ca-certificates
+# Labels for OCI compliance
+LABEL org.opencontainers.image.title="Right-Sizer" \
+  org.opencontainers.image.description="Kubernetes operator for automatic pod resource right-sizing" \
+  org.opencontainers.image.vendor="Right-Sizer Contributors" \
+  org.opencontainers.image.licenses="AGPL-3.0-or-later" \
+  org.opencontainers.image.version="${VERSION}" \
+  org.opencontainers.image.revision="${GIT_COMMIT}" \
+  org.opencontainers.image.created="${BUILD_DATE}"
 
-# Create non-root user first
-RUN adduser -D -s /bin/sh appuser
+# Copy the binary from builder
+COPY --from=builder /build/right-sizer /app/right-sizer
+
+# Use nonroot user (UID 65532)
+USER nonroot:nonroot
 
 WORKDIR /app
 
-# Copy the binary from builder stage and ensure it's executable
-COPY --from=builder --chown=appuser:appuser /app/right-sizer /app/right-sizer
-RUN chmod +x /app/right-sizer
-
-# Switch to non-root user
-USER appuser
-
-# Expose health check port
+# Expose metrics and health check port
 EXPOSE 8081
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD ["/app/right-sizer", "--health-check"]
 
 # Run the binary
 ENTRYPOINT ["/app/right-sizer"]

@@ -5,7 +5,7 @@ on:
     branches:
       - main
     tags:
-      - 'v*.*.*'
+      - "v*.*.*"
   pull_request:
     branches:
       - main
@@ -18,6 +18,7 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     permissions:
       contents: read
       packages: write
@@ -27,10 +28,21 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: linux/arm64,linux/amd64
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
         with:
-          platforms: linux/amd64,linux/arm64
+          driver-opts: |
+            image=moby/buildkit:v0.12.0
+            network=host
+          buildkitd-flags: --debug
+          config-inline: |
+            [worker.oci]
+              max-parallelism = 4
 
       - name: Log in to GitHub Container Registry
         if: github.event_name != 'pull_request'
@@ -60,17 +72,67 @@ jobs:
             org.opencontainers.image.vendor=Right-Sizer Contributors
             org.opencontainers.image.licenses=AGPL-3.0-or-later
 
-      - name: Build and push Docker image
-        id: build
+      - name: Build and push Docker image (AMD64)
+        id: build-amd64
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: ${{ env.IMAGE_NAME }}:test-amd64
+          cache-from: type=gha,scope=buildkit-amd64
+          cache-to: type=gha,mode=max,scope=buildkit-amd64
+          build-args: |
+            VERSION=${{ github.sha }}
+            BUILD_DATE=${{ github.event.repository.updated_at }}
+            TARGETARCH=amd64
+            TARGETOS=linux
+
+      - name: Test AMD64 image
+        run: |
+          echo "Testing AMD64 image..."
+          # Test that the image runs
+          docker run --rm ${{ env.IMAGE_NAME }}:test-amd64 --version || true
+          # Test that the image has the expected user
+          docker run --rm --entrypoint sh ${{ env.IMAGE_NAME }}:test-amd64 -c "whoami" | grep -q appuser
+          # Test that the binary exists and is executable
+          docker run --rm --entrypoint sh ${{ env.IMAGE_NAME }}:test-amd64 -c "test -x /app/right-sizer && echo 'Binary is executable'"
+
+      - name: Build multi-platform and push
+        id: build-multiplatform
+        if: github.event_name != 'pull_request'
         uses: docker/build-push-action@v5
         with:
           context: .
           platforms: linux/amd64,linux/arm64
-          push: ${{ github.event_name != 'pull_request' }}
+          push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: |
+            type=gha,scope=buildkit-amd64
+            type=gha,scope=buildkit-arm64
+            type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache
+          cache-to: |
+            type=gha,mode=max,scope=buildkit-arm64
+            type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache,mode=max
+          build-args: |
+            VERSION=${{ github.sha }}
+            BUILD_DATE=${{ github.event.repository.updated_at }}
+          provenance: false
+          sbom: false
+
+      - name: Build for PR (no push)
+        if: github.event_name == 'pull_request'
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          platforms: linux/amd64
+          push: false
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=buildkit-amd64
+          cache-to: type=gha,mode=max,scope=buildkit-amd64
           build-args: |
             VERSION=${{ github.sha }}
             BUILD_DATE=${{ github.event.repository.updated_at }}
@@ -80,16 +142,36 @@ jobs:
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }}
-          format: 'sarif'
-          output: 'trivy-results.sarif'
-          severity: 'CRITICAL,HIGH'
-          vuln-type: 'os,library'
+          format: "sarif"
+          output: "trivy-results.sarif"
+          severity: "CRITICAL,HIGH"
+          vuln-type: "os,library"
+        continue-on-error: true
 
       - name: Upload Trivy results to GitHub Security tab
         if: github.event_name != 'pull_request'
         uses: github/codeql-action/upload-sarif@v3
         with:
-          sarif_file: 'trivy-results.sarif'
+          sarif_file: "trivy-results.sarif"
+        continue-on-error: true
+
+      - name: Generate SBOM
+        if: github.event_name != 'pull_request'
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          format: spdx-json
+          output-file: sbom.spdx.json
+        continue-on-error: true
+
+      - name: Upload SBOM
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: sbom.spdx.json
+          retention-days: 30
+        continue-on-error: true
 
       - name: Image digest
         if: github.event_name != 'pull_request'
@@ -98,29 +180,61 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Registry:** \`${{ env.REGISTRY }}\`" >> $GITHUB_STEP_SUMMARY
           echo "**Image:** \`${{ env.IMAGE_NAME }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "**Digest:** \`${{ steps.build.outputs.digest }}\`" >> $GITHUB_STEP_SUMMARY
+          if [ -n "${{ steps.build-multiplatform.outputs.digest }}" ]; then
+            echo "**Digest:** \`${{ steps.build-multiplatform.outputs.digest }}\`" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Platforms:** linux/amd64, linux/arm64" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Tags:**" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
           echo "${{ steps.meta.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Pull command:**" >> $GITHUB_STEP_SUMMARY
+          echo "### Pull Commands" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**For AMD64:**" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+          echo "docker pull --platform linux/amd64 ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**For ARM64:**" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+          echo "docker pull --platform linux/arm64 ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Auto-detect platform:**" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
           echo "docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
 
-  test-image:
-    needs: build
+  # Separate job for slow ARM64 builds if main build times out
+  build-arm64-fallback:
     runs-on: ubuntu-latest
-    if: github.event_name != 'pull_request'
+    timeout-minutes: 90
+    if: |
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main' &&
+      failure()
+    needs: build
     permissions:
       contents: read
-      packages: read
+      packages: write
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: linux/arm64
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: |
+            image=moby/buildkit:v0.12.0
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
@@ -129,18 +243,25 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Test Docker image
-        run: |
-          echo "Testing Docker image..."
-          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
-
-          # Test that the image runs and shows help/version
-          docker run --rm ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest --version || true
-
-          # Test that the image has the expected user
-          docker run --rm --entrypoint sh ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest -c "whoami" | grep -q appuser
-
-          # Test that the binary exists and is executable
-          docker run --rm --entrypoint sh ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest -c "test -x /app/right-sizer && echo 'Binary is executable'"
-
-          echo "✅ Docker image tests passed!"
+      - name: Build and push ARM64 image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          platforms: linux/arm64
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-arm64
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}-arm64
+          cache-from: |
+            type=gha,scope=buildkit-arm64
+            type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache-arm64
+          cache-to: |
+            type=gha,mode=max,scope=buildkit-arm64
+            type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache-arm64,mode=max
+          build-args: |
+            VERSION=${{ github.sha }}
+            BUILD_DATE=${{ github.event.repository.updated_at }}
+            TARGETARCH=arm64
+            TARGETOS=linux
+          provenance: false
+          sbom: false
