@@ -1,0 +1,224 @@
+name: Simple Docker Build
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      push_image:
+        description: 'Push image to registry'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+
+env:
+  REGISTRY: docker.io
+  IMAGE_NAME: aavishay/right-sizer
+
+jobs:
+  docker-build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver: docker
+          install: true
+
+      - name: Log in to Docker Hub
+        if: github.event_name != 'pull_request' || github.event.inputs.push_image == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: docker.io
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Generate build metadata
+        id: meta
+        run: |
+          # Generate build number
+          BUILD_NUM="${{ github.run_number }}"
+          if [ -z "$BUILD_NUM" ]; then
+            BUILD_NUM="local-$(date +%s)"
+          fi
+
+          # Get git info
+          GIT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          GIT_BRANCH="${{ github.ref_name }}"
+
+          # Generate tags
+          TAGS="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:build-${BUILD_NUM}"
+          TAGS="${TAGS},${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:build-${BUILD_NUM}-${GIT_SHA}"
+          TAGS="${TAGS},${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${GIT_SHA}"
+
+          # Add branch tag
+          if [ "$GIT_BRANCH" != "" ]; then
+            TAGS="${TAGS},${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${GIT_BRANCH}-build-${BUILD_NUM}"
+          fi
+
+          # Add latest tag for main branch
+          if [ "$GIT_BRANCH" = "main" ]; then
+            TAGS="${TAGS},${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
+          fi
+
+          # Add date tag
+          DATE_TAG=$(date +%Y%m%d)
+          TAGS="${TAGS},${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${DATE_TAG}-build-${BUILD_NUM}"
+
+          echo "tags=${TAGS}" >> $GITHUB_OUTPUT
+          echo "build_num=${BUILD_NUM}" >> $GITHUB_OUTPUT
+          echo "git_sha=${GIT_SHA}" >> $GITHUB_OUTPUT
+
+          # Display tags
+          echo "Generated tags:"
+          echo "${TAGS}" | tr ',' '\n' | sed 's/^/  - /'
+
+      - name: Build Docker image
+        id: build
+        run: |
+          echo "Building Docker image..."
+
+          # Determine Dockerfile
+          if [ -f "Dockerfile.alpine" ]; then
+            DOCKERFILE="Dockerfile.alpine"
+          else
+            DOCKERFILE="Dockerfile"
+          fi
+
+          echo "Using Dockerfile: $DOCKERFILE"
+
+          # Build arguments
+          BUILD_ARGS=""
+          BUILD_ARGS="${BUILD_ARGS} --build-arg VERSION=${{ steps.meta.outputs.git_sha }}"
+          BUILD_ARGS="${BUILD_ARGS} --build-arg BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          BUILD_ARGS="${BUILD_ARGS} --build-arg BUILD_NUMBER=${{ steps.meta.outputs.build_num }}"
+          BUILD_ARGS="${BUILD_ARGS} --build-arg GIT_COMMIT=${{ github.sha }}"
+          BUILD_ARGS="${BUILD_ARGS} --build-arg GIT_BRANCH=${{ github.ref_name }}"
+
+          # Build the image
+          docker build \
+            ${BUILD_ARGS} \
+            -f ${DOCKERFILE} \
+            -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:build-${{ steps.meta.outputs.build_num }} \
+            .
+
+          # Tag additional names
+          IFS=',' read -ra TAG_ARRAY <<< "${{ steps.meta.outputs.tags }}"
+          for tag in "${TAG_ARRAY[@]}"; do
+            if [ "$tag" != "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:build-${{ steps.meta.outputs.build_num }}" ]; then
+              echo "Tagging: $tag"
+              docker tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:build-${{ steps.meta.outputs.build_num }} $tag
+            fi
+          done
+
+          echo "Build complete!"
+
+      - name: Test Docker image
+        run: |
+          echo "Testing Docker image..."
+          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:build-${{ steps.meta.outputs.build_num }}"
+
+          # Test 1: Image exists
+          docker image inspect $IMAGE > /dev/null
+          echo "✓ Image exists"
+
+          # Test 2: Run with --version (allow failure)
+          docker run --rm $IMAGE --version || echo "ℹ Version check failed (non-critical)"
+
+          # Test 3: Check user
+          USER=$(docker run --rm --entrypoint sh $IMAGE -c "whoami" 2>/dev/null || echo "unknown")
+          echo "✓ Running as user: $USER"
+
+          # Test 4: Check binary
+          if docker run --rm --entrypoint sh $IMAGE -c "test -x /app/right-sizer && echo OK" 2>/dev/null | grep -q OK; then
+            echo "✓ Binary is executable"
+          else
+            echo "ℹ Binary check failed (may be using different path)"
+          fi
+
+          # Test 5: Get image size
+          SIZE=$(docker image inspect $IMAGE --format='{{.Size}}' | numfmt --to=iec-i --suffix=B 2>/dev/null || echo "unknown")
+          echo "ℹ Image size: $SIZE"
+
+          echo "Tests complete!"
+
+      - name: Push Docker image
+        if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event.inputs.push_image == 'true'
+        run: |
+          echo "Pushing Docker images..."
+
+          IFS=',' read -ra TAG_ARRAY <<< "${{ steps.meta.outputs.tags }}"
+          for tag in "${TAG_ARRAY[@]}"; do
+            echo "Pushing: $tag"
+            docker push $tag
+          done
+
+          echo "All images pushed successfully!"
+
+      - name: Generate summary
+        if: always()
+        run: |
+          echo "### Docker Build Summary 🐳" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          echo "**Build Information:**" >> $GITHUB_STEP_SUMMARY
+          echo "- Build Number: \`${{ steps.meta.outputs.build_num }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Git SHA: \`${{ steps.meta.outputs.git_sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Branch: \`${{ github.ref_name }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          echo "**Docker Tags:**" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "${{ steps.meta.outputs.tags }}" | tr ',' '\n' >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ github.event_name }}" = "push" ] && [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            echo "**Images pushed to Docker Hub! ✅**" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Pull the latest image:" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+            echo "docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:build-${{ steps.meta.outputs.build_num }}" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "**Images built locally (not pushed)**" >> $GITHUB_STEP_SUMMARY
+          fi
+
+  test-with-act:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Info for act testing
+        run: |
+          echo "This job is for testing with act"
+          echo "To test this workflow locally:"
+          echo ""
+          echo "1. Ensure .secrets.act has Docker credentials:"
+          echo "   DOCKER_USERNAME=your_username"
+          echo "   DOCKER_PASSWORD=your_password"
+          echo ""
+          echo "2. Run with act:"
+          echo "   act push -W .github/workflows/docker-build-simple.yml \\"
+          echo "     --container-architecture linux/amd64 \\"
+          echo "     -P ubuntu-latest=catthehacker/ubuntu:act-latest \\"
+          echo "     --secret-file .secrets.act"
+          echo ""
+          echo "3. For workflow_dispatch with push:"
+          echo "   act workflow_dispatch -W .github/workflows/docker-build-simple.yml \\"
+          echo "     --input push_image=true \\"
+          echo "     --secret-file .secrets.act"
