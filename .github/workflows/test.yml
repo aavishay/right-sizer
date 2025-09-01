@@ -5,8 +5,8 @@ on:
     branches:
       - main
       - develop
-      - 'feature/**'
-      - 'release/**'
+      - "feature/**"
+      - "release/**"
   pull_request:
     branches:
       - main
@@ -14,14 +14,14 @@ on:
   workflow_dispatch:
 
 env:
-  GO_VERSION: '1.23'  # Using 1.23 as 1.24 doesn't exist yet
+  GO_VERSION: "1.24"
 
 jobs:
   test:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        go-version: ['1.22', '1.23']  # Test on multiple Go versions
+        go-version: ["1.23", "1.24"] # Test on multiple Go versions
 
     steps:
       - name: Checkout code
@@ -136,7 +136,7 @@ jobs:
       - name: Install kubectl
         uses: azure/setup-kubectl@v4
         with:
-          version: 'v1.30.0'
+          version: "v1.30.0"
 
       - name: Test cluster connection
         run: |
@@ -228,7 +228,7 @@ jobs:
       - name: Run Gosec Security Scanner
         uses: securego/gosec@master
         with:
-          args: '-no-fail -fmt sarif -out gosec-results.sarif ./go/...'
+          args: "-no-fail -fmt sarif -out gosec-results.sarif ./go/..."
 
       - name: Upload Gosec results to GitHub Security tab
         uses: github/codeql-action/upload-sarif@v3

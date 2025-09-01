@@ -1,11 +1,10 @@
 # Copyright (C) 2024 right-sizer contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
+# Alternative Dockerfile using Alpine Linux
+# Use this when gcr.io or Docker Hub are experiencing issues
+
 # Build stage
-# Using golang base image - alternatives if Docker Hub is down:
-# - gcr.io/distroless/base:latest (Google)
-# - public.ecr.aws/docker/library/golang:1.24-alpine (AWS)
-# - quay.io/projectquay/golang:1.24-alpine (Red Hat)
 FROM --platform=$BUILDPLATFORM golang:1.24-alpine AS builder
 
 # Build arguments for cross-compilation
@@ -32,7 +31,6 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 COPY go/ .
 
 # Build the binary with caching
-# Use cache mounts for faster builds
 RUN --mount=type=cache,target=/go/pkg/mod \
   --mount=type=cache,target=/root/.cache/go-build \
   CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} \
@@ -41,11 +39,8 @@ RUN --mount=type=cache,target=/go/pkg/mod \
   -o right-sizer main.go && \
   chmod +x right-sizer
 
-# Final stage - use distroless for minimal size and security
-# Alternative base images if gcr.io is unavailable:
-# - alpine:3.18 (requires adding ca-certificates)
-# - scratch (most minimal, requires copying ca-certificates from builder)
-FROM gcr.io/distroless/static:nonroot
+# Final stage - using Alpine for reliability
+FROM alpine:3.19
 
 # Labels for OCI compliance
 LABEL org.opencontainers.image.title="Right-Sizer" \
@@ -56,10 +51,16 @@ LABEL org.opencontainers.image.title="Right-Sizer" \
   org.opencontainers.image.revision="${GIT_COMMIT}" \
   org.opencontainers.image.created="${BUILD_DATE}"
 
-# Copy the binary from builder
-COPY --from=builder /build/right-sizer /app/right-sizer
+# Install ca-certificates for HTTPS communication
+RUN apk --no-cache add ca-certificates && \
+  adduser -D -u 65532 -g nonroot nonroot && \
+  mkdir -p /app && \
+  chown -R nonroot:nonroot /app
 
-# Use nonroot user (UID 65532)
+# Copy the binary from builder
+COPY --from=builder --chown=nonroot:nonroot /build/right-sizer /app/right-sizer
+
+# Use nonroot user
 USER nonroot:nonroot
 
 WORKDIR /app

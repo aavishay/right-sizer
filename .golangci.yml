@@ -184,20 +184,61 @@ linters-settings:
 
   staticcheck:
     # Go version to target
-    go: "1.23"
+    go: "1.24"
     # https://staticcheck.io/docs/options#checks
     checks: ["all"]
 
   stylecheck:
     # Go version to target
-    go: "1.23"
+    go: "1.24"
     # https://staticcheck.io/docs/options#checks
-    checks: ["all", "-ST1000", "-ST1003", "-ST1016", "-ST1020", "-ST1021", "-ST1022"]
+    checks:
+      ["all", "-ST1000", "-ST1003", "-ST1016", "-ST1020", "-ST1021", "-ST1022"]
     # https://staticcheck.io/docs/options#dot_import_whitelist
     dot-import-whitelist:
       - fmt
     # https://staticcheck.io/docs/options#initialisms
-    initialisms: ["ACL", "API", "ASCII", "CPU", "CSS", "DNS", "EOF", "GUID", "HTML", "HTTP", "HTTPS", "ID", "IP", "JSON", "QPS", "RAM", "RPC", "SLA", "SMTP", "SQL", "SSH", "TCP", "TLS", "TTL", "UDP", "UI", "GID", "UID", "UUID", "URI", "URL", "UTF8", "VM", "XML", "XMPP", "XSRF", "XSS", "K8s"]
+    initialisms:
+      [
+        "ACL",
+        "API",
+        "ASCII",
+        "CPU",
+        "CSS",
+        "DNS",
+        "EOF",
+        "GUID",
+        "HTML",
+        "HTTP",
+        "HTTPS",
+        "ID",
+        "IP",
+        "JSON",
+        "QPS",
+        "RAM",
+        "RPC",
+        "SLA",
+        "SMTP",
+        "SQL",
+        "SSH",
+        "TCP",
+        "TLS",
+        "TTL",
+        "UDP",
+        "UI",
+        "GID",
+        "UID",
+        "UUID",
+        "URI",
+        "URL",
+        "UTF8",
+        "VM",
+        "XML",
+        "XMPP",
+        "XSRF",
+        "XSS",
+        "K8s",
+      ]
 
   unparam:
     # Report preallocation suggestions on for loops
@@ -205,7 +246,7 @@ linters-settings:
 
   unused:
     # Go version to target
-    go: "1.23"
+    go: "1.24"
 
   whitespace:
     multi-if: false
@@ -227,26 +268,26 @@ linters:
     - varcheck
 
     # Disabled by choice
-    - depguard       # Too strict about imports
-    - wsl            # Too opinionated about whitespace
-    - nlreturn       # Too opinionated about newlines
-    - paralleltest   # Not always necessary
-    - exhaustruct    # Too strict for all structs
+    - depguard # Too strict about imports
+    - wsl # Too opinionated about whitespace
+    - nlreturn # Too opinionated about newlines
+    - paralleltest # Not always necessary
+    - exhaustruct # Too strict for all structs
     - gochecknoglobals # We need some globals
     - gochecknoinits # Init functions are sometimes needed
-    - godox          # We want to allow TODO/FIXME comments
-    - goerr113       # Too strict about error handling
-    - wrapcheck      # Too strict about error wrapping
-    - testpackage    # Tests in same package are fine
-    - varnamelen     # Short variable names are sometimes OK
-    - ireturn        # Returning interfaces is sometimes necessary
-    - tagliatelle    # Enforces specific case for struct tags
+    - godox # We want to allow TODO/FIXME comments
+    - goerr113 # Too strict about error handling
+    - wrapcheck # Too strict about error wrapping
+    - testpackage # Tests in same package are fine
+    - varnamelen # Short variable names are sometimes OK
+    - ireturn # Returning interfaces is sometimes necessary
+    - tagliatelle # Enforces specific case for struct tags
     - nonamedreturns # Named returns can be useful sometimes
     - forcetypeassert # Type assertions are sometimes needed
-    - godot          # Not all comments need periods
-    - cyclop         # Duplicate of gocyclo
-    - maintidx       # Maintainability index is too opinionated
-    - musttag        # Not all structs need all tags
+    - godot # Not all comments need periods
+    - cyclop # Duplicate of gocyclo
+    - maintidx # Maintainability index is too opinionated
+    - musttag # Not all structs need all tags
 
 issues:
   # List of regexps of issue texts to exclude
