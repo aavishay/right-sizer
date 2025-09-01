@@ -105,24 +105,24 @@ Right-Sizer is a Kubernetes operator that automatically optimizes pod resource a
 | Metrics | metrics-server 0.5 | 0.6+ | Or Prometheus |
 | Memory | 2GB | 4GB+ | For Minikube/local |
 
-<!--### 1️⃣ Installation (Production)
+### 1️⃣ Installation (Docker Hub)
+
+Use the pre-built Docker image from Docker Hub:
 
 ```bash
-# Add Helm repository (when published)
-helm repo add right-sizer https://right-sizer.github.io/charts
-helm repo update
-
-# Install with default configuration
-helm install right-sizer right-sizer/right-sizer \
-  --namespace right-sizer \
-  --create-namespace
-
-# Install with custom values
-helm install right-sizer right-sizer/right-sizer \
+# Install using Helm with Docker Hub image
+helm install right-sizer ./helm \
   --namespace right-sizer \
   --create-namespace \
-  -f examples/helm-values-custom.yaml
-```-->
+  --set image.repository=aavishay/right-sizer \
+  --set image.tag=latest \
+  --set image.pullPolicy=IfNotPresent
+```
+
+Available image tags:
+- `latest` - Latest stable build from main branch
+- `v{build-number}` - Specific build version
+- `sha-{commit}` - Specific commit SHA
 
 ### 2️⃣ Local Development Setup
 
@@ -142,9 +142,9 @@ minikube image load right-sizer:latest
 helm install right-sizer ./helm \
   --namespace right-sizer \
   --create-namespace \
-  --set image.repository=right-sizer \
+  --set image.repository=aavishay/right-sizer \
   --set image.tag=latest \
-  --set image.pullPolicy=Never
+  --set image.pullPolicy=IfNotPresent
 ```
 
 ### 3️⃣ Quick Configuration Examples

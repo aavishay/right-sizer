@@ -17,6 +17,7 @@ NC='\033[0m' # No Color
 
 # Configuration
 OPERATOR_NAME="right-sizer"
+DOCKER_REPOSITORY="aavishay/right-sizer"
 NAMESPACE="default"
 IMAGE_TAG="latest"
 BUILD_LOCAL=true
@@ -136,7 +137,7 @@ if [[ "$BUILD_LOCAL" == true ]]; then
   # Check if Go is installed for local build
   if ! command -v go &>/dev/null; then
     echo -e "${YELLOW}Go is not installed. Using Docker build instead.${NC}"
-    docker build -t ${OPERATOR_NAME}:${IMAGE_TAG} .
+    docker build -t ${DOCKER_REPOSITORY}:${IMAGE_TAG} .
   else
     # Build Go binary
     echo "Running go mod tidy..."
@@ -149,10 +150,10 @@ if [[ "$BUILD_LOCAL" == true ]]; then
 
     # Build Docker image
     echo "Building Docker image..."
-    docker build -t ${OPERATOR_NAME}:${IMAGE_TAG} .
+    docker build -t ${DOCKER_REPOSITORY}:${IMAGE_TAG} .
   fi
 
-  echo -e "${GREEN}✓ Image built: ${OPERATOR_NAME}:${IMAGE_TAG}${NC}"
+  echo -e "${GREEN}✓ Image built: ${DOCKER_REPOSITORY}:${IMAGE_TAG}${NC}"
 else
   echo -e "\n${YELLOW}Skipping image build (using existing image)${NC}"
 fi
@@ -234,7 +235,7 @@ if [[ "$USE_HELM" == true ]]; then
 
   helm upgrade --install ${OPERATOR_NAME} ./helm \
     --namespace ${NAMESPACE} \
-    --set image.repository=${OPERATOR_NAME} \
+    --set image.repository=${DOCKER_REPOSITORY} \
     --set image.tag=${IMAGE_TAG} \
     --set image.pullPolicy=IfNotPresent \
     --set createDefaultConfig=true \
@@ -272,7 +273,7 @@ echo -e "${GREEN}Deployment Summary:${NC}"
 echo -e "${BLUE}========================================${NC}"
 echo -e "Operator: ${GREEN}${OPERATOR_NAME}${NC}"
 echo -e "Namespace: ${GREEN}${NAMESPACE}${NC}"
-echo -e "Image: ${GREEN}${OPERATOR_NAME}:${IMAGE_TAG}${NC}"
+echo -e "Image: ${GREEN}${DOCKER_REPOSITORY}:${IMAGE_TAG}${NC}"
 echo -e "Pod: ${GREEN}${POD_NAME}${NC}"
 echo -e "Kubernetes: ${GREEN}${K8S_VERSION}${NC}"
 
