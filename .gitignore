@@ -76,6 +76,13 @@ local-test/
 *-local.yaml
 custom-values.yaml
 
+# Act (GitHub Actions local testing)
+.env.act
+.secrets.act
+.github/events/
+act-artifacts/
+act-cache/
+
 # Docker files
 .dockerignore.local
 
