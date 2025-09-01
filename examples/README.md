@@ -12,7 +12,7 @@ This directory contains example configurations for the right-sizer operator usin
 
 ### Core CRD Examples
 
-#### 1. **crd-config.yaml** - Global Configuration Examples
+#### 1. **config-global-settings.yaml** - Global Configuration Examples
 Demonstrates various `RightSizerConfig` configurations for different environments:
 - Full-featured configuration with all available options
 - Minimal configuration for simple deployments
@@ -20,10 +20,10 @@ Demonstrates various `RightSizerConfig` configurations for different environment
 - Production environment with conservative settings
 
 ```bash
-kubectl apply -f crd-config.yaml
+kubectl apply -f config-global-settings.yaml
 ```
 
-#### 2. **crd-policies.yaml** - Resource Sizing Policies
+#### 2. **policies-workload-types.yaml** - Resource Sizing Policies
 Shows how to create `RightSizerPolicy` resources for different workload types:
 - Production web applications
 - Development environments
@@ -34,10 +34,10 @@ Shows how to create `RightSizerPolicy` resources for different workload types:
 - Cross-namespace optimization
 
 ```bash
-kubectl apply -f crd-policies.yaml
+kubectl apply -f policies-workload-types.yaml
 ```
 
-#### 3. **crd-namespace-filters.yaml** - Namespace Filtering
+#### 3. **config-namespace-filtering.yaml** - Namespace Filtering
 Examples of configuring namespace inclusion/exclusion:
 - Include specific namespaces only
 - Exclude system namespaces
@@ -45,12 +45,12 @@ Examples of configuring namespace inclusion/exclusion:
 - Combining multiple filtering strategies
 
 ```bash
-kubectl apply -f crd-namespace-filters.yaml
+kubectl apply -f config-namespace-filtering.yaml
 ```
 
 ### Feature-Specific Examples
 
-#### 4. **rightsizerconfig-with-thresholds.yaml** - Scaling Thresholds
+#### 4. **config-scaling-thresholds.yaml** - Scaling Thresholds
 Demonstrates configuring CPU and memory scaling thresholds:
 - Scale-up thresholds (when to increase resources)
 - Scale-down thresholds (when to decrease resources)
@@ -58,10 +58,10 @@ Demonstrates configuring CPU and memory scaling thresholds:
 - Per-resource threshold configuration
 
 ```bash
-kubectl apply -f rightsizerconfig-with-thresholds.yaml
+kubectl apply -f config-scaling-thresholds.yaml
 ```
 
-#### 5. **rate-limiting-config.yaml** - Rate Limiting
+#### 5. **config-rate-limiting.yaml** - Rate Limiting
 Shows how to configure rate limiting for resource adjustments:
 - Maximum changes per time period
 - Cooldown periods between adjustments
@@ -69,12 +69,12 @@ Shows how to configure rate limiting for resource adjustments:
 - Pod restart limits
 
 ```bash
-kubectl apply -f rate-limiting-config.yaml
+kubectl apply -f config-rate-limiting.yaml
 ```
 
 ### Helm Configuration
 
-#### 6. **custom-values-example.yaml** - Helm Values
+#### 6. **helm-values-custom.yaml** - Helm Values
 Example Helm values file for customizing the operator deployment:
 - Custom image configuration
 - Log level settings
@@ -82,7 +82,7 @@ Example Helm values file for customizing the operator deployment:
 - Controller-specific settings
 
 ```bash
-helm install right-sizer ../helm -f custom-values-example.yaml
+helm install right-sizer ../helm -f helm-values-custom.yaml
 ```
 
 ## Usage Guide
@@ -96,12 +96,12 @@ helm install right-sizer ../helm -f custom-values-example.yaml
 
 2. **Apply a global configuration**:
    ```bash
-   kubectl apply -f crd-config.yaml
+   kubectl apply -f config-global-settings.yaml
    ```
 
 3. **Create policies for your workloads**:
    ```bash
-   kubectl apply -f crd-policies.yaml
+   kubectl apply -f policies-workload-types.yaml
    ```
 
 4. **Monitor the operator**:
@@ -115,7 +115,7 @@ To test with a specific configuration:
 
 1. Apply the configuration:
    ```bash
-   kubectl apply -f rightsizerconfig-with-thresholds.yaml
+   kubectl apply -f config-scaling-thresholds.yaml
    ```
 
 2. Deploy a test workload:
