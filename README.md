@@ -105,11 +105,41 @@ Right-Sizer is a Kubernetes operator that automatically optimizes pod resource a
 | Metrics | metrics-server 0.5 | 0.6+ | Or Prometheus |
 | Memory | 2GB | 4GB+ | For Minikube/local |
 
-### 1️⃣ Installation (Docker Hub)
+### 1️⃣ Installation (Helm Repository)
+
+Install directly from our GitHub Pages Helm repository:
+
+```bash
+# Add the Helm repository
+helm repo add right-sizer https://aavishay.github.io/right-sizer/charts
+helm repo update
+
+# Install with default configuration
+helm install right-sizer right-sizer/right-sizer \
+  --namespace right-sizer \
+  --create-namespace
+
+# Install with custom values
+helm install right-sizer right-sizer/right-sizer \
+  --namespace right-sizer \
+  --create-namespace \
+  -f custom-values.yaml
+
+# View available chart versions
+helm search repo right-sizer --versions
+
+# Show all configurable values
+helm show values right-sizer/right-sizer
+```
+
+### 2️⃣ Installation (Docker Hub)
 
 Use the pre-built Docker image from Docker Hub:
 
 ```bash
+# Pull the latest image
+docker pull aavishay/right-sizer:latest
+
 # Install using Helm with Docker Hub image
 helm install right-sizer ./helm \
   --namespace right-sizer \
@@ -124,7 +154,7 @@ Available image tags:
 - `v{build-number}` - Specific build version
 - `sha-{commit}` - Specific commit SHA
 
-### 2️⃣ Local Development Setup
+### 3️⃣ Local Development Setup
 
 ```bash
 # Clone the repository
@@ -147,7 +177,7 @@ helm install right-sizer ./helm \
   --set image.pullPolicy=IfNotPresent
 ```
 
-### 3️⃣ Quick Configuration Examples
+### 4️⃣ Quick Configuration Examples
 
 #### Development Environment (Aggressive Optimization)
 ```bash
