@@ -2,9 +2,9 @@ module right-sizer
 
 go 1.24.0
 
-replace golang.org/x/tools => golang.org/x/tools v0.10.0
+replace golang.org/x/tools => golang.org/x/tools v0.17.0
 
-replace golang.org/x/sys => golang.org/x/sys v0.10.0
+replace golang.org/x/sys => golang.org/x/sys v0.17.0
 
 replace golang.org/x/net => golang.org/x/net v0.17.0
 
