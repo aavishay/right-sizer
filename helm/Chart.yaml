@@ -21,8 +21,23 @@ annotations:
   "artifacthub.io/repository": "https://github.com/aavishay/right-sizer"
   # License information
   "artifacthub.io/license": AGPL-3.0
+  # Documentation links
+  "artifacthub.io/links": |
+    - name: Chart Source
+      url: https://github.com/aavishay/right-sizer/tree/main/helm
+    - name: Support
+      url: https://github.com/aavishay/right-sizer/issues
+  # Changelog tracking
+  "artifacthub.io/changes": |
+    - kind: added
+      description: Initial release of Right-Sizer Helm chart
+    - kind: added
+      description: Support for Kubernetes 1.33+ in-place pod resizing
+    - kind: added
+      description: Multiple optimization strategies (adaptive, conservative, aggressive)
+    - kind: added
+      description: Integration with Metrics Server and Prometheus
   # Security scanning (uncomment and configure when GPG signing is set up)
   # "artifacthub.io/signKey": |
   #   fingerprint: YOUR_GPG_FINGERPRINT
   #   url: YOUR_KEY_URL
-  # Documentation - README.md file is now in the chart directory

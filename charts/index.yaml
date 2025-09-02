@@ -2,13 +2,27 @@ apiVersion: v1
 entries:
   right-sizer:
   - annotations:
+      artifacthub.io/changes: |
+        - kind: added
+          description: Initial release of Right-Sizer Helm chart
+        - kind: added
+          description: Support for Kubernetes 1.33+ in-place pod resizing
+        - kind: added
+          description: Multiple optimization strategies (adaptive, conservative, aggressive)
+        - kind: added
+          description: Integration with Metrics Server and Prometheus
       artifacthub.io/license: AGPL-3.0
+      artifacthub.io/links: |
+        - name: Chart Source
+          url: https://github.com/aavishay/right-sizer/tree/main/helm
+        - name: Support
+          url: https://github.com/aavishay/right-sizer/issues
       artifacthub.io/repository: https://github.com/aavishay/right-sizer
     apiVersion: v2
-    appVersion: latest
-    created: "2025-09-02T13:07:54.022425+03:00"
+    appVersion: 0.1.0
+    created: "2025-09-02T16:23:27.485117+03:00"
     description: A Kubernetes operator for automatic pod resource right-sizing
-    digest: b9cd0bdd7dd9c3a26455f19e2a80a6076874e9dc971380d1c2c69e9554a28bbd
+    digest: b6de82a030feef3a94a966965350160b767320802b0839551ff9cab659537273
     home: https://github.com/aavishay/right-sizer
     keywords:
     - kubernetes
@@ -26,4 +40,4 @@ entries:
     urls:
     - https://aavishay.github.io/right-sizer/charts/right-sizer-0.1.0.tgz
     version: 0.1.0
-generated: "2025-09-02T13:07:54.020794+03:00"
+generated: "2025-09-02T16:23:27.483768+03:00"
