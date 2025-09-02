@@ -4,9 +4,9 @@ description: A Kubernetes operator for automatic pod resource right-sizing
 type: application
 version: 0.1.0
 appVersion: "latest"
-home: https://github.com/right-sizer/right-sizer
+home: https://github.com/aavishay/right-sizer
 sources:
-  - https://github.com/right-sizer/right-sizer
+  - https://github.com/aavishay/right-sizer
 keywords:
   - kubernetes
   - operator
@@ -17,6 +17,8 @@ maintainers:
   - name: right-sizer contributors
     email: contributors@right-sizer.io
 annotations:
+  # Repository information
+  "artifacthub.io/repository": "https://github.com/aavishay/right-sizer"
   # License information
   "artifacthub.io/license": AGPL-3.0
   # Security scanning (uncomment and configure when GPG signing is set up)
