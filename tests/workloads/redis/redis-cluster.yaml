@@ -1,0 +1,481 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: redis
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redis-config
+  namespace: redis
+data:
+  master.conf: |
+    bind 0.0.0.0
+    protected-mode no
+    port 6379
+    tcp-backlog 511
+    timeout 0
+    tcp-keepalive 300
+    daemonize no
+    supervised no
+    pidfile /var/run/redis_6379.pid
+    loglevel notice
+    logfile ""
+    databases 16
+    always-show-logo yes
+    save 900 1
+    save 300 10
+    save 60 10000
+    stop-writes-on-bgsave-error yes
+    rdbcompression yes
+    rdbchecksum yes
+    dbfilename dump.rdb
+    dir /data
+    replica-serve-stale-data yes
+    replica-read-only yes
+    repl-diskless-sync no
+    repl-diskless-sync-delay 5
+    repl-disable-tcp-nodelay no
+    replica-priority 100
+    maxmemory 256mb
+    maxmemory-policy allkeys-lru
+    lazyfree-lazy-eviction no
+    lazyfree-lazy-expire no
+    lazyfree-lazy-server-del no
+    replica-lazy-flush no
+    appendonly yes
+    appendfilename "appendonly.aof"
+    appendfsync everysec
+    no-appendfsync-on-rewrite no
+    auto-aof-rewrite-percentage 100
+    auto-aof-rewrite-min-size 64mb
+    aof-load-truncated yes
+    aof-use-rdb-preamble yes
+    lua-time-limit 5000
+    slowlog-log-slower-than 10000
+    slowlog-max-len 128
+    latency-monitor-threshold 0
+    notify-keyspace-events ""
+    hash-max-ziplist-entries 512
+    hash-max-ziplist-value 64
+    list-max-ziplist-size -2
+    list-compress-depth 0
+    set-max-intset-entries 512
+    zset-max-ziplist-entries 128
+    zset-max-ziplist-value 64
+    hll-sparse-max-bytes 3000
+    stream-node-max-bytes 4096
+    stream-node-max-entries 100
+    activerehashing yes
+    client-output-buffer-limit normal 0 0 0
+    client-output-buffer-limit replica 256mb 64mb 60
+    client-output-buffer-limit pubsub 32mb 8mb 60
+    hz 10
+    dynamic-hz yes
+    aof-rewrite-incremental-fsync yes
+    rdb-save-incremental-fsync yes
+  replica.conf: |
+    bind 0.0.0.0
+    protected-mode no
+    port 6379
+    tcp-backlog 511
+    timeout 0
+    tcp-keepalive 300
+    daemonize no
+    supervised no
+    pidfile /var/run/redis_6379.pid
+    loglevel notice
+    logfile ""
+    databases 16
+    always-show-logo yes
+    save 900 1
+    save 300 10
+    save 60 10000
+    stop-writes-on-bgsave-error yes
+    rdbcompression yes
+    rdbchecksum yes
+    dbfilename dump.rdb
+    dir /data
+    replica-serve-stale-data yes
+    replica-read-only yes
+    repl-diskless-sync no
+    repl-diskless-sync-delay 5
+    repl-disable-tcp-nodelay no
+    replica-priority 100
+    maxmemory 256mb
+    maxmemory-policy allkeys-lru
+    lazyfree-lazy-eviction no
+    lazyfree-lazy-expire no
+    lazyfree-lazy-server-del no
+    replica-lazy-flush no
+    appendonly yes
+    appendfilename "appendonly.aof"
+    appendfsync everysec
+    no-appendfsync-on-rewrite no
+    auto-aof-rewrite-percentage 100
+    auto-aof-rewrite-min-size 64mb
+    aof-load-truncated yes
+    aof-use-rdb-preamble yes
+    lua-time-limit 5000
+    slowlog-log-slower-than 10000
+    slowlog-max-len 128
+    latency-monitor-threshold 0
+    notify-keyspace-events ""
+    hash-max-ziplist-entries 512
+    hash-max-ziplist-value 64
+    list-max-ziplist-size -2
+    list-compress-depth 0
+    set-max-intset-entries 512
+    zset-max-ziplist-entries 128
+    zset-max-ziplist-value 64
+    hll-sparse-max-bytes 3000
+    stream-node-max-bytes 4096
+    stream-node-max-entries 100
+    activerehashing yes
+    client-output-buffer-limit normal 0 0 0
+    client-output-buffer-limit replica 256mb 64mb 60
+    client-output-buffer-limit pubsub 32mb 8mb 60
+    hz 10
+    dynamic-hz yes
+    aof-rewrite-incremental-fsync yes
+    rdb-save-incremental-fsync yes
+    replicaof redis-master 6379
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-master
+  namespace: redis
+  labels:
+    app: redis
+    role: master
+spec:
+  type: ClusterIP
+  selector:
+    app: redis
+    role: master
+  ports:
+    - port: 6379
+      targetPort: 6379
+      name: redis
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-replica
+  namespace: redis
+  labels:
+    app: redis
+    role: replica
+spec:
+  type: ClusterIP
+  selector:
+    app: redis
+    role: replica
+  ports:
+    - port: 6379
+      targetPort: 6379
+      name: redis
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis-master
+  namespace: redis
+  labels:
+    app: redis
+    role: master
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+      role: master
+  template:
+    metadata:
+      labels:
+        app: redis
+        role: master
+    spec:
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          command:
+            - redis-server
+            - /etc/redis/redis.conf
+          ports:
+            - containerPort: 6379
+              name: redis
+          # Initial resources - Right-Sizer will optimize these
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "128Mi"
+            limits:
+              cpu: "250m"
+              memory: "512Mi"
+          volumeMounts:
+            - name: config
+              mountPath: /etc/redis
+            - name: data
+              mountPath: /data
+          livenessProbe:
+            exec:
+              command:
+                - redis-cli
+                - ping
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+          readinessProbe:
+            exec:
+              command:
+                - redis-cli
+                - ping
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+      volumes:
+        - name: config
+          configMap:
+            name: redis-config
+            items:
+              - key: master.conf
+                path: redis.conf
+        - name: data
+          emptyDir: {}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis-replica
+  namespace: redis
+  labels:
+    app: redis
+    role: replica
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: redis
+      role: replica
+  template:
+    metadata:
+      labels:
+        app: redis
+        role: replica
+    spec:
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          command:
+            - redis-server
+            - /etc/redis/redis.conf
+          ports:
+            - containerPort: 6379
+              name: redis
+          # Initial resources - Right-Sizer will optimize these
+          resources:
+            requests:
+              cpu: "25m"
+              memory: "64Mi"
+            limits:
+              cpu: "150m"
+              memory: "256Mi"
+          volumeMounts:
+            - name: config
+              mountPath: /etc/redis
+            - name: data
+              mountPath: /data
+          livenessProbe:
+            exec:
+              command:
+                - redis-cli
+                - ping
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+          readinessProbe:
+            exec:
+              command:
+                - redis-cli
+                - ping
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+      volumes:
+        - name: config
+          configMap:
+            name: redis-config
+            items:
+              - key: replica.conf
+                path: redis.conf
+        - name: data
+          emptyDir: {}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis-load-generator
+  namespace: redis
+  labels:
+    app: redis-load-generator
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: redis-load-generator
+  template:
+    metadata:
+      labels:
+        app: redis-load-generator
+    spec:
+      containers:
+        - name: load-generator
+          image: redis:7-alpine
+          command:
+            - sh
+            - -c
+            - |
+              # Wait for Redis to be ready
+              echo "Waiting for Redis master to be ready..."
+              sleep 30
+
+              # Create load generation script
+              cat > /tmp/load.sh << 'EOF'
+              #!/bin/sh
+
+              MASTER_HOST="redis-master"
+              REPLICA_HOST="redis-replica"
+              COUNTER=0
+
+              echo "Starting Redis load generation..."
+
+              while true; do
+                # Write operations to master
+                for i in $(seq 1 100); do
+                  KEY="key:$COUNTER:$i"
+                  VALUE=$(head -c 100 /dev/urandom | base64)
+                  redis-cli -h $MASTER_HOST SET "$KEY" "$VALUE" EX 300 > /dev/null 2>&1
+
+                  # Set hash fields
+                  redis-cli -h $MASTER_HOST HSET "hash:$COUNTER" "field:$i" "$VALUE" > /dev/null 2>&1
+
+                  # Add to sorted set
+                  SCORE=$(($RANDOM % 10000))
+                  redis-cli -h $MASTER_HOST ZADD "zset:load" $SCORE "member:$COUNTER:$i" > /dev/null 2>&1
+
+                  # Add to list
+                  redis-cli -h $MASTER_HOST LPUSH "list:load" "$VALUE" > /dev/null 2>&1
+                  redis-cli -h $MASTER_HOST LTRIM "list:load" 0 999 > /dev/null 2>&1
+                done
+
+                # Read operations from replicas
+                for i in $(seq 1 200); do
+                  KEY="key:$COUNTER:$(($RANDOM % 100))"
+                  redis-cli -h $REPLICA_HOST GET "$KEY" > /dev/null 2>&1
+
+                  # Get hash fields
+                  redis-cli -h $REPLICA_HOST HGETALL "hash:$COUNTER" > /dev/null 2>&1
+
+                  # Range queries on sorted set
+                  redis-cli -h $REPLICA_HOST ZRANGE "zset:load" 0 50 > /dev/null 2>&1
+
+                  # List operations
+                  redis-cli -h $REPLICA_HOST LRANGE "list:load" 0 100 > /dev/null 2>&1
+                done
+
+                # Complex operations
+                redis-cli -h $MASTER_HOST --eval - << 'LUA'
+              local count = 0
+              for i = 1, 100 do
+                redis.call('INCR', 'counter:' .. i)
+                count = count + 1
+              end
+              return count
+              LUA
+
+                # Pipeline operations
+                (
+                  for i in $(seq 1 50); do
+                    echo "SET pipeline:$i value:$i"
+                    echo "EXPIRE pipeline:$i 300"
+                  done
+                ) | redis-cli -h $MASTER_HOST --pipe > /dev/null 2>&1
+
+                # Check memory usage
+                MEMORY_USAGE=$(redis-cli -h $MASTER_HOST INFO memory | grep used_memory_human | cut -d: -f2 | tr -d '\r')
+                echo "Iteration $COUNTER completed. Memory usage: $MEMORY_USAGE"
+
+                COUNTER=$(($COUNTER + 1))
+
+                # Clean up old keys periodically
+                if [ $(($COUNTER % 100)) -eq 0 ]; then
+                  echo "Cleaning up old keys..."
+                  redis-cli -h $MASTER_HOST --scan --pattern "key:*" | head -1000 | xargs -r redis-cli -h $MASTER_HOST DEL > /dev/null 2>&1
+                fi
+
+                sleep 2
+              done
+              EOF
+
+              chmod +x /tmp/load.sh
+              exec /tmp/load.sh
+          resources:
+            requests:
+              cpu: "30m"
+              memory: "64Mi"
+            limits:
+              cpu: "200m"
+              memory: "256Mi"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis-benchmark
+  namespace: redis
+  labels:
+    app: redis-benchmark
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis-benchmark
+  template:
+    metadata:
+      labels:
+        app: redis-benchmark
+    spec:
+      containers:
+        - name: benchmark
+          image: redis:7-alpine
+          command:
+            - sh
+            - -c
+            - |
+              # Wait for Redis to be ready
+              echo "Waiting for Redis to be ready..."
+              sleep 40
+
+              echo "Starting Redis benchmark..."
+              while true; do
+                echo "Running benchmark against master..."
+                redis-benchmark -h redis-master -p 6379 -n 10000 -c 50 -d 100 -q
+
+                echo "Running benchmark against replica..."
+                redis-benchmark -h redis-replica -p 6379 -n 10000 -c 50 -d 100 -t get,mget -q
+
+                echo "Running pipeline benchmark..."
+                redis-benchmark -h redis-master -p 6379 -n 10000 -P 16 -q
+
+                echo "Benchmark iteration completed. Waiting 30 seconds..."
+                sleep 30
+              done
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "300m"
+              memory: "256Mi"

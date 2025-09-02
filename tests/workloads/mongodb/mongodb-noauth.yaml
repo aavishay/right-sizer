@@ -1,0 +1,375 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: mongodb
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongodb-headless
+  namespace: mongodb
+  labels:
+    app: mongodb
+spec:
+  clusterIP: None
+  selector:
+    app: mongodb
+  ports:
+    - port: 27017
+      targetPort: 27017
+      name: mongodb
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongodb
+  namespace: mongodb
+  labels:
+    app: mongodb
+spec:
+  type: ClusterIP
+  selector:
+    app: mongodb
+  ports:
+    - port: 27017
+      targetPort: 27017
+      name: mongodb
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mongodb
+  namespace: mongodb
+  labels:
+    app: mongodb
+spec:
+  serviceName: mongodb-headless
+  replicas: 3
+  selector:
+    matchLabels:
+      app: mongodb
+  template:
+    metadata:
+      labels:
+        app: mongodb
+    spec:
+      containers:
+        - name: mongodb
+          image: mongo:7.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 27017
+              name: mongodb
+          env:
+            - name: MONGO_INITDB_DATABASE
+              value: "testdb"
+          command:
+            - mongod
+            - "--replSet"
+            - rs0
+            - "--bind_ip_all"
+          # Initial resources - Right-Sizer will optimize these
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "1Gi"
+          volumeMounts:
+            - name: mongodb-data
+              mountPath: /data/db
+          livenessProbe:
+            exec:
+              command:
+                - mongosh
+                - --eval
+                - "db.adminCommand('ping')"
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+          readinessProbe:
+            exec:
+              command:
+                - mongosh
+                - --eval
+                - "db.adminCommand('ping')"
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+  volumeClaimTemplates:
+    - metadata:
+        name: mongodb-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 2Gi
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: mongodb-init
+  namespace: mongodb
+spec:
+  backoffLimit: 3
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: init
+          image: mongo:7.0
+          command:
+            - sh
+            - -c
+            - |
+              echo "Waiting for MongoDB pods to be ready..."
+              sleep 30
+
+              echo "Attempting to initialize replica set..."
+              mongosh mongodb://mongodb-0.mongodb-headless:27017 --eval "
+              try {
+                rs.initiate({
+                  _id: 'rs0',
+                  members: [
+                    { _id: 0, host: 'mongodb-0.mongodb-headless.mongodb.svc.cluster.local:27017', priority: 2 },
+                    { _id: 1, host: 'mongodb-1.mongodb-headless.mongodb.svc.cluster.local:27017', priority: 1 },
+                    { _id: 2, host: 'mongodb-2.mongodb-headless.mongodb.svc.cluster.local:27017', priority: 1 }
+                  ]
+                });
+                print('Replica set initialized successfully');
+              } catch(e) {
+                if (e.codeName === 'AlreadyInitialized' || e.message.includes('already initialized')) {
+                  print('Replica set already initialized');
+                  rs.status();
+                } else {
+                  print('Error: ' + e);
+                  throw e;
+                }
+              }
+              "
+
+              echo "Waiting for replica set to stabilize..."
+              sleep 15
+
+              echo "Checking replica set status..."
+              mongosh mongodb://mongodb-0.mongodb-headless:27017 --eval "rs.status()"
+
+              echo "Creating test database and collections..."
+              mongosh mongodb://mongodb-0.mongodb-headless:27017/testdb --eval "
+              db.createCollection('loadtest');
+              db.loadtest.createIndex({ timestamp: 1 });
+              db.loadtest.createIndex({ random: 1 });
+              db.loadtest.insertOne({ test: 'initial', timestamp: new Date() });
+              print('Test database setup complete');
+              "
+
+              echo "MongoDB initialization complete!"
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "128Mi"
+            limits:
+              cpu: "200m"
+              memory: "256Mi"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mongodb-load
+  namespace: mongodb
+  labels:
+    app: mongodb-load
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: mongodb-load
+  template:
+    metadata:
+      labels:
+        app: mongodb-load
+    spec:
+      containers:
+        - name: load-generator
+          image: mongo:7.0
+          command:
+            - sh
+            - -c
+            - |
+              # Wait for MongoDB replica set to be ready
+              echo "Waiting for MongoDB replica set to be ready..."
+              sleep 60
+
+              # Create load generation script
+              cat > /tmp/load.js << 'EOF'
+              print("Starting load generation...");
+
+              // Connect to the database
+              db = db.getSiblingDB('testdb');
+
+              // Load generation loop
+              while (true) {
+                try {
+                  // Batch insert operations
+                  let batch = [];
+                  for (let i = 0; i < 100; i++) {
+                    batch.push({
+                      timestamp: new Date(),
+                      iteration: i,
+                      random: Math.random(),
+                      data: "x".repeat(Math.floor(Math.random() * 500)),
+                      type: "load_test",
+                      tags: ["test", "load", "benchmark"]
+                    });
+                  }
+                  db.loadtest.insertMany(batch);
+
+                  // Read operations
+                  let count = db.loadtest.countDocuments();
+                  let docs = db.loadtest.find({ random: { $gte: 0.5 } }).limit(50).toArray();
+
+                  // Aggregation operations
+                  let result = db.loadtest.aggregate([
+                    { $match: { random: { $gte: 0.3 } } },
+                    { $group: {
+                        _id: "$type",
+                        count: { $sum: 1 },
+                        avgRandom: { $avg: "$random" }
+                      }
+                    },
+                    { $sort: { count: -1 } }
+                  ]).toArray();
+
+                  // Update operations
+                  db.loadtest.updateMany(
+                    { random: { $lt: 0.2 } },
+                    {
+                      $set: { updated: new Date() },
+                      $inc: { updateCount: 1 }
+                    }
+                  );
+
+                  // Clean up old documents to prevent unlimited growth
+                  if (count > 5000) {
+                    let deleted = db.loadtest.deleteMany({
+                      timestamp: { $lt: new Date(Date.now() - 600000) } // 10 minutes old
+                    });
+                    print("Cleaned up " + deleted.deletedCount + " old documents");
+                  }
+
+                  print("Batch completed. Document count: " + count);
+                  sleep(3000); // Wait 3 seconds between batches
+
+                } catch (e) {
+                  print("Error in load generation: " + e);
+                  sleep(5000); // Wait longer on error
+                }
+              }
+              EOF
+
+              # Run the load generator against the primary
+              echo "Starting continuous load generation..."
+              mongosh mongodb://mongodb-0.mongodb-headless:27017,mongodb-1.mongodb-headless:27017,mongodb-2.mongodb-headless:27017/testdb?replicaSet=rs0 --file /tmp/load.js
+          resources:
+            requests:
+              cpu: "75m"
+              memory: "192Mi"
+            limits:
+              cpu: "400m"
+              memory: "768Mi"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mongodb-reader
+  namespace: mongodb
+  labels:
+    app: mongodb-reader
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mongodb-reader
+  template:
+    metadata:
+      labels:
+        app: mongodb-reader
+    spec:
+      containers:
+        - name: reader
+          image: mongo:7.0
+          command:
+            - sh
+            - -c
+            - |
+              # Wait for MongoDB replica set to be ready
+              echo "Waiting for MongoDB replica set to be ready..."
+              sleep 70
+
+              # Create read-heavy workload script
+              cat > /tmp/reader.js << 'EOF'
+              print("Starting read-heavy workload...");
+
+              // Connect to the database with read preference for secondaries
+              db = db.getSiblingDB('testdb');
+
+              // Read-heavy loop
+              while (true) {
+                try {
+                  // Various read operations
+                  for (let i = 0; i < 20; i++) {
+                    // Count documents
+                    let count = db.loadtest.countDocuments();
+
+                    // Find with different queries
+                    db.loadtest.find({ random: { $gte: Math.random() } }).limit(100).toArray();
+                    db.loadtest.find({ type: "load_test" }).skip(Math.floor(Math.random() * 100)).limit(50).toArray();
+
+                    // Complex aggregations
+                    db.loadtest.aggregate([
+                      { $match: { random: { $gte: 0.5 } } },
+                      { $unwind: "$tags" },
+                      { $group: {
+                          _id: "$tags",
+                          count: { $sum: 1 },
+                          avgRandom: { $avg: "$random" },
+                          maxRandom: { $max: "$random" },
+                          minRandom: { $min: "$random" }
+                        }
+                      },
+                      { $sort: { count: -1 } },
+                      { $limit: 10 }
+                    ]).toArray();
+
+                    // Text search simulation
+                    db.loadtest.find({
+                      $or: [
+                        { type: "load_test" },
+                        { random: { $gte: 0.7 } },
+                        { updateCount: { $exists: true } }
+                      ]
+                    }).limit(200).toArray();
+                  }
+
+                  print("Read batch completed");
+                  sleep(2000); // Wait 2 seconds between batches
+
+                } catch (e) {
+                  print("Error in read operations: " + e);
+                  sleep(5000); // Wait longer on error
+                }
+              }
+              EOF
+
+              # Run the reader workload with read preference for secondaries
+              echo "Starting continuous read operations..."
+              mongosh mongodb://mongodb-0.mongodb-headless:27017,mongodb-1.mongodb-headless:27017,mongodb-2.mongodb-headless:27017/testdb?replicaSet=rs0\&readPreference=secondaryPreferred --file /tmp/reader.js
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "128Mi"
+            limits:
+              cpu: "250m"
+              memory: "512Mi"

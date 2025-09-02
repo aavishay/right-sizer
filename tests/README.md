@@ -15,6 +15,15 @@ tests/
 ├── rbac/                   # RBAC-specific tests
 │   ├── test-rbac-suite.sh # Comprehensive RBAC test suite
 │   └── rbac-integration-test.sh # RBAC integration tests
+├── workloads/              # Test workload deployments for Right-Sizer validation
+│   ├── basic/              # Basic test deployments
+│   │   └── test-deployment.yaml
+│   ├── redis/              # Redis cluster test workloads
+│   │   └── redis-cluster.yaml
+│   └── mongodb/            # MongoDB replica set test workloads
+│       ├── mongodb-cluster.yaml
+│       ├── mongodb-noauth.yaml
+│       └── mongodb-load-simple.yaml
 ├── fixtures/               # Test fixtures and sample resources
 │   ├── nginx-deployment.yaml
 │   ├── stress-test-pods.yaml
@@ -104,6 +113,90 @@ Quick validation tests to ensure basic functionality.
 **Run smoke tests:**
 ```bash
 ./tests/run-all-tests.sh --smoke
+```
+
+### Workload Tests
+
+Workload tests deploy real applications to validate Right-Sizer's optimization capabilities with production-like workloads.
+
+**Location:** `tests/workloads/`
+
+#### Basic Workloads
+
+Simple test deployments for basic Right-Sizer functionality:
+
+```bash
+# Deploy basic test workloads
+kubectl apply -f tests/workloads/basic/test-deployment.yaml
+
+# Watch Right-Sizer optimize the resources
+kubectl logs -n right-sizer -l app.kubernetes.io/name=right-sizer -f
+```
+
+#### Redis Cluster Tests
+
+Deploy a Redis master-replica cluster with load generators:
+
+```bash
+# Deploy Redis cluster with load testing
+kubectl apply -f tests/workloads/redis/redis-cluster.yaml
+
+# Check optimization progress
+kubectl top pods -n redis
+kubectl get pods -n redis -o custom-columns=NAME:.metadata.name,CPU_REQ:.spec.containers[0].resources.requests.cpu,MEM_REQ:.spec.containers[0].resources.requests.memory
+
+# Clean up
+kubectl delete -f tests/workloads/redis/redis-cluster.yaml
+```
+
+**Components:**
+- 1 Redis master
+- 3 Redis replicas
+- 2 Load generators creating continuous read/write operations
+- 1 Benchmark pod running redis-benchmark
+
+#### MongoDB Tests
+
+Deploy MongoDB replica set with various configurations:
+
+```bash
+# Deploy MongoDB without authentication (for testing)
+kubectl apply -f tests/workloads/mongodb/mongodb-noauth.yaml
+
+# Deploy MongoDB with authentication
+kubectl apply -f tests/workloads/mongodb/mongodb-cluster.yaml
+
+# Deploy simplified MongoDB load generator
+kubectl apply -f tests/workloads/mongodb/mongodb-load-simple.yaml
+
+# Monitor Right-Sizer adjustments
+kubectl logs -n right-sizer -l app.kubernetes.io/name=right-sizer --tail=50 | grep mongodb
+
+# Clean up
+kubectl delete namespace mongodb
+```
+
+**Components:**
+- 3-node MongoDB replica set
+- Load generators for read/write operations
+- Initialization jobs for replica set configuration
+
+#### Running Workload Tests
+
+```bash
+# Deploy all workload tests
+for workload in tests/workloads/*/*.yaml; do
+  kubectl apply -f "$workload"
+done
+
+# Monitor Right-Sizer's optimization
+watch kubectl top pods -A
+
+# Generate load test report
+kubectl logs -n right-sizer -l app.kubernetes.io/name=right-sizer | grep "Successfully resized" > workload-test-results.log
+
+# Clean up all test workloads
+kubectl delete namespace redis mongodb default
 ```
 
 ## Test Fixtures

@@ -1,0 +1,522 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: daemonset-test
+  labels:
+    test-type: daemonset
+    right-sizer: enabled
+---
+# Node Exporter DaemonSet - Simulates Prometheus node exporter
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: node-exporter
+  namespace: daemonset-test
+  labels:
+    app: node-exporter
+    component: monitoring
+spec:
+  selector:
+    matchLabels:
+      app: node-exporter
+  template:
+    metadata:
+      labels:
+        app: node-exporter
+        component: monitoring
+    spec:
+      hostNetwork: true
+      hostPID: true
+      containers:
+        - name: node-exporter
+          image: prom/node-exporter:latest
+          args:
+            - --path.procfs=/host/proc
+            - --path.sysfs=/host/sys
+            - --path.rootfs=/host/root
+            - --collector.filesystem.mount-points-exclude=^/(dev|proc|sys|var/lib/docker/.+|var/lib/kubelet/pods/.+)($|/)
+          ports:
+            - containerPort: 9100
+              name: metrics
+              protocol: TCP
+          # Initial resources - Right-Sizer will optimize these
+          resources:
+            requests:
+              cpu: "30m"
+              memory: "64Mi"
+            limits:
+              cpu: "200m"
+              memory: "256Mi"
+          volumeMounts:
+            - name: proc
+              mountPath: /host/proc
+              readOnly: true
+            - name: sys
+              mountPath: /host/sys
+              readOnly: true
+            - name: root
+              mountPath: /host/root
+              readOnly: true
+      volumes:
+        - name: proc
+          hostPath:
+            path: /proc
+        - name: sys
+          hostPath:
+            path: /sys
+        - name: root
+          hostPath:
+            path: /
+---
+# Log Collector DaemonSet - Simulates Fluentd/Filebeat
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: log-collector
+  namespace: daemonset-test
+  labels:
+    app: log-collector
+    component: logging
+spec:
+  selector:
+    matchLabels:
+      app: log-collector
+  template:
+    metadata:
+      labels:
+        app: log-collector
+        component: logging
+    spec:
+      serviceAccountName: log-collector
+      containers:
+        - name: log-collector
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              echo "Starting log collector simulation..."
+
+              # Create a simple log processing simulation
+              while true; do
+                # Simulate reading container logs
+                for i in $(seq 1 10); do
+                  # Read from /var/log
+                  if [ -d /var/log/pods ]; then
+                    find /var/log/pods -type f -name "*.log" 2>/dev/null | head -20 | while read -r logfile; do
+                      # Simulate processing (just count lines)
+                      wc -l "$logfile" 2>/dev/null || true
+                    done
+                  fi
+
+                  # Generate some CPU/memory load
+                  echo "Processing batch $i at $(date)"
+                  dd if=/dev/zero of=/dev/null bs=1M count=10 2>/dev/null
+
+                  # Simulate parsing JSON logs
+                  echo '{"timestamp":"'$(date -Iseconds)'","level":"info","message":"Log entry '$i'","service":"log-collector"}' >> /tmp/processed.log
+
+                  # Rotate log file if too large
+                  if [ -f /tmp/processed.log ] && [ $(stat -c%s /tmp/processed.log 2>/dev/null || echo 0) -gt 10485760 ]; then
+                    mv /tmp/processed.log /tmp/processed.log.old
+                    echo "Log rotated at $(date)" > /tmp/processed.log
+                  fi
+                done
+
+                # Simulate batch processing interval
+                sleep 5
+              done
+          # Initial resources - Right-Sizer will optimize these
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "128Mi"
+            limits:
+              cpu: "300m"
+              memory: "512Mi"
+          volumeMounts:
+            - name: varlog
+              mountPath: /var/log
+              readOnly: true
+            - name: varlibdockercontainers
+              mountPath: /var/lib/docker/containers
+              readOnly: true
+      volumes:
+        - name: varlog
+          hostPath:
+            path: /var/log
+        - name: varlibdockercontainers
+          hostPath:
+            path: /var/lib/docker/containers
+---
+# System Metrics Collector DaemonSet
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: system-metrics
+  namespace: daemonset-test
+  labels:
+    app: system-metrics
+    component: monitoring
+spec:
+  selector:
+    matchLabels:
+      app: system-metrics
+  template:
+    metadata:
+      labels:
+        app: system-metrics
+        component: monitoring
+    spec:
+      hostNetwork: true
+      containers:
+        - name: metrics-collector
+          image: alpine:3.19
+          command:
+            - sh
+            - -c
+            - |
+              apk add --no-cache procps sysstat util-linux
+
+              echo "Starting system metrics collection..."
+
+              while true; do
+                # Collect CPU metrics
+                CPU_USAGE=$(top -bn1 | grep "Cpu(s)" | awk '{print $2}' | cut -d'%' -f1 2>/dev/null || echo "0")
+
+                # Collect memory metrics
+                MEM_TOTAL=$(free -m | awk 'NR==2{print $2}' 2>/dev/null || echo "0")
+                MEM_USED=$(free -m | awk 'NR==2{print $3}' 2>/dev/null || echo "0")
+                MEM_FREE=$(free -m | awk 'NR==2{print $4}' 2>/dev/null || echo "0")
+
+                # Collect disk I/O metrics
+                DISK_READ=$(cat /proc/diskstats | awk '{print $6}' | paste -sd+ | bc 2>/dev/null || echo "0")
+                DISK_WRITE=$(cat /proc/diskstats | awk '{print $10}' | paste -sd+ | bc 2>/dev/null || echo "0")
+
+                # Collect network metrics
+                NET_RX=$(cat /proc/net/dev | grep -v lo | awk '{sum+=$2} END {print sum}' 2>/dev/null || echo "0")
+                NET_TX=$(cat /proc/net/dev | grep -v lo | awk '{sum+=$10} END {print sum}' 2>/dev/null || echo "0")
+
+                # Collect process metrics
+                PROC_COUNT=$(ps aux | wc -l)
+                LOAD_AVG=$(cat /proc/loadavg | awk '{print $1,$2,$3}')
+
+                # Output metrics in JSON format
+                cat << EOF > /tmp/metrics.json
+                {
+                  "timestamp": "$(date -Iseconds)",
+                  "cpu_usage": "$CPU_USAGE",
+                  "memory": {
+                    "total_mb": "$MEM_TOTAL",
+                    "used_mb": "$MEM_USED",
+                    "free_mb": "$MEM_FREE"
+                  },
+                  "disk": {
+                    "read_sectors": "$DISK_READ",
+                    "write_sectors": "$DISK_WRITE"
+                  },
+                  "network": {
+                    "rx_bytes": "$NET_RX",
+                    "tx_bytes": "$NET_TX"
+                  },
+                  "process_count": "$PROC_COUNT",
+                  "load_average": "$LOAD_AVG"
+                }
+                EOF
+
+                cat /tmp/metrics.json
+
+                # Simulate processing overhead
+                for i in $(seq 1 100); do
+                  echo "scale=10; 4*a(1)" | bc -l > /dev/null 2>&1 || true
+                done
+
+                sleep 10
+              done
+          # Initial resources - Right-Sizer will optimize these
+          resources:
+            requests:
+              cpu: "25m"
+              memory: "64Mi"
+            limits:
+              cpu: "150m"
+              memory: "256Mi"
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - name: proc
+              mountPath: /host/proc
+              readOnly: true
+            - name: sys
+              mountPath: /host/sys
+              readOnly: true
+      volumes:
+        - name: proc
+          hostPath:
+            path: /proc
+        - name: sys
+          hostPath:
+            path: /sys
+---
+# Network Monitor DaemonSet
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: network-monitor
+  namespace: daemonset-test
+  labels:
+    app: network-monitor
+    component: monitoring
+spec:
+  selector:
+    matchLabels:
+      app: network-monitor
+  template:
+    metadata:
+      labels:
+        app: network-monitor
+        component: monitoring
+    spec:
+      hostNetwork: true
+      containers:
+        - name: network-monitor
+          image: nicolaka/netshoot:latest
+          command:
+            - sh
+            - -c
+            - |
+              echo "Starting network monitoring..."
+
+              while true; do
+                # Monitor network interfaces
+                echo "=== Network Interfaces ===" > /tmp/netmon.log
+                ip -s link show >> /tmp/netmon.log 2>&1
+
+                # Check connectivity to cluster services
+                echo "=== Cluster Connectivity ===" >> /tmp/netmon.log
+                nslookup kubernetes.default.svc.cluster.local >> /tmp/netmon.log 2>&1 || true
+
+                # Monitor TCP connections
+                echo "=== TCP Connections ===" >> /tmp/netmon.log
+                ss -tan | head -50 >> /tmp/netmon.log 2>&1
+
+                # Monitor UDP connections
+                echo "=== UDP Connections ===" >> /tmp/netmon.log
+                ss -uan | head -20 >> /tmp/netmon.log 2>&1
+
+                # Check network latency
+                echo "=== Network Latency ===" >> /tmp/netmon.log
+                ping -c 3 8.8.8.8 >> /tmp/netmon.log 2>&1 || true
+
+                # Monitor iptables rules count
+                echo "=== IPTables Rules Count ===" >> /tmp/netmon.log
+                iptables -L -n | wc -l >> /tmp/netmon.log 2>&1 || true
+
+                # Generate network traffic for testing
+                for i in $(seq 1 5); do
+                  curl -s -o /dev/null http://kubernetes.default.svc.cluster.local:443 2>&1 || true
+                  nslookup google.com > /dev/null 2>&1 || true
+                done
+
+                # Output summary
+                echo "Network monitoring cycle completed at $(date)"
+                tail -20 /tmp/netmon.log
+
+                sleep 15
+              done
+          # Initial resources - Right-Sizer will optimize these
+          resources:
+            requests:
+              cpu: "40m"
+              memory: "96Mi"
+            limits:
+              cpu: "250m"
+              memory: "384Mi"
+          securityContext:
+            capabilities:
+              add:
+                - NET_ADMIN
+                - NET_RAW
+                - SYS_ADMIN
+---
+# Storage Monitor DaemonSet
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: storage-monitor
+  namespace: daemonset-test
+  labels:
+    app: storage-monitor
+    component: monitoring
+spec:
+  selector:
+    matchLabels:
+      app: storage-monitor
+  template:
+    metadata:
+      labels:
+        app: storage-monitor
+        component: monitoring
+    spec:
+      containers:
+        - name: storage-monitor
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              echo "Starting storage monitoring..."
+
+              while true; do
+                # Monitor disk usage
+                echo "=== Disk Usage ===" > /tmp/storage.log
+                df -h >> /tmp/storage.log 2>&1
+
+                # Monitor inode usage
+                echo "=== Inode Usage ===" >> /tmp/storage.log
+                df -i >> /tmp/storage.log 2>&1
+
+                # Check mount points
+                echo "=== Mount Points ===" >> /tmp/storage.log
+                mount | grep -E "(ext4|xfs|overlay)" >> /tmp/storage.log 2>&1
+
+                # Simulate I/O operations
+                echo "=== I/O Test ===" >> /tmp/storage.log
+
+                # Write test
+                dd if=/dev/zero of=/tmp/testfile bs=1M count=10 2>&1 | grep -E "(copied|bytes)" >> /tmp/storage.log
+
+                # Read test
+                dd if=/tmp/testfile of=/dev/null bs=1M 2>&1 | grep -E "(copied|bytes)" >> /tmp/storage.log
+
+                # Clean up test file
+                rm -f /tmp/testfile
+
+                # Monitor container storage
+                if [ -d /var/lib/docker ]; then
+                  echo "=== Docker Storage ===" >> /tmp/storage.log
+                  du -sh /var/lib/docker/* 2>/dev/null | head -10 >> /tmp/storage.log
+                fi
+
+                # Output summary
+                echo "Storage monitoring completed at $(date)"
+                cat /tmp/storage.log
+
+                sleep 20
+              done
+          # Initial resources - Right-Sizer will optimize these
+          resources:
+            requests:
+              cpu: "20m"
+              memory: "48Mi"
+            limits:
+              cpu: "100m"
+              memory: "192Mi"
+          volumeMounts:
+            - name: docker-storage
+              mountPath: /var/lib/docker
+              readOnly: true
+            - name: root-fs
+              mountPath: /host
+              readOnly: true
+      volumes:
+        - name: docker-storage
+          hostPath:
+            path: /var/lib/docker
+        - name: root-fs
+          hostPath:
+            path: /
+---
+# Load Generator DaemonSet - Creates variable load for testing Right-Sizer
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: load-generator
+  namespace: daemonset-test
+  labels:
+    app: load-generator
+    component: testing
+spec:
+  selector:
+    matchLabels:
+      app: load-generator
+  template:
+    metadata:
+      labels:
+        app: load-generator
+        component: testing
+    spec:
+      containers:
+        - name: cpu-load
+          image: alpine:3.19
+          command:
+            - sh
+            - -c
+            - |
+              apk add --no-cache stress-ng bc
+
+              echo "Starting variable load generation..."
+
+              while true; do
+                # Variable CPU load
+                LOAD_LEVEL=$((RANDOM % 3))
+
+                case $LOAD_LEVEL in
+                  0)
+                    echo "Low load phase (1 minute)"
+                    stress-ng --cpu 1 --cpu-load 20 --timeout 60s --quiet
+                    ;;
+                  1)
+                    echo "Medium load phase (2 minutes)"
+                    stress-ng --cpu 1 --cpu-load 50 --vm 1 --vm-bytes 32M --timeout 120s --quiet
+                    ;;
+                  2)
+                    echo "High load phase (30 seconds)"
+                    stress-ng --cpu 2 --cpu-load 80 --vm 2 --vm-bytes 64M --io 1 --timeout 30s --quiet
+                    ;;
+                esac
+
+                # Rest period
+                echo "Rest period (30 seconds)"
+                sleep 30
+              done
+          # Initial resources - Right-Sizer will optimize these
+          resources:
+            requests:
+              cpu: "75m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "768Mi"
+---
+# ServiceAccount for log-collector
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: log-collector
+  namespace: daemonset-test
+---
+# Role for log-collector
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: log-collector
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "pods/log"]
+    verbs: ["get", "list"]
+---
+# RoleBinding for log-collector
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: log-collector
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: log-collector
+subjects:
+  - kind: ServiceAccount
+    name: log-collector
+    namespace: daemonset-test

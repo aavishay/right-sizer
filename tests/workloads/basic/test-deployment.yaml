@@ -1,0 +1,136 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-test
+  namespace: default
+  labels:
+    app: nginx-test
+    environment: test
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: nginx-test
+  template:
+    metadata:
+      labels:
+        app: nginx-test
+        environment: test
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:alpine
+          ports:
+            - containerPort: 80
+              name: http
+          # Initial resources - Right-Sizer will optimize these
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "200m"
+              memory: "256Mi"
+          env:
+            - name: NGINX_WORKER_PROCESSES
+              value: "auto"
+            - name: NGINX_WORKER_CONNECTIONS
+              value: "1024"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-test
+  namespace: default
+spec:
+  selector:
+    app: nginx-test
+  ports:
+    - port: 80
+      targetPort: 80
+      protocol: TCP
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: stress-test
+  namespace: default
+  labels:
+    app: stress-test
+    environment: test
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: stress-test
+  template:
+    metadata:
+      labels:
+        app: stress-test
+        environment: test
+    spec:
+      containers:
+        - name: stress
+          image: polinux/stress
+          command: ["stress"]
+          args:
+            - "--cpu"
+            - "1"
+            - "--io"
+            - "1"
+            - "--vm"
+            - "1"
+            - "--vm-bytes"
+            - "128M"
+            - "--timeout"
+            - "3600s"
+            - "--verbose"
+          # Initial resources - Right-Sizer will optimize these
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis-test
+  namespace: default
+  labels:
+    app: redis-test
+    environment: test
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis-test
+  template:
+    metadata:
+      labels:
+        app: redis-test
+        environment: test
+    spec:
+      containers:
+        - name: redis
+          image: redis:alpine
+          ports:
+            - containerPort: 6379
+              name: redis
+          # Initial resources - Right-Sizer will optimize these
+          resources:
+            requests:
+              cpu: "25m"
+              memory: "32Mi"
+            limits:
+              cpu: "100m"
+              memory: "128Mi"
+          command: ["redis-server"]
+          args:
+            - "--maxmemory"
+            - "64mb"
+            - "--maxmemory-policy"
+            - "allkeys-lru"

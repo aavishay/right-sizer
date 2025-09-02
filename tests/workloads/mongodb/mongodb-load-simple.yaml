@@ -1,0 +1,175 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mongodb-simple-load
+  namespace: mongodb
+  labels:
+    app: mongodb-simple-load
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mongodb-simple-load
+  template:
+    metadata:
+      labels:
+        app: mongodb-simple-load
+    spec:
+      containers:
+        - name: load-generator
+          image: mongo:7.0
+          command:
+            - sh
+            - -c
+            - |
+              # Wait for MongoDB to be ready
+              echo "Waiting for MongoDB to be ready..."
+              sleep 30
+
+              # Create a simple load generation script
+              cat > /tmp/load.js << 'EOF'
+              // Connect to the replica set
+              print("Connecting to MongoDB replica set...");
+
+              // Simple load generation loop
+              while (true) {
+                try {
+                  // Insert some documents
+                  for (let i = 0; i < 10; i++) {
+                    db.loadtest.insertOne({
+                      timestamp: new Date(),
+                      iteration: i,
+                      random: Math.random(),
+                      data: "x".repeat(Math.floor(Math.random() * 100)),
+                      type: "load_test"
+                    });
+                  }
+
+                  // Read some documents
+                  let count = db.loadtest.countDocuments();
+                  let docs = db.loadtest.find().limit(5).toArray();
+
+                  // Perform aggregation
+                  let result = db.loadtest.aggregate([
+                    { $match: { random: { $gte: 0.5 } } },
+                    { $group: { _id: "$type", count: { $sum: 1 } } }
+                  ]).toArray();
+
+                  // Update some documents
+                  db.loadtest.updateMany(
+                    { random: { $lt: 0.3 } },
+                    { $set: { updated: new Date() } }
+                  );
+
+                  // Delete old documents to prevent collection from growing too large
+                  if (count > 1000) {
+                    db.loadtest.deleteMany({
+                      timestamp: { $lt: new Date(Date.now() - 300000) }
+                    });
+                  }
+
+                  print("Batch completed. Document count: " + count);
+                  sleep(2000); // Wait 2 seconds between batches
+
+                } catch (e) {
+                  print("Error in load generation: " + e);
+                  sleep(5000); // Wait longer on error
+                }
+              }
+              EOF
+
+              # Run the load generator
+              echo "Starting load generation..."
+              mongosh mongodb://admin:admin123@mongodb-0.mongodb-headless:27017,mongodb-1.mongodb-headless:27017,mongodb-2.mongodb-headless:27017/testdb?replicaSet=rs0\&authSource=admin --file /tmp/load.js
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "128Mi"
+            limits:
+              cpu: "300m"
+              memory: "512Mi"
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: mongodb-init-simple
+  namespace: mongodb
+spec:
+  backoffLimit: 3
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: init
+          image: mongo:7.0
+          command:
+            - sh
+            - -c
+            - |
+              echo "Waiting for MongoDB pods to be ready..."
+              sleep 45
+
+              echo "Attempting to initialize replica set..."
+              mongosh mongodb://mongodb-0.mongodb-headless:27017 --eval "
+              try {
+                rs.initiate({
+                  _id: 'rs0',
+                  members: [
+                    { _id: 0, host: 'mongodb-0.mongodb-headless.mongodb.svc.cluster.local:27017' },
+                    { _id: 1, host: 'mongodb-1.mongodb-headless.mongodb.svc.cluster.local:27017' },
+                    { _id: 2, host: 'mongodb-2.mongodb-headless.mongodb.svc.cluster.local:27017' }
+                  ]
+                });
+                print('Replica set initialized successfully');
+              } catch(e) {
+                if (e.codeName === 'AlreadyInitialized' || e.message.includes('already initialized')) {
+                  print('Replica set already initialized');
+                } else {
+                  print('Error: ' + e);
+                  // Don't fail if already initialized
+                }
+              }
+              "
+
+              echo "Waiting for replica set to be ready..."
+              sleep 10
+
+              echo "Creating admin user..."
+              mongosh mongodb://mongodb-0.mongodb-headless:27017 --eval "
+              try {
+                db = db.getSiblingDB('admin');
+                db.createUser({
+                  user: 'admin',
+                  pwd: 'admin123',
+                  roles: [
+                    { role: 'root', db: 'admin' },
+                    { role: 'clusterAdmin', db: 'admin' }
+                  ]
+                });
+                print('Admin user created');
+              } catch(e) {
+                if (e.codeName === 'DuplicateKey' || e.code === 51003) {
+                  print('Admin user already exists');
+                } else {
+                  print('Error creating user: ' + e);
+                }
+              }
+              "
+
+              echo "Creating test database..."
+              mongosh mongodb://admin:admin123@mongodb-0.mongodb-headless:27017/admin?authSource=admin --eval "
+              use testdb;
+              db.createCollection('loadtest');
+              db.loadtest.createIndex({ timestamp: 1 });
+              db.loadtest.createIndex({ random: 1 });
+              print('Test database setup complete');
+              "
+
+              echo "MongoDB initialization complete!"
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "128Mi"
+            limits:
+              cpu: "200m"
+              memory: "256Mi"

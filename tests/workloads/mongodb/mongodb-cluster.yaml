@@ -1,0 +1,410 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: mongodb
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mongodb-secret
+  namespace: mongodb
+type: Opaque
+data:
+  # admin/admin123 (base64 encoded)
+  mongodb-root-username: YWRtaW4=
+  mongodb-root-password: YWRtaW4xMjM=
+  # mongodb://admin:admin123@mongodb-0.mongodb-headless:27017,mongodb-1.mongodb-headless:27017,mongodb-2.mongodb-headless:27017/?replicaSet=rs0
+  mongodb-replica-set-key: bW9uZ29kYnJlcGxpY2FzZXRrZXkxMjM=
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongodb-headless
+  namespace: mongodb
+  labels:
+    app: mongodb
+spec:
+  clusterIP: None
+  selector:
+    app: mongodb
+  ports:
+    - port: 27017
+      targetPort: 27017
+      name: mongodb
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongodb
+  namespace: mongodb
+  labels:
+    app: mongodb
+spec:
+  type: ClusterIP
+  selector:
+    app: mongodb
+  ports:
+    - port: 27017
+      targetPort: 27017
+      name: mongodb
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mongodb-init
+  namespace: mongodb
+data:
+  init-replica.js: |
+    var cfg = {
+      "_id": "rs0",
+      "version": 1,
+      "members": [
+        {
+          "_id": 0,
+          "host": "mongodb-0.mongodb-headless.mongodb.svc.cluster.local:27017",
+          "priority": 2
+        },
+        {
+          "_id": 1,
+          "host": "mongodb-1.mongodb-headless.mongodb.svc.cluster.local:27017",
+          "priority": 1
+        },
+        {
+          "_id": 2,
+          "host": "mongodb-2.mongodb-headless.mongodb.svc.cluster.local:27017",
+          "priority": 1
+        }
+      ]
+    };
+    rs.initiate(cfg);
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mongodb
+  namespace: mongodb
+  labels:
+    app: mongodb
+spec:
+  serviceName: mongodb-headless
+  replicas: 3
+  selector:
+    matchLabels:
+      app: mongodb
+  template:
+    metadata:
+      labels:
+        app: mongodb
+    spec:
+      containers:
+        - name: mongodb
+          image: mongo:7.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 27017
+              name: mongodb
+          env:
+            - name: MONGO_INITDB_ROOT_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-secret
+                  key: mongodb-root-username
+            - name: MONGO_INITDB_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-secret
+                  key: mongodb-root-password
+            - name: MONGO_INITDB_DATABASE
+              value: "testdb"
+          command:
+            - mongod
+            - "--replSet"
+            - rs0
+            - "--bind_ip_all"
+            - "--auth"
+            - "--keyFile"
+            - "/data/replica.key"
+          # Initial resources - Right-Sizer will optimize these
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "1Gi"
+          volumeMounts:
+            - name: mongodb-data
+              mountPath: /data/db
+            - name: mongodb-key
+              mountPath: /data/replica.key
+              subPath: replica.key
+              readOnly: false
+          livenessProbe:
+            exec:
+              command:
+                - mongosh
+                - --eval
+                - "db.adminCommand('ping')"
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+          readinessProbe:
+            exec:
+              command:
+                - mongosh
+                - --eval
+                - "db.adminCommand('ping')"
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+        - name: mongodb-exporter
+          image: percona/mongodb_exporter:0.40
+          ports:
+            - containerPort: 9216
+              name: metrics
+          env:
+            - name: MONGODB_URI
+              value: "mongodb://admin:admin123@localhost:27017/admin?authSource=admin&ssl=false"
+          resources:
+            requests:
+              cpu: "25m"
+              memory: "64Mi"
+            limits:
+              cpu: "100m"
+              memory: "128Mi"
+      initContainers:
+        - name: create-keyfile
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              echo "mongodbereplicasetkey123" > /data/replica.key
+              chmod 400 /data/replica.key
+              chown 999:999 /data/replica.key
+          volumeMounts:
+            - name: mongodb-key
+              mountPath: /data
+          resources:
+            requests:
+              cpu: "10m"
+              memory: "32Mi"
+            limits:
+              cpu: "50m"
+              memory: "64Mi"
+      volumes:
+        - name: mongodb-key
+          emptyDir: {}
+  volumeClaimTemplates:
+    - metadata:
+        name: mongodb-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 2Gi
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: mongodb-init-replica
+  namespace: mongodb
+spec:
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: mongo-init
+          image: mongo:7.0
+          command:
+            - sh
+            - -c
+            - |
+              sleep 30
+              echo "Initializing MongoDB replica set..."
+              mongosh --host mongodb-0.mongodb-headless.mongodb.svc.cluster.local:27017 \
+                      --username admin \
+                      --password admin123 \
+                      --authenticationDatabase admin \
+                      --eval "
+              var cfg = {
+                '_id': 'rs0',
+                'members': [
+                  {
+                    '_id': 0,
+                    'host': 'mongodb-0.mongodb-headless.mongodb.svc.cluster.local:27017',
+                    'priority': 2
+                  },
+                  {
+                    '_id': 1,
+                    'host': 'mongodb-1.mongodb-headless.mongodb.svc.cluster.local:27017',
+                    'priority': 1
+                  },
+                  {
+                    '_id': 2,
+                    'host': 'mongodb-2.mongodb-headless.mongodb.svc.cluster.local:27017',
+                    'priority': 1
+                  }
+                ]
+              };
+
+              try {
+                rs.initiate(cfg);
+                print('Replica set initialized successfully');
+              } catch(e) {
+                if (e.codeName === 'AlreadyInitialized') {
+                  print('Replica set already initialized');
+                  rs.status();
+                } else {
+                  print('Error initializing replica set: ' + e);
+                }
+              }
+              "
+
+              echo "Creating test database and collection..."
+              mongosh --host mongodb-0.mongodb-headless.mongodb.svc.cluster.local:27017 \
+                      --username admin \
+                      --password admin123 \
+                      --authenticationDatabase admin \
+                      --eval "
+              use testdb;
+              db.createCollection('testcollection');
+              db.testcollection.insertOne({'test': 'data', 'timestamp': new Date()});
+              print('Test database created successfully');
+              "
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "128Mi"
+            limits:
+              cpu: "200m"
+              memory: "256Mi"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mongodb-load-generator
+  namespace: mongodb
+  labels:
+    app: mongodb-load-generator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mongodb-load-generator
+  template:
+    metadata:
+      labels:
+        app: mongodb-load-generator
+    spec:
+      containers:
+        - name: load-generator
+          image: node:20-alpine
+          command:
+            - sh
+            - -c
+            - |
+              apk add --no-cache mongodb-tools
+              cat > /app/load.js << 'EOF'
+              const { MongoClient } = require('mongodb');
+
+              const uri = 'mongodb://admin:admin123@mongodb-0.mongodb-headless:27017,mongodb-1.mongodb-headless:27017,mongodb-2.mongodb-headless:27017/testdb?replicaSet=rs0&authSource=admin';
+
+              async function generateLoad() {
+                const client = new MongoClient(uri);
+
+                try {
+                  await client.connect();
+                  console.log('Connected to MongoDB replica set');
+
+                  const db = client.db('testdb');
+                  const collection = db.collection('loadtest');
+
+                  // Continuous load generation
+                  while (true) {
+                    const operations = [];
+
+                    // Batch insert operations
+                    for (let i = 0; i < 100; i++) {
+                      operations.push({
+                        insertOne: {
+                          document: {
+                            timestamp: new Date(),
+                            random: Math.random(),
+                            data: 'x'.repeat(Math.floor(Math.random() * 1000)),
+                            counter: i
+                          }
+                        }
+                      });
+                    }
+
+                    await collection.bulkWrite(operations);
+
+                    // Random reads
+                    for (let i = 0; i < 50; i++) {
+                      await collection.find({
+                        random: { $gte: Math.random() }
+                      }).limit(10).toArray();
+                    }
+
+                    // Aggregation pipeline
+                    await collection.aggregate([
+                      { $match: { random: { $gte: 0.5 } } },
+                      { $group: { _id: null, count: { $sum: 1 }, avg: { $avg: '$random' } } }
+                    ]).toArray();
+
+                    // Clean up old documents (keep collection size manageable)
+                    const count = await collection.countDocuments();
+                    if (count > 10000) {
+                      await collection.deleteMany({
+                        timestamp: { $lt: new Date(Date.now() - 300000) } // 5 minutes old
+                      });
+                    }
+
+                    console.log(`Operations completed. Document count: ${count}`);
+
+                    // Wait between batches
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+                  }
+                } catch (error) {
+                  console.error('Error:', error);
+                  process.exit(1);
+                } finally {
+                  await client.close();
+                }
+              }
+
+              // Wait for MongoDB to be ready
+              setTimeout(() => {
+                generateLoad().catch(console.error);
+              }, 60000); // Wait 60 seconds for replica set initialization
+              EOF
+
+              cd /app
+              npm init -y
+              npm install mongodb
+              node load.js
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "128Mi"
+            limits:
+              cpu: "200m"
+              memory: "256Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongodb-metrics
+  namespace: mongodb
+  labels:
+    app: mongodb
+spec:
+  type: ClusterIP
+  selector:
+    app: mongodb
+  ports:
+    - port: 9216
+      targetPort: 9216
+      name: metrics
