@@ -206,6 +206,65 @@ lint: ## Run Go linter
 	cd go && golangci-lint run ./...
 	@echo "$(GREEN)Linting completed$(NC)"
 
+##@ Security
+
+.PHONY: security-scan
+security-scan: ## Run all security scans
+	@echo "$(BLUE)Running security scans...$(NC)"
+	@$(MAKE) vuln-check
+	@$(MAKE) trivy-scan
+	@echo "$(GREEN)All security scans completed$(NC)"
+
+.PHONY: vuln-check
+vuln-check: ## Check Go dependencies for vulnerabilities
+	@echo "$(BLUE)Checking Go dependencies for vulnerabilities...$(NC)"
+	@if ! command -v govulncheck &> /dev/null; then \
+		echo "$(YELLOW)govulncheck not found, installing...$(NC)"; \
+		go install golang.org/x/vuln/cmd/govulncheck@latest; \
+	fi
+	cd go && govulncheck ./...
+	@echo "$(GREEN)Vulnerability check completed$(NC)"
+
+.PHONY: trivy-scan
+trivy-scan: ## Scan Docker image for vulnerabilities
+	@echo "$(BLUE)Scanning Docker image with Trivy...$(NC)"
+	@if ! command -v trivy &> /dev/null; then \
+		echo "$(RED)Trivy not found. Please install: brew install trivy$(NC)"; \
+		exit 1; \
+	fi
+	trivy image --severity HIGH,CRITICAL $(DOCKER_IMAGE):$(DOCKER_TAG)
+	@echo "$(GREEN)Trivy scan completed$(NC)"
+
+.PHONY: update-deps
+update-deps: ## Update Go dependencies to latest versions
+	@echo "$(BLUE)Updating Go dependencies...$(NC)"
+	cd go && go get -u ./...
+	cd go && go mod tidy
+	@echo "$(GREEN)Dependencies updated$(NC)"
+	@echo "$(YELLOW)Run 'make test' to verify everything still works$(NC)"
+
+.PHONY: security-report
+security-report: ## Generate security report
+	@echo "$(BLUE)Generating security report...$(NC)"
+	@echo "# Security Report - $(shell date '+%Y-%m-%d')" > security-report.md
+	@echo "" >> security-report.md
+	@echo "## Version Information" >> security-report.md
+	@echo "- Right-Sizer Version: $(VERSION)" >> security-report.md
+	@echo "- Git Commit: $(GIT_COMMIT)" >> security-report.md
+	@echo "" >> security-report.md
+	@echo "## Vulnerability Scan Results" >> security-report.md
+	@echo "" >> security-report.md
+	@echo "### Go Dependencies" >> security-report.md
+	@echo '```' >> security-report.md
+	@cd go && govulncheck ./... 2>&1 | tail -n +2 >> ../security-report.md || echo "No vulnerabilities found" >> ../security-report.md
+	@echo '```' >> security-report.md
+	@echo "" >> security-report.md
+	@echo "### Docker Image" >> security-report.md
+	@echo '```' >> security-report.md
+	@trivy image --severity HIGH,CRITICAL --format table $(DOCKER_IMAGE):$(DOCKER_TAG) >> security-report.md 2>&1 || echo "No HIGH or CRITICAL vulnerabilities found" >> security-report.md
+	@echo '```' >> security-report.md
+	@echo "$(GREEN)Security report generated: security-report.md$(NC)"
+
 ##@ Development
 
 .PHONY: dev
