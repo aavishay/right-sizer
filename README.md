@@ -3,6 +3,7 @@
 # 🎯 Right-Sizer Operator
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
+[![Version](https://img.shields.io/badge/Version-0.1.0-green.svg)](https://github.com/aavishay/right-sizer/releases)
 [![Kubernetes](https://img.shields.io/badge/Kubernetes-1.33%2B-326ce5)](https://kubernetes.io)
 [![Go Version](https://img.shields.io/badge/Go-1.24-00ADD8)](https://golang.org)
 [![Helm](https://img.shields.io/badge/Helm-3.0%2B-0F1689)](https://helm.sh)
@@ -26,7 +27,8 @@ helm repo add right-sizer https://aavishay.github.io/right-sizer/charts
 helm install right-sizer right-sizer/right-sizer --namespace right-sizer --create-namespace
 
 # Quick Install (Docker)
-docker pull aavishay/right-sizer:latest
+docker pull aavishay/right-sizer:0.1.0  # Specific version
+docker pull aavishay/right-sizer:latest # Latest version
 ```
 
 **Key Benefits:** 🚀 Zero-downtime resizing • 💰 30-50% cost reduction • 🎯 Automatic optimization • 📊 Real-time monitoring
