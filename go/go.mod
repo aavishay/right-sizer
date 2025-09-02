@@ -6,7 +6,7 @@ replace golang.org/x/tools => golang.org/x/tools v0.10.0
 
 replace golang.org/x/sys => golang.org/x/sys v0.10.0
 
-replace golang.org/x/net => golang.org/x/net v0.10.0
+replace golang.org/x/net => golang.org/x/net v0.17.0
 
 require (
 	github.com/go-logr/zapr v1.3.0
