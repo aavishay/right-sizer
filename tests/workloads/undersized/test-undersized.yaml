@@ -1,0 +1,144 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: undersized-app
+  namespace: test-apps
+  labels:
+    app: undersized-test
+    right-sizer.io/enabled: "true"
+    right-sizer.io/strategy: "adaptive"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: undersized-test
+  template:
+    metadata:
+      labels:
+        app: undersized-test
+        right-sizer.io/enabled: "true"
+        right-sizer.io/min-cpu: "50m"
+        right-sizer.io/max-cpu: "2000m"
+        right-sizer.io/min-memory: "64Mi"
+        right-sizer.io/max-memory: "2Gi"
+    spec:
+      containers:
+      - name: stress
+        image: polinux/stress
+        command: ["stress"]
+        args:
+        # This will consume more resources than allocated
+        # --cpu 1: spawn 1 worker spinning on sqrt()
+        # --vm 1: spawn 1 worker spinning on malloc()/free()
+        # --vm-bytes 128M: malloc 128MB per vm worker
+        # --timeout 300s: run for 5 minutes then restart
+        - "--cpu"
+        - "1"
+        - "--vm"
+        - "1"
+        - "--vm-bytes"
+        - "128M"
+        - "--timeout"
+        - "300s"
+        resources:
+          requests:
+            cpu: "50m"       # Undersized - stress will need more
+            memory: "64Mi"   # Undersized - stress will need at least 128Mi
+          limits:
+            cpu: "100m"      # Low limit that will need to be increased
+            memory: "128Mi"  # Will need to be increased for vm operations
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: memory-intensive-app
+  namespace: test-apps
+  labels:
+    app: memory-test
+    right-sizer.io/enabled: "true"
+    right-sizer.io/strategy: "aggressive"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: memory-test
+  template:
+    metadata:
+      labels:
+        app: memory-test
+        right-sizer.io/enabled: "true"
+        right-sizer.io/min-cpu: "10m"
+        right-sizer.io/max-cpu: "500m"
+        right-sizer.io/min-memory: "100Mi"
+        right-sizer.io/max-memory: "1Gi"
+    spec:
+      containers:
+      - name: memory-consumer
+        image: alpine:latest
+        command: ["/bin/sh"]
+        args:
+        - "-c"
+        - |
+          echo "Starting memory-intensive workload..."
+          # Allocate memory using dd
+          dd if=/dev/zero of=/tmp/bigfile bs=1M count=200
+          # Keep the file in memory and do some processing
+          while true; do
+            cat /tmp/bigfile | wc -c > /dev/null
+            sleep 5
+          done
+        resources:
+          requests:
+            cpu: "10m"       # CPU is fine, focus is on memory
+            memory: "100Mi"  # Undersized - will need ~250Mi for 200MB file
+          limits:
+            cpu: "50m"
+            memory: "150Mi"  # Too low - will cause OOM without right-sizing
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cpu-burst-app
+  namespace: test-apps
+  labels:
+    app: cpu-burst-test
+    right-sizer.io/enabled: "true"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cpu-burst-test
+  template:
+    metadata:
+      labels:
+        app: cpu-burst-test
+        right-sizer.io/enabled: "true"
+        right-sizer.io/strategy: "conservative"
+        right-sizer.io/min-cpu: "100m"
+        right-sizer.io/max-cpu: "2000m"
+        right-sizer.io/min-memory: "50Mi"
+        right-sizer.io/max-memory: "500Mi"
+    spec:
+      containers:
+      - name: cpu-burst
+        image: alpine:latest
+        command: ["/bin/sh"]
+        args:
+        - "-c"
+        - |
+          echo "Starting CPU burst workload..."
+          while true; do
+            # Burst of CPU activity
+            echo "CPU burst starting..."
+            timeout 10 sh -c 'while true; do echo "scale=5000; a(1)*4" | bc -l > /dev/null; done' || true
+            # Rest period
+            echo "Resting..."
+            sleep 20
+          done
+        resources:
+          requests:
+            cpu: "100m"     # May be insufficient during bursts
+            memory: "50Mi"  # Should be sufficient
+          limits:
+            cpu: "200m"     # May need to be increased for burst periods
+            memory: "100Mi"

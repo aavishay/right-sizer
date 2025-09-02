@@ -1,0 +1,127 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: test-apps
+  labels:
+    right-sizer.io/enabled: "true"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: oversized-nginx
+  namespace: test-apps
+  labels:
+    app: nginx-test
+    right-sizer.io/enabled: "true"
+    right-sizer.io/strategy: "adaptive"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: nginx-test
+  template:
+    metadata:
+      labels:
+        app: nginx-test
+        right-sizer.io/enabled: "true"
+        right-sizer.io/min-cpu: "50m"
+        right-sizer.io/max-cpu: "2000m"
+        right-sizer.io/min-memory: "64Mi"
+        right-sizer.io/max-memory: "2Gi"
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:alpine
+        ports:
+        - containerPort: 80
+        resources:
+          requests:
+            cpu: "1000m"      # Intentionally oversized - nginx typically uses ~10m
+            memory: "1Gi"     # Intentionally oversized - nginx typically uses ~50Mi
+          limits:
+            cpu: "2000m"      # Very high limit
+            memory: "2Gi"     # Very high limit
+        env:
+        - name: NGINX_PORT
+          value: "80"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: oversized-stress-app
+  namespace: test-apps
+  labels:
+    app: stress-test
+    right-sizer.io/enabled: "true"
+    right-sizer.io/strategy: "conservative"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: stress-test
+  template:
+    metadata:
+      labels:
+        app: stress-test
+        right-sizer.io/enabled: "true"
+        right-sizer.io/min-cpu: "100m"
+        right-sizer.io/max-cpu: "1000m"
+        right-sizer.io/min-memory: "128Mi"
+        right-sizer.io/max-memory: "1Gi"
+    spec:
+      containers:
+      - name: stress-app
+        image: busybox:latest
+        command: ["/bin/sh"]
+        args:
+        - "-c"
+        - |
+          echo "Starting simulated workload..."
+          while true; do
+            # Simulate some CPU usage (but not much)
+            for i in $(seq 1 100); do
+              echo "Working... $i" > /dev/null
+            done
+            # Sleep to keep CPU usage low
+            sleep 10
+          done
+        resources:
+          requests:
+            cpu: "500m"       # Oversized for a simple loop
+            memory: "512Mi"   # Oversized for busybox
+          limits:
+            cpu: "1000m"
+            memory: "1Gi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-service
+  namespace: test-apps
+spec:
+  selector:
+    app: nginx-test
+  ports:
+  - port: 80
+    targetPort: 80
+  type: ClusterIP
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: right-sizer-test-config
+  namespace: test-apps
+data:
+  description: |
+    This namespace contains test applications with intentionally oversized resources.
+    The Right-Sizer operator should detect the actual resource usage and recommend
+    or apply more appropriate resource limits.
+
+    Expected behavior:
+    1. nginx deployment: Should be scaled down from 1CPU/1Gi to ~50m/100Mi
+    2. stress-app deployment: Should be scaled down from 500m/512Mi to ~100m/128Mi
+
+    Monitor with:
+    kubectl get pods -n test-apps -w
+    kubectl top pods -n test-apps
+    kubectl describe pods -n test-apps
