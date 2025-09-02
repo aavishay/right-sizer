@@ -1,0 +1,37 @@
+apiVersion: v1
+entries:
+  right-sizer:
+  - annotations:
+      artifacthub.io/license: AGPL-3.0
+      artifacthub.io/readme: |
+        # right-sizer Operator
+
+        A Kubernetes operator for automatic pod resource right-sizing with support for Kubernetes 1.33+ in-place pod resizing.
+
+        ## License
+        This software is licensed under the GNU Affero General Public License v3.0 (AGPL-3.0).
+        See LICENSE file for details.
+      artifacthub.io/repository: https://github.com/aavishay/right-sizer
+    apiVersion: v2
+    appVersion: latest
+    created: "2025-09-02T06:32:09.726870559Z"
+    description: A Kubernetes operator for automatic pod resource right-sizing
+    digest: 22f0b8dc991ea082fb5c17836bb8c15dfd97081a62fc8a9270e0c2d7a951bfb7
+    home: https://github.com/aavishay/right-sizer
+    keywords:
+    - kubernetes
+    - operator
+    - resource-management
+    - right-sizing
+    - autoscaling
+    maintainers:
+    - email: contributors@right-sizer.io
+      name: right-sizer contributors
+    name: right-sizer
+    sources:
+    - https://github.com/aavishay/right-sizer
+    type: application
+    urls:
+    - https://aavishay.github.io/right-sizer/charts/right-sizer-0.1.0-20250902063209.tgz
+    version: 0.1.0-20250902063209
+generated: "2025-09-02T06:32:09.725601923Z"
