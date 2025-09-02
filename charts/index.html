@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Right-Sizer Helm Repository (Local)</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 50px auto; padding: 20px; }
+        h1 { color: #333; }
+        pre { background: #f4f4f4; padding: 15px; border-radius: 5px; overflow-x: auto; }
+        code { background: #f4f4f4; padding: 2px 5px; border-radius: 3px; }
+        .command { background: #000; color: #0f0; padding: 10px; border-radius: 5px; margin: 10px 0; }
+    </style>
+</head>
+<body>
+    <h1>🚀 Right-Sizer Helm Repository (Local Test)</h1>
+
+    <h2>Available Charts</h2>
+    <ul>
+        <li><a href="right-sizer-0.1.0.tgz">right-sizer-0.1.0.tgz</a></li>
+    </ul>
+
+    <h2>Usage</h2>
+    <div class="command">
+        <pre>
+# Add this repository
+helm repo add right-sizer-local http://localhost:8080/charts
+helm repo update
+
+# Install the chart
+helm install right-sizer right-sizer-local/right-sizer
+        </pre>
+    </div>
+
+    <h2>Files</h2>
+    <ul>
+        <li><a href="index.yaml">index.yaml</a> - Repository index</li>
+    </ul>
+</body>
+</html>
