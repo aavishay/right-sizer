@@ -25,12 +25,4 @@ annotations:
   # "artifacthub.io/signKey": |
   #   fingerprint: YOUR_GPG_FINGERPRINT
   #   url: YOUR_KEY_URL
-  # Documentation
-  "artifacthub.io/readme": |
-    # right-sizer Operator
-
-    A Kubernetes operator for automatic pod resource right-sizing with support for Kubernetes 1.33+ in-place pod resizing.
-
-    ## License
-    This software is licensed under the GNU Affero General Public License v3.0 (AGPL-3.0).
-    See LICENSE file for details.
+  # Documentation - README.md file is now in the chart directory
