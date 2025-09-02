@@ -16,6 +16,23 @@
 
 ---
 
+## ⚡ TL;DR
+
+Right-Sizer automatically adjusts Kubernetes pod resources based on actual usage, reducing costs and improving performance.
+
+```bash
+# Quick Install (Helm)
+helm repo add right-sizer https://aavishay.github.io/right-sizer/charts
+helm install right-sizer right-sizer/right-sizer --namespace right-sizer --create-namespace
+
+# Quick Install (Docker)
+docker pull aavishay/right-sizer:latest
+```
+
+**Key Benefits:** 🚀 Zero-downtime resizing • 💰 30-50% cost reduction • 🎯 Automatic optimization • 📊 Real-time monitoring
+
+---
+
 ## 📚 Table of Contents
 
 - [Overview](#-overview)
@@ -105,12 +122,12 @@ Right-Sizer is a Kubernetes operator that automatically optimizes pod resource a
 | Metrics | metrics-server 0.5 | 0.6+ | Or Prometheus |
 | Memory | 2GB | 4GB+ | For Minikube/local |
 
-### 1️⃣ Installation (Helm Repository)
+### 1️⃣ Installation Options
 
-Install directly from our GitHub Pages Helm repository:
+#### Option A: Install from Helm Repository (Recommended)
 
 ```bash
-# Add the Helm repository
+# Add the official Helm repository
 helm repo add right-sizer https://aavishay.github.io/right-sizer/charts
 helm repo update
 
@@ -119,86 +136,141 @@ helm install right-sizer right-sizer/right-sizer \
   --namespace right-sizer \
   --create-namespace
 
-# Install with custom values
+# Or install with custom values
 helm install right-sizer right-sizer/right-sizer \
   --namespace right-sizer \
   --create-namespace \
   -f custom-values.yaml
-
-# View available chart versions
-helm search repo right-sizer --versions
-
-# Show all configurable values
-helm show values right-sizer/right-sizer
 ```
 
-### 2️⃣ Installation (Docker Hub)
-
-Use the pre-built Docker image from Docker Hub:
-
-```bash
-# Pull the latest image
-docker pull aavishay/right-sizer:latest
-
-# Install using Helm with Docker Hub image
-helm install right-sizer ./helm \
-  --namespace right-sizer \
-  --create-namespace \
-  --set image.repository=aavishay/right-sizer \
-  --set image.tag=latest \
-  --set image.pullPolicy=IfNotPresent
-```
-
-Available image tags:
-- `latest` - Latest stable build from main branch
-- `v{build-number}` - Specific build version
-- `sha-{commit}` - Specific commit SHA
-
-### 3️⃣ Local Development Setup
+#### Option B: Install from Source with Pre-built Images
 
 ```bash
 # Clone the repository
-git clone https://github.com/right-sizer/right-sizer.git
+git clone https://github.com/aavishay/right-sizer.git
+cd right-sizer
+
+# Install using Helm with Docker Hub images
+helm install right-sizer ./helm \
+  --namespace right-sizer \
+  --create-namespace
+```
+
+#### Option C: Local Development with Custom Build
+
+```bash
+# Clone and build locally
+git clone https://github.com/aavishay/right-sizer.git
 cd right-sizer
 
 # Build Docker image
-docker build -t right-sizer:latest .
+docker build -t my-right-sizer:dev .
 
 # For Minikube users
 minikube start --kubernetes-version=v1.33.1 --memory=4096 --cpus=2
-minikube image load right-sizer:latest
+minikube image load my-right-sizer:dev
 
-# Install from local Helm chart
+# Install with local image
 helm install right-sizer ./helm \
   --namespace right-sizer \
   --create-namespace \
-  --set image.repository=aavishay/right-sizer \
-  --set image.tag=latest \
-  --set image.pullPolicy=IfNotPresent
+  --set image.repository=my-right-sizer \
+  --set image.tag=dev \
+  --set image.pullPolicy=Never
 ```
 
-### 4️⃣ Quick Configuration Examples
+### 2️⃣ Available Versions
 
-#### Development Environment (Aggressive Optimization)
+#### Helm Chart Versions
 ```bash
+# View all available chart versions
+helm search repo right-sizer --versions
+
+# Install specific version
+helm install right-sizer right-sizer/right-sizer --version 0.1.0
+```
+
+#### Docker Image Tags
+- `latest` - Latest stable build from main branch
+- `v{build-number}` - Specific build version (e.g., v123)
+- `sha-{commit}` - Specific commit SHA
+- `{version}` - Release versions (e.g., v1.0.0)
+
+```bash
+# Pull specific version
+docker pull aavishay/right-sizer:latest
+docker pull aavishay/right-sizer:v123
+```
+
+### 3️⃣ Configuration Management
+
+#### View Default Values
+```bash
+# Show all configurable parameters
+helm show values right-sizer/right-sizer > values.yaml
+
+# Customize and install
+vim values.yaml
+helm install right-sizer right-sizer/right-sizer -f values.yaml
+```
+
+#### Quick Configuration Profiles
+```bash
+# Development - Aggressive optimization
+helm install right-sizer right-sizer/right-sizer \
+  --set defaultConfig.mode=aggressive \
+  --set defaultConfig.resizeInterval=30s
+
+# Production - Conservative with dry-run
+helm install right-sizer right-sizer/right-sizer \
+  --set defaultConfig.mode=conservative \
+  --set defaultConfig.dryRun=true \
+  --set defaultConfig.constraints.cooldownPeriod=10m
+
+# Cost Optimization Focus
+helm install right-sizer right-sizer/right-sizer \
+  --set defaultConfig.mode=cost-optimized \
+  --set defaultConfig.constraints.maxChangePercentage=30
+```
+
+### 4️⃣ Post-Installation
+
+#### Verify Installation
+```bash
+# Check operator status
+kubectl get pods -n right-sizer
+kubectl logs -n right-sizer -l app.kubernetes.io/name=right-sizer
+
+# View created resources
+kubectl get rightsizerpolicies -A
+kubectl get rightsizerconfigs -A
+```
+
+#### Apply Custom Policies
+```bash
+# Development environment
 kubectl apply -f examples/config-global-settings.yaml
 kubectl apply -f examples/policies-workload-types.yaml
-```
 
-#### Production Environment (Conservative)
-```bash
-helm install right-sizer ./helm \
-  --set defaultMode=conservative \
-  --set dryRun=true \
-  -f examples/helm-values-custom.yaml
-```
+# Production environment
+kubectl apply -f examples/config-conservative.yaml
 
-#### Cost Optimization Focus
-```bash
+# Cost optimization
 kubectl apply -f examples/config-scaling-thresholds.yaml
 ```
 
-### 4️⃣ Verify Installation
+#### Upgrade or Uninstall
+```bash
+# Upgrade to latest version
+helm repo update
+helm upgrade right-sizer right-sizer/right-sizer
+
+# Uninstall
+helm uninstall right-sizer -n right-sizer
+kubectl delete namespace right-sizer
+```
+
+### 5️⃣ Verify Right-Sizer Operation
 
 ```bash
 # Check operator status
@@ -265,6 +337,162 @@ graph TB
 | **Admission Controller** | Request validation | Webhook validation, mutation |
 | **Health Checker** | Health monitoring | Liveness, readiness probes |
 | **Metrics Collector** | Data gathering | Multi-source metrics aggregation |
+
+---
+
+## 🚢 Deployment & Distribution
+
+### Deployment Architecture
+
+Right-Sizer is distributed through multiple channels for maximum accessibility:
+
+```mermaid
+graph LR
+    subgraph "Source"
+        GH[GitHub Repository]
+    end
+    
+    subgraph "CI/CD Pipeline"
+        GA[GitHub Actions]
+        B1[Build & Test]
+        B2[Security Scan]
+        B3[Multi-arch Build]
+    end
+    
+    subgraph "Distribution Channels"
+        DH[Docker Hub<br/>aavishay/right-sizer]
+        HR[Helm Repository<br/>GitHub Pages]
+        GR[GitHub Releases]
+    end
+    
+    subgraph "Installation Methods"
+        H1[Helm Install]
+        D1[Docker Pull]
+        K1[Kubectl Apply]
+    end
+    
+    GH --> GA
+    GA --> B1
+    B1 --> B2
+    B2 --> B3
+    B3 --> DH
+    B3 --> HR
+    B3 --> GR
+    HR --> H1
+    DH --> D1
+    GR --> K1
+```
+
+### Distribution Channels
+
+| Channel | URL | Purpose | Update Frequency |
+|---------|-----|---------|------------------|
+| **Helm Repository** | https://aavishay.github.io/right-sizer/charts | Official Helm charts | On every helm/ change |
+| **Docker Hub** | docker.io/aavishay/right-sizer | Container images | On every main push |
+| **GitHub Releases** | github.com/aavishay/right-sizer/releases | Binary releases & archives | On version tags |
+| **Source Code** | github.com/aavishay/right-sizer | Development & customization | Continuous |
+
+### CI/CD Pipeline
+
+The project uses GitHub Actions for automated building, testing, and deployment:
+
+#### Automated Workflows
+
+1. **Docker Build & Push** (`docker-build.yml`)
+   - Triggers: Push to main, PRs, tags
+   - Multi-architecture builds (amd64, arm64)
+   - Automated security scanning with Trivy
+   - SBOM generation
+   - Push to Docker Hub with tags:
+     - `latest` (main branch)
+     - `v{build-number}`
+     - `sha-{commit}`
+
+2. **Helm Chart Publishing** (`helm-publish.yml`)
+   - Triggers: Changes to helm/, releases, manual
+   - Packages Helm charts
+   - Publishes to GitHub Pages
+   - Maintains version history
+   - Generates repository index
+
+3. **Release Pipeline** (`release.yml`)
+   - Triggers: Version tags (v*.*.*)
+   - Creates GitHub releases
+   - Builds binaries for multiple platforms
+   - Generates changelog
+   - Updates Docker tags
+
+#### Build Matrix
+
+| Platform | Architecture | Base Image | Size |
+|----------|-------------|------------|------|
+| Linux | amd64 | Alpine 3.20 | ~50MB |
+| Linux | arm64 | Alpine 3.20 | ~50MB |
+| Darwin | amd64 | Binary only | ~35MB |
+| Darwin | arm64 | Binary only | ~35MB |
+| Windows | amd64 | Binary only | ~35MB |
+
+### Installation Methods Comparison
+
+| Method | Pros | Cons | Best For |
+|--------|------|------|----------|
+| **Helm Repository** | Version management, Standard workflow, Easy upgrades | Requires Helm | Production deployments |
+| **Docker Hub** | Pre-built images, Multi-arch support | Manual manifest management | Quick testing, CI/CD |
+| **Source Build** | Full customization, Latest features | Requires build tools | Development, customization |
+| **GitHub Releases** | Direct binary access, Checksums provided | Manual installation | Air-gapped environments |
+
+### Release Process
+
+```mermaid
+graph TD
+    A[Code Change] --> B{Type?}
+    B -->|Feature| C[Main Branch]
+    B -->|Release| D[Tag Version]
+    
+    C --> E[Build & Test]
+    E --> F[Push to Docker Hub]
+    F --> G[Update Helm Chart]
+    G --> H[Publish to GH Pages]
+    
+    D --> I[Create Release]
+    I --> J[Build Multi-platform]
+    J --> K[Generate Changelog]
+    K --> L[Publish Assets]
+    L --> M[Update Latest Tags]
+```
+
+### Quick Deployment Commands
+
+```bash
+# Production Deployment (Helm)
+helm repo add right-sizer https://aavishay.github.io/right-sizer/charts
+helm repo update
+helm install right-sizer right-sizer/right-sizer \
+  --namespace right-sizer \
+  --create-namespace \
+  --version 0.1.0
+
+# Development Deployment (Latest)
+docker pull aavishay/right-sizer:latest
+helm install right-sizer right-sizer/right-sizer \
+  --set image.tag=latest
+
+# GitOps/ArgoCD Integration
+cat <<EOF | kubectl apply -f -
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: right-sizer
+spec:
+  source:
+    repoURL: https://aavishay.github.io/right-sizer/charts
+    chart: right-sizer
+    targetRevision: 0.1.0
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: right-sizer
+EOF
+```
 
 ---
 
