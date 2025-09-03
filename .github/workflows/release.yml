@@ -332,17 +332,39 @@ jobs:
       - name: Install Helm
         uses: azure/setup-helm@v4
 
-      - name: Create gh-pages branch if needed
+      - name: Package Helm chart
         run: |
-          git fetch origin gh-pages || git checkout -b gh-pages
-          git checkout gh-pages || git checkout -b gh-pages
+          # Package the chart from main branch
+          helm package helm/ -d /tmp/helm-charts/
+          ls -la /tmp/helm-charts/
+
+      - name: Create or update gh-pages branch
+        run: |
+          # Check if gh-pages branch exists
+          if git ls-remote --heads origin gh-pages | grep gh-pages; then
+            echo "gh-pages branch exists, checking out..."
+            git fetch origin gh-pages
+            git checkout gh-pages
+          else
+            echo "Creating new gh-pages branch..."
+            git checkout --orphan gh-pages
+            git rm -rf . || true
+          fi
+
+          # Ensure charts directory exists
           mkdir -p charts
 
-      - name: Package and index Helm chart
-        run: |
-          helm package helm/ -d charts/
+          # Copy the packaged chart from temp directory
+          cp /tmp/helm-charts/*.tgz charts/
+
+          # Generate or update the Helm repository index
           helm repo index charts/ --url https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/charts
 
+          # Add and commit changes
           git add charts/
-          git commit -m "Update Helm chart for version ${{ github.ref_name }}" || true
-          git push origin gh-pages || git push --set-upstream origin gh-pages
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Update Helm chart for version ${{ github.ref_name }}"
+            git push origin gh-pages || git push --set-upstream origin gh-pages
+          fi
