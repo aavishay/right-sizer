@@ -20,7 +20,7 @@
 
 ## Prerequisites
 
-- Go 1.24+
+- Go 1.25+
 - Docker (for container builds)
 - Kubernetes 1.33+ (for in-place resize feature)
 - Helm 3.x (for Helm deployments)

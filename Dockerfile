@@ -4,9 +4,9 @@
 # Build stage
 # Using golang base image - alternatives if Docker Hub is down:
 # - gcr.io/distroless/base:latest (Google)
-# - public.ecr.aws/docker/library/golang:1.24-alpine (AWS)
-# - quay.io/projectquay/golang:1.24-alpine (Red Hat)
-FROM --platform=$BUILDPLATFORM golang:1.24-alpine AS builder
+# - public.ecr.aws/docker/library/golang:1.25-alpine (AWS)
+# - quay.io/projectquay/golang:1.25-alpine (Red Hat)
+FROM --platform=$BUILDPLATFORM golang:1.25-alpine AS builder
 
 # Build arguments for cross-compilation
 ARG TARGETOS

@@ -181,11 +181,11 @@ run_test_workflow() {
   local workflow="${WORKFLOW_DIR}/test.yml"
   local log_file="${LOG_DIR}/test_${TIMESTAMP}.log"
 
-  print_info "Running unit tests with Go 1.24..."
+  print_info "Running unit tests with Go 1.25..."
 
   # Run only the test job (not all jobs)
   local cmd=$(build_act_cmd "${workflow}" "test")
-  cmd="${cmd} --matrix go-version:1.24"
+  cmd="${cmd} --matrix go-version:1.25"
 
   echo "Log: ${log_file}"
 
@@ -280,7 +280,7 @@ run_go_version_test() {
 
   local log_file="${LOG_DIR}/go-version-test_${TIMESTAMP}.log"
 
-  print_info "Testing Go 1.24 configuration..."
+  print_info "Testing Go 1.25 configuration..."
 
   # Run the direct version test
   local cmd=$(build_act_cmd "${workflow}" "test-direct-version" "workflow_dispatch")

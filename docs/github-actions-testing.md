@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document provides a comprehensive guide for testing all GitHub Actions workflows in the right-sizer project. All workflows have been configured to use Go 1.24 consistently.
+This document provides a comprehensive guide for testing all GitHub Actions workflows in the right-sizer project. All workflows have been configured to use Go 1.25 consistently.
 
 ## Workflow Files
 
@@ -22,7 +22,7 @@ The project includes three main GitHub Actions workflows:
 
 ### 2. Test Workflow (`test.yml`)
 - **Triggers**: Push to main/develop/feature/release branches, pull requests, manual dispatch
-- **Go Version**: 1.24 (single version, no matrix)
+- **Go Version**: 1.25 (single version, no matrix)
 - **Jobs**:
   - **test**: Unit tests with race detection and coverage
   - **integration-test**: Kubernetes integration tests with Kind
@@ -38,7 +38,7 @@ The project includes three main GitHub Actions workflows:
 
 ### 3. Release Workflow (`release.yml`)
 - **Triggers**: Version tags (v*.*.*), manual dispatch with tag input
-- **Go Version**: 1.24
+- **Go Version**: 1.25
 - **Jobs**:
   - **build-binaries**: Cross-platform binary builds (Linux, macOS, Windows)
   - **build-docker**: Multi-platform Docker image publishing
@@ -98,7 +98,7 @@ VERBOSE=true ./scripts/test-github-actions.sh test
 The project includes validation scripts to ensure workflow correctness:
 
 #### Go Version Validation (`scripts/validate-go-version.sh`)
-Validates that all workflows use the correct Go version (1.24).
+Validates that all workflows use the correct Go version (1.25).
 
 ```bash
 ./scripts/validate-go-version.sh
@@ -118,11 +118,11 @@ Comprehensive validation including:
 
 ## Go Version Configuration
 
-All workflows and build files are configured to use **Go 1.24**:
+All workflows and build files are configured to use **Go 1.25**:
 
-- **Environment Variable**: `GO_VERSION: "1.24"`
-- **Matrix Configuration**: `go-version: ["1.24"]`
-- **go.mod**: `go 1.24`
+- **Environment Variable**: `GO_VERSION: "1.25"`
+- **Matrix Configuration**: `go-version: ["1.25"]`
+- **go.mod**: `go 1.25`
 
 ### Verification
 ```bash
@@ -263,7 +263,7 @@ actionlint .github/workflows/*.yml
 - [GitHub Actions Documentation](https://docs.github.com/en/actions)
 - [act Documentation](https://github.com/nektos/act)
 - [actionlint](https://github.com/rhysd/actionlint)
-- [Go 1.24 Release Notes](https://go.dev/doc/go1.24)
+- [Go 1.25 Release Notes](https://go.dev/doc/go1.25)
 - [Docker Build Action](https://github.com/docker/build-push-action)
 - [Helm Chart Testing](https://helm.sh/docs/topics/chart_tests/)
 
@@ -279,5 +279,5 @@ For issues or questions about GitHub Actions testing:
 ---
 
 *Last updated: December 2024*  
-*Go Version: 1.24*  
+*Go Version: 1.25*  
 *Project: right-sizer*

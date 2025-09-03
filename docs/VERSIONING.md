@@ -269,8 +269,8 @@ Pre-releases are useful for testing before official releases:
 
 | Right-Sizer Version | Kubernetes Version | Helm Version | Go Version |
 |--------------------|--------------------|--------------|------------|
-| 0.1.x | 1.33+ | 3.0+ | 1.24 |
-| 1.0.x | 1.33+ | 3.0+ | 1.24 |
+| 0.1.x | 1.33+ | 3.0+ | 1.25 |
+| 1.0.x | 1.33+ | 3.0+ | 1.25 |
 
 ## Best Practices
 

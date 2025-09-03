@@ -4,7 +4,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
 # Script to validate Go version consistency across all GitHub Actions workflows
-# Ensures all workflows use Go 1.24
+# Ensures all workflows use Go 1.25
 
 set -e
 
@@ -34,7 +34,7 @@ else
 fi
 
 # Expected Go version
-EXPECTED_GO_VERSION="1.24"
+EXPECTED_GO_VERSION="1.25"
 
 # Counters
 TOTAL_FILES=0
@@ -208,7 +208,7 @@ main() {
   else
     print_error "Found $INVALID_FILES workflow(s) with incorrect Go version!"
     echo -e "\n${BOLD}To fix the issues:${NC}"
-    echo -e "  1. Update GO_VERSION environment variable to '$EXPECTED_GO_VERSION'"
+    echo -e "  1. Update GO_VERSION environment variable and any go-version fields to '$EXPECTED_GO_VERSION'"
     echo -e "  2. Update go-version in setup-go action to '$EXPECTED_GO_VERSION'"
     echo -e "  3. Update matrix go-version arrays to use only '$EXPECTED_GO_VERSION'"
     echo ""

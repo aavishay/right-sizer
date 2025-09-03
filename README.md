@@ -3,9 +3,9 @@
 # 🎯 Right-Sizer Operator
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
-[![Version](https://img.shields.io/badge/Version-0.1.0-green.svg)](https://github.com/aavishay/right-sizer/releases)
+[![Version](https://img.shields.io/badge/Version-0.1.1-green.svg)](https://github.com/aavishay/right-sizer/releases)
 [![Kubernetes](https://img.shields.io/badge/Kubernetes-1.33%2B-326ce5)](https://kubernetes.io)
-[![Go Version](https://img.shields.io/badge/Go-1.24-00ADD8)](https://golang.org)
+[![Go Version](https://img.shields.io/badge/Go-1.25-00ADD8)](https://golang.org)
 [![Helm](https://img.shields.io/badge/Helm-3.0%2B-0F1689)](https://helm.sh)
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED)](https://www.docker.com)
 
@@ -796,7 +796,7 @@ kubectl get mutatingwebhookconfigurations
 
 ### Prerequisites
 
-- Go 1.24+
+- Go 1.25+
 - Docker
 - Kubernetes 1.33+ (Minikube recommended)
 - Make

@@ -358,3 +358,88 @@ install-tools: ## Install development tools
 	@go install golang.org/x/tools/cmd/goimports@latest
 	@go install github.com/rakyll/gotest@latest
 	@echo "$(GREEN)Development tools installed$(NC)"
+
+##@ Local E2E / Minikube
+
+.PHONY: mk-start
+mk-start: ## Start (or ensure) a minikube cluster for local testing
+	@echo "$(BLUE)Starting minikube (profile: right-sizer)...$(NC)"
+	minikube start -p right-sizer --kubernetes-version=stable --cpus=4 --memory=6144
+	@echo "$(GREEN)Minikube started$(NC)"
+
+.PHONY: mk-enable-metrics
+mk-enable-metrics: ## Enable metrics-server addon in minikube
+	@echo "$(BLUE)Enabling metrics-server addon...$(NC)"
+	minikube -p right-sizer addons enable metrics-server
+	@echo "$(GREEN)metrics-server enabled (it may take ~30s to become Ready)$(NC)"
+
+.PHONY: mk-build-image
+mk-build-image: ## Build operator image inside minikube Docker daemon
+	@echo "$(BLUE)Building image inside minikube Docker daemon...$(NC)"
+	eval $$(minikube -p right-sizer docker-env) && \
+	  docker build -t right-sizer:test \
+	    --build-arg VERSION=$(VERSION) \
+	    --build-arg GIT_COMMIT=$(GIT_COMMIT) \
+	    --build-arg BUILD_DATE=$(BUILD_DATE) \
+	    -f Dockerfile .
+	@echo "$(GREEN)Image right-sizer:test built inside minikube$(NC)"
+
+.PHONY: mk-deploy
+mk-deploy: mk-start mk-build-image ## Deploy Helm chart using locally built image
+	@echo "$(BLUE)Deploying Helm chart to minikube...$(NC)"
+	helm upgrade --install right-sizer ./helm \
+	  -n right-sizer --create-namespace \
+	  --set image.repository=right-sizer \
+	  --set image.tag=test \
+	  --set image.pullPolicy=IfNotPresent
+	kubectl wait --for=condition=available deployment/right-sizer -n right-sizer --timeout=120s
+	@echo "$(GREEN)Deployment available$(NC)"
+
+.PHONY: mk-policy
+mk-policy: ## Apply sample RightSizerPolicy and demo workload
+	@echo "$(BLUE)Applying demo workload & policy...$(NC)"
+	./hack/apply-demo.sh
+	@echo "$(GREEN)Demo workload & policy applied$(NC)"
+
+.PHONY: mk-port-forward
+mk-port-forward: ## Port-forward operator (health:8081, metrics:9090, controller-runtime:8080)
+	@echo "$(BLUE)Starting port-forward (Ctrl+C to stop)...$(NC)"
+	kubectl -n right-sizer port-forward deploy/right-sizer 8081:8081 9090:9090 8080:8080
+
+.PHONY: mk-logs
+mk-logs: ## Tail operator logs
+	kubectl logs -n right-sizer -f deploy/right-sizer
+
+.PHONY: mk-status
+mk-status: ## Show quick status (pods & policies)
+	@echo "$(BLUE)Operator status:$(NC)"
+	kubectl get pods -n right-sizer
+	@echo ""
+	@echo "$(BLUE)Policies:$(NC)"
+	-kubectl get rightsizerpolicies -A || true
+
+.PHONY: mk-test
+mk-test: mk-deploy mk-enable-metrics mk-policy ## Full local e2e (cluster → image → deploy → policy)
+	@echo "$(BLUE)Waiting briefly for metrics-server (15s)...$(NC)"; sleep 15
+	$(MAKE) mk-status
+	@echo ""
+	@echo "$(BLUE)Recent operator logs:$(NC)"
+	kubectl logs -n right-sizer deploy/right-sizer --tail=40
+	@echo "$(GREEN)Local e2e sequence completed$(NC)"
+
+.PHONY: mk-clean
+mk-clean: ## Remove demo namespaces & uninstall operator (keeps cluster)
+	@echo "$(YELLOW)Cleaning demo resources...$(NC)"
+	-helm uninstall right-sizer -n right-sizer 2>/dev/null || true
+	-kubectl delete ns rs-demo 2>/dev/null || true
+	@echo "$(GREEN)Demo resources removed$(NC)"
+
+.PHONY: mk-destroy
+mk-destroy: mk-clean ## Delete entire minikube profile
+	@echo "$(YELLOW)Deleting minikube profile 'right-sizer'...$(NC)"
+	minikube delete -p right-sizer
+	@echo "$(GREEN)Minikube profile deleted$(NC)"
+
+.PHONY: local-e2e
+local-e2e: mk-test ## Alias for mk-test
+	@echo "$(GREEN)local-e2e completed$(NC)"

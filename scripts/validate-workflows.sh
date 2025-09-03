@@ -34,7 +34,7 @@ else
 fi
 
 # Configuration
-EXPECTED_GO_VERSION="1.24"
+EXPECTED_GO_VERSION="1.25"
 WORKFLOW_DIR="${ROOT_DIR}/.github/workflows"
 TEMP_DIR="/tmp/workflow-validation-$$"
 FAILED_TESTS=0
