@@ -8,10 +8,18 @@ This directory contains all tests for the Right Sizer Kubernetes operator, organ
 tests/
 ├── unit/                    # Unit tests for individual components
 │   ├── controllers/         # Controller unit tests
+│   │   ├── guaranteed_qos_test.go  # Guaranteed QoS preservation tests
+│   │   └── rightsizer_test.go      # General controller tests
 │   ├── metrics/            # Metrics provider unit tests
 │   └── main_test.go        # Main application unit tests
 ├── integration/            # Integration tests
 │   └── integration_test.go # End-to-end integration tests
+├── k8s/                    # Kubernetes deployment tests
+│   ├── test-deployments.yaml    # Test deployments with various QoS classes
+│   ├── monitor-test.sh         # QoS monitoring and validation script
+│   └── TEST_RESULTS.md         # Test execution results
+├── helm/                   # Helm chart test configurations
+│   └── test-values.yaml    # Test values for Helm deployment
 ├── rbac/                   # RBAC-specific tests
 │   ├── test-rbac-suite.sh # Comprehensive RBAC test suite
 │   └── rbac-integration-test.sh # RBAC integration tests
@@ -50,6 +58,13 @@ Unit tests focus on individual components and functions in isolation.
 
 **Location:** `tests/unit/`
 
+**Key Tests:**
+- **Guaranteed QoS Tests** (`unit/controllers/guaranteed_qos_test.go`): Tests for preserving Guaranteed Quality of Service class during pod resource updates
+  - QoS detection and classification
+  - Resource preservation logic (requests = limits)
+  - Memory decrease handling
+  - JSON patch structure validation
+
 **Run unit tests:**
 ```bash
 # Run all unit tests
@@ -61,6 +76,9 @@ go test -cover ./...
 
 # Run specific test
 go test ./controllers -run TestRightSizerController
+
+# Run Guaranteed QoS tests specifically
+go test ./controllers -run TestGuaranteedQoS
 
 # Verbose output
 go test -v ./...
@@ -83,6 +101,61 @@ KUBECONFIG=~/.kube/config go test
 
 # Run against specific cluster
 go test -cluster-endpoint=https://my-cluster:6443
+```
+
+### Kubernetes Deployment Tests
+
+Tests that validate Right-Sizer behavior with actual Kubernetes deployments.
+
+**Location:** `tests/k8s/`
+
+**Components:**
+- **test-deployments.yaml**: Various test deployments including:
+  - Guaranteed QoS pods (requests = limits)
+  - Burstable QoS pods (different requests and limits)
+  - Multi-container pods
+  - Critical workloads
+  - Stress test pods
+- **monitor-test.sh**: Comprehensive monitoring script that:
+  - Verifies QoS class preservation
+  - Monitors resource changes
+  - Generates load on test pods
+  - Reports QoS violations
+
+**Run Kubernetes tests:**
+```bash
+# Deploy test workloads
+kubectl apply -f tests/k8s/test-deployments.yaml
+
+# Run monitoring script (60 second test)
+./tests/k8s/monitor-test.sh 60
+
+# Run extended monitoring (5 minutes)
+./tests/k8s/monitor-test.sh 300
+
+# Clean up test deployments
+kubectl delete -f tests/k8s/test-deployments.yaml
+```
+
+### Helm Tests
+
+Test configurations for Helm chart deployments.
+
+**Location:** `tests/helm/`
+
+**Run Helm tests:**
+```bash
+# Deploy Right-Sizer with test configuration
+helm install right-sizer ./helm -n right-sizer -f tests/helm/test-values.yaml
+
+# Verify deployment
+kubectl get pods -n right-sizer
+
+# Check logs
+kubectl logs -n right-sizer deployment/right-sizer
+
+# Uninstall
+helm uninstall right-sizer -n right-sizer
 ```
 
 ### RBAC Tests

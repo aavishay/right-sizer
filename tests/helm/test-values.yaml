@@ -1,0 +1,181 @@
+# Test values for right-sizer Helm chart
+# Used for testing Guaranteed QoS pod fixes
+
+image:
+  repository: right-sizer
+  tag: test-fix
+  pullPolicy: Never  # Use local image from minikube
+
+config:
+  # Enable debug logging to see detailed operations
+  logLevel: debug
+
+  # Short interval for faster testing
+  resizeInterval: 30s
+
+  # Enable dry run initially to see what would happen
+  dryRun: false
+
+  # QoS preservation settings (testing the fix)
+  preserveGuaranteedQoS: true
+  forceGuaranteedForCritical: false
+  qosTransitionWarning: true
+
+  # Resource sizing multipliers
+  cpuRequestMultiplier: 1.2
+  memoryRequestMultiplier: 1.2
+  cpuLimitMultiplier: 1.0      # For Guaranteed QoS testing
+  memoryLimitMultiplier: 1.0   # For Guaranteed QoS testing
+  cpuLimitAddition: 0
+  memoryLimitAddition: 0
+
+  # Minimum resources
+  minCPURequest: 10
+  minMemoryRequest: 64
+
+  # Maximum resources
+  maxCPULimit: 2000
+  maxMemoryLimit: 2048
+
+  # Scaling thresholds
+  cpuScaleUpThreshold: 0.8
+  cpuScaleDownThreshold: 0.3
+  memoryScaleUpThreshold: 0.8
+  memoryScaleDownThreshold: 0.3
+
+  # Safety threshold
+  safetyThreshold: 0.3
+
+  # Namespace configuration - test in specific namespaces
+  namespaceInclude:
+    - test-apps
+    - test-guaranteed
+  namespaceExclude:
+    - kube-system
+    - kube-public
+    - kube-node-lease
+    - right-sizer
+    - default
+
+  # Enable in-place resize
+  enableInPlaceResize: true
+
+  # Metrics provider
+  metricsProvider: metrics-server
+  metricsServerEndpoint: https://metrics-server.kube-system.svc.cluster.local
+
+rbac:
+  create: true
+
+serviceAccount:
+  create: true
+  name: right-sizer
+
+# Resource limits for right-sizer itself
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+# Pod security context
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  fsGroup: 65532
+  seccompProfile:
+    type: RuntimeDefault
+
+# Container security context
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 65532
+
+# Liveness and readiness probes
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: 8081
+  initialDelaySeconds: 15
+  periodSeconds: 20
+
+readinessProbe:
+  httpGet:
+    path: /readyz
+    port: 8081
+  initialDelaySeconds: 5
+  periodSeconds: 10
+
+# Metrics and monitoring
+metrics:
+  enabled: true
+  port: 8080
+  path: /metrics
+
+# Admission webhook configuration (disabled for initial testing)
+admissionWebhook:
+  enabled: false
+  port: 8443
+  certPath: /etc/webhook/certs/tls.crt
+  keyPath: /etc/webhook/certs/tls.key
+
+# Audit logging
+audit:
+  enabled: true
+  logLevel: info
+
+# Node selector (if needed)
+nodeSelector: {}
+
+# Tolerations
+tolerations: []
+
+# Affinity rules
+affinity: {}
+
+# Priority class
+priorityClassName: ""
+
+# Service configuration
+service:
+  type: ClusterIP
+  port: 8080
+  annotations: {}
+
+# Additional environment variables
+env:
+  - name: PRESERVE_GUARANTEED_QOS
+    value: "true"
+  - name: QOS_TRANSITION_WARNING
+    value: "true"
+  - name: FORCE_GUARANTEED_FOR_CRITICAL
+    value: "false"
+
+# Volume mounts (if needed for certificates, etc.)
+volumeMounts: []
+
+# Volumes
+volumes: []
+
+# Labels to add to all resources
+labels:
+  version: test-fix
+  test: guaranteed-qos
+
+# Annotations to add to the pod
+podAnnotations:
+  test.right-sizer.io/purpose: "guaranteed-qos-fix-testing"
+
+# Deployment strategy
+strategy:
+  type: Recreate
+
+# Replicas (keeping it simple for testing)
+replicaCount: 1

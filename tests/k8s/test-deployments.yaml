@@ -1,0 +1,334 @@
+---
+# Test Deployment 1: Guaranteed QoS Pod
+# This pod has requests equal to limits for both CPU and memory
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: guaranteed-qos-app
+  namespace: test-guaranteed
+  labels:
+    app: guaranteed-qos-app
+    test: right-sizer
+    qos: guaranteed
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: guaranteed-qos-app
+  template:
+    metadata:
+      labels:
+        app: guaranteed-qos-app
+        test: right-sizer
+        qos: guaranteed
+      annotations:
+        rightsizer.io/qos-class: "Guaranteed"
+        rightsizer.io/test: "guaranteed-qos-preservation"
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:alpine
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "128Mi"  # Equal to requests = Guaranteed QoS
+            cpu: "100m"      # Equal to requests = Guaranteed QoS
+        ports:
+        - containerPort: 80
+          name: http
+---
+# Test Deployment 2: Burstable QoS Pod
+# This pod has different values for requests and limits
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: burstable-qos-app
+  namespace: test-apps
+  labels:
+    app: burstable-qos-app
+    test: right-sizer
+    qos: burstable
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: burstable-qos-app
+  template:
+    metadata:
+      labels:
+        app: burstable-qos-app
+        test: right-sizer
+        qos: burstable
+      annotations:
+        rightsizer.io/test: "burstable-qos-handling"
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:alpine
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "256Mi"  # Different from requests = Burstable QoS
+            cpu: "200m"      # Different from requests = Burstable QoS
+        ports:
+        - containerPort: 80
+          name: http
+---
+# Test Deployment 3: Guaranteed QoS with Higher Resources
+# Testing memory decrease handling
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: guaranteed-high-mem
+  namespace: test-guaranteed
+  labels:
+    app: guaranteed-high-mem
+    test: right-sizer
+    qos: guaranteed
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: guaranteed-high-mem
+  template:
+    metadata:
+      labels:
+        app: guaranteed-high-mem
+        test: right-sizer
+        qos: guaranteed
+      annotations:
+        rightsizer.io/qos-class: "Guaranteed"
+        rightsizer.io/test: "memory-decrease-handling"
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:alpine
+        resources:
+          requests:
+            memory: "256Mi"  # Higher memory to test decrease handling
+            cpu: "200m"
+          limits:
+            memory: "256Mi"  # Equal to requests = Guaranteed QoS
+            cpu: "200m"      # Equal to requests = Guaranteed QoS
+        ports:
+        - containerPort: 80
+          name: http
+---
+# Test Deployment 4: Stress Generator (Guaranteed QoS)
+# This deployment generates CPU and memory load for testing
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: stress-test-guaranteed
+  namespace: test-guaranteed
+  labels:
+    app: stress-test
+    test: right-sizer
+    qos: guaranteed
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: stress-test
+  template:
+    metadata:
+      labels:
+        app: stress-test
+        test: right-sizer
+        qos: guaranteed
+      annotations:
+        rightsizer.io/qos-class: "Guaranteed"
+        rightsizer.io/test: "stress-test-guaranteed"
+    spec:
+      containers:
+      - name: stress
+        image: polinux/stress
+        command: ["/bin/sh"]
+        args:
+        - "-c"
+        - |
+          # Run stress with moderate CPU and memory usage
+          # This will use about 50% of allocated resources
+          stress --cpu 1 --io 1 --vm 1 --vm-bytes 64M --timeout 3600s &
+          # Keep the container running
+          while true; do
+            echo "Stress test running... $(date)"
+            sleep 30
+          done
+        resources:
+          requests:
+            memory: "150Mi"
+            cpu: "150m"
+          limits:
+            memory: "150Mi"  # Equal to requests = Guaranteed QoS
+            cpu: "150m"      # Equal to requests = Guaranteed QoS
+---
+# Test Deployment 5: Mixed Container Pod (Guaranteed QoS)
+# Multiple containers with Guaranteed QoS
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: multi-container-guaranteed
+  namespace: test-guaranteed
+  labels:
+    app: multi-container
+    test: right-sizer
+    qos: guaranteed
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: multi-container
+  template:
+    metadata:
+      labels:
+        app: multi-container
+        test: right-sizer
+        qos: guaranteed
+      annotations:
+        rightsizer.io/qos-class: "Guaranteed"
+        rightsizer.io/test: "multi-container-guaranteed"
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:alpine
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "64Mi"   # Equal to requests
+            cpu: "50m"       # Equal to requests
+        ports:
+        - containerPort: 80
+          name: http
+      - name: sidecar
+        image: busybox
+        command: ["/bin/sh"]
+        args: ["-c", "while true; do echo 'Sidecar running'; sleep 60; done"]
+        resources:
+          requests:
+            memory: "32Mi"
+            cpu: "25m"
+          limits:
+            memory: "32Mi"   # Equal to requests
+            cpu: "25m"       # Equal to requests
+---
+# Test Deployment 6: Critical Workload (Guaranteed QoS)
+# Simulating a critical database or cache
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: critical-workload
+  namespace: test-guaranteed
+  labels:
+    app: critical-workload
+    test: right-sizer
+    qos: guaranteed
+    criticality: high
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: critical-workload
+  template:
+    metadata:
+      labels:
+        app: critical-workload
+        test: right-sizer
+        qos: guaranteed
+        criticality: high
+      annotations:
+        rightsizer.io/qos-class: "Guaranteed"
+        rightsizer.io/critical: "true"
+        rightsizer.io/test: "critical-workload-preservation"
+    spec:
+      containers:
+      - name: redis
+        image: redis:alpine
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "256Mi"  # Equal to requests = Guaranteed QoS
+            cpu: "250m"      # Equal to requests = Guaranteed QoS
+        ports:
+        - containerPort: 6379
+          name: redis
+---
+# Test Deployment 7: Pod with Restart Policy Test
+# Testing in-place resize behavior
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: resize-policy-test
+  namespace: test-apps
+  labels:
+    app: resize-policy
+    test: right-sizer
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: resize-policy
+  template:
+    metadata:
+      labels:
+        app: resize-policy
+        test: right-sizer
+      annotations:
+        rightsizer.io/test: "resize-policy-behavior"
+    spec:
+      containers:
+      - name: app
+        image: nginx:alpine
+        resources:
+          requests:
+            memory: "100Mi"
+            cpu: "100m"
+          limits:
+            memory: "200Mi"
+            cpu: "150m"
+        # Container resize policy (for Kubernetes 1.27+)
+        resizePolicy:
+        - resourceName: cpu
+          restartPolicy: NotRequired
+        - resourceName: memory
+          restartPolicy: RestartContainer  # Memory decreases require restart
+        ports:
+        - containerPort: 80
+          name: http
+---
+# Test Service for load generation
+apiVersion: v1
+kind: Service
+metadata:
+  name: guaranteed-qos-app
+  namespace: test-guaranteed
+spec:
+  selector:
+    app: guaranteed-qos-app
+  ports:
+  - port: 80
+    targetPort: 80
+    name: http
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: critical-workload
+  namespace: test-guaranteed
+spec:
+  selector:
+    app: critical-workload
+  ports:
+  - port: 6379
+    targetPort: 6379
+    name: redis
+  type: ClusterIP
