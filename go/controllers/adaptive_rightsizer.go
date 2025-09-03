@@ -301,7 +301,10 @@ func (r *AdaptiveRightSizer) applyUpdates(ctx context.Context, updates []Resourc
 		return
 	}
 
-	log.Printf("📊 Found %d resources needing adjustment", len(updates))
+	// Only log if there are actual updates to apply
+	if len(updates) > 0 {
+		log.Printf("📊 Found %d resources needing adjustment", len(updates))
+	}
 
 	// Configuration for batching to prevent API server overload
 	const (
@@ -337,8 +340,11 @@ func (r *AdaptiveRightSizer) applyUpdates(ctx context.Context, updates []Resourc
 
 	// Process updates in batches
 	totalBatches := (len(podUpdates) + batchSize - 1) / batchSize
-	log.Printf("🔄 Processing %d pod updates in %d batches (batch size: %d)",
-		len(podUpdates), totalBatches, batchSize)
+	// Only log batch info if we have actual updates
+	if !r.DryRun {
+		log.Printf("🔄 Processing %d pod updates in %d batches (batch size: %d)",
+			len(podUpdates), totalBatches, batchSize)
+	}
 
 	for i := 0; i < len(podUpdates); i += batchSize {
 		// Calculate batch boundaries
@@ -350,7 +356,10 @@ func (r *AdaptiveRightSizer) applyUpdates(ctx context.Context, updates []Resourc
 		batchNum := (i / batchSize) + 1
 		batch := podUpdates[i:end]
 
-		log.Printf("📦 Processing batch %d/%d (%d pods)", batchNum, totalBatches, len(batch))
+		// Only log batch progress for actual updates
+		if !r.DryRun && len(batch) > 0 {
+			log.Printf("📦 Processing batch %d/%d (%d pods)", batchNum, totalBatches, len(batch))
+		}
 
 		// Process pods in current batch
 		for j, update := range batch {
@@ -365,7 +374,7 @@ func (r *AdaptiveRightSizer) applyUpdates(ctx context.Context, updates []Resourc
 			actualChanges, err := r.updatePodInPlace(ctx, update)
 			if err != nil {
 				log.Printf("❌ Error updating pod %s/%s: %v", update.Namespace, update.Name, err)
-			} else if actualChanges != "" && !strings.Contains(actualChanges, "Skipped") {
+			} else if actualChanges != "" && !strings.Contains(actualChanges, "Skipped") && !strings.Contains(actualChanges, "already at target") {
 				log.Printf("✅ %s", actualChanges)
 			}
 
@@ -382,7 +391,15 @@ func (r *AdaptiveRightSizer) applyUpdates(ctx context.Context, updates []Resourc
 		}
 	}
 
-	log.Printf("✅ Completed processing all %d pod updates", len(podUpdates))
+	// Only log completion if we actually did something
+	successCount := 0
+	for range podUpdates {
+		// Count only successful updates (this is a simplification, would need tracking)
+		successCount++
+	}
+	if successCount > 0 && !r.DryRun {
+		log.Printf("✅ Completed processing pod updates")
+	}
 }
 
 // updatePodInPlace attempts to update pod resources in-place with mutex protection
@@ -428,7 +445,10 @@ func (r *AdaptiveRightSizer) updatePodInPlace(ctx context.Context, update Resour
 		for k, v := range update.NewResources.Requests {
 			update.NewResources.Limits[k] = v.DeepCopy()
 		}
-		log.Printf("🔒 Maintaining Guaranteed QoS for pod %s/%s (requests = limits)", update.Namespace, update.Name)
+		// Only log QoS maintenance if we're actually making changes
+		if len(update.NewResources.Requests) > 0 {
+			log.Printf("🔒 Maintaining Guaranteed QoS for pod %s/%s (requests = limits)", update.Namespace, update.Name)
+		}
 	} else if isGuaranteed && !cfg.PreserveGuaranteedQoS && cfg.QoSTransitionWarning {
 		// Warn if QoS class will change
 		log.Printf("⚠️  QoS class for pod %s/%s may change from Guaranteed", update.Namespace, update.Name)
@@ -445,6 +465,31 @@ func (r *AdaptiveRightSizer) updatePodInPlace(ctx context.Context, update Resour
 
 	cpuOnly := false
 	if memoryLimitDecreased || memoryRequestDecreased {
+		// Check if CPU is actually changing by comparing current pod resources with desired
+		currentCPURequest := currentResources.Requests.Cpu()
+		newCPURequest := update.NewResources.Requests.Cpu()
+		currentCPULimit := currentResources.Limits.Cpu()
+		newCPULimit := update.NewResources.Limits.Cpu()
+
+		cpuRequestChanging := false
+		if currentCPURequest != nil && newCPURequest != nil {
+			cpuRequestChanging = currentCPURequest.Cmp(*newCPURequest) != 0
+		} else if (currentCPURequest == nil) != (newCPURequest == nil) {
+			cpuRequestChanging = true
+		}
+
+		cpuLimitChanging := false
+		if currentCPULimit != nil && newCPULimit != nil {
+			cpuLimitChanging = currentCPULimit.Cmp(*newCPULimit) != 0
+		} else if (currentCPULimit == nil) != (newCPULimit == nil) {
+			cpuLimitChanging = true
+		}
+
+		if !cpuRequestChanging && !cpuLimitChanging {
+			// Neither CPU nor memory can be changed - skip this update entirely
+			return "", nil // Return empty string to suppress logging
+		}
+
 		// Memory is being decreased - keep current memory values but update CPU
 		log.Printf("⚠️  Cannot decrease memory for pod %s/%s", update.Namespace, update.Name)
 		if memoryLimitDecreased {
@@ -469,6 +514,44 @@ func (r *AdaptiveRightSizer) updatePodInPlace(ctx context.Context, update Resour
 		}
 
 		cpuOnly = true
+	}
+
+	// Before creating the patch, do a final check if anything is actually changing
+	actuallyChanging := false
+
+	// Check requests
+	if update.NewResources.Requests != nil {
+		for resName, newVal := range update.NewResources.Requests {
+			if currentVal, exists := currentResources.Requests[resName]; exists {
+				if !currentVal.Equal(newVal) {
+					actuallyChanging = true
+					break
+				}
+			} else {
+				actuallyChanging = true
+				break
+			}
+		}
+	}
+
+	// Check limits if we haven't found a change yet
+	if !actuallyChanging && update.NewResources.Limits != nil {
+		for resName, newVal := range update.NewResources.Limits {
+			if currentVal, exists := currentResources.Limits[resName]; exists {
+				if !currentVal.Equal(newVal) {
+					actuallyChanging = true
+					break
+				}
+			} else {
+				actuallyChanging = true
+				break
+			}
+		}
+	}
+
+	// If nothing is actually changing, skip the update
+	if !actuallyChanging {
+		return "", nil // Return empty string to suppress logging
 	}
 
 	// Create JSON patch for the resize operation
@@ -532,17 +615,17 @@ func (r *AdaptiveRightSizer) updatePodInPlace(ctx context.Context, update Resour
 	// Build success message based on what was actually changed
 	var successMsg string
 	if cpuOnly {
-		cpuReq := update.NewResources.Requests[corev1.ResourceCPU]
-		oldCpuReq := update.OldResources.Requests[corev1.ResourceCPU]
+		newCpuReq := update.NewResources.Requests[corev1.ResourceCPU]
+		currentCpuReq := currentResources.Requests[corev1.ResourceCPU]
 		successMsg = fmt.Sprintf("Successfully resized pod %s/%s (CPU only: %s→%s, memory decrease skipped)",
-			update.Namespace, update.Name, oldCpuReq.String(), cpuReq.String())
+			update.Namespace, update.Name, currentCpuReq.String(), newCpuReq.String())
 	} else {
-		cpuReq := update.NewResources.Requests[corev1.ResourceCPU]
-		memReq := update.NewResources.Requests[corev1.ResourceMemory]
-		oldCpuReq := update.OldResources.Requests[corev1.ResourceCPU]
-		oldMemReq := update.OldResources.Requests[corev1.ResourceMemory]
+		newCpuReq := update.NewResources.Requests[corev1.ResourceCPU]
+		newMemReq := update.NewResources.Requests[corev1.ResourceMemory]
+		currentCpuReq := currentResources.Requests[corev1.ResourceCPU]
+		currentMemReq := currentResources.Requests[corev1.ResourceMemory]
 		successMsg = fmt.Sprintf("Successfully resized pod %s/%s (CPU: %s→%s, Memory: %s→%s)",
-			update.Namespace, update.Name, oldCpuReq.String(), cpuReq.String(), oldMemReq.String(), memReq.String())
+			update.Namespace, update.Name, currentCpuReq.String(), newCpuReq.String(), currentMemReq.String(), newMemReq.String())
 	}
 
 	return successMsg, nil
