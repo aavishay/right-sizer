@@ -28,6 +28,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Corrected service account automounting configuration
 - **Duplicate Logging Issues**: Resolved redundant log messages in resource adjustment operations
   - Consolidated scaling analysis logs to appear only when resize is needed
+- **Guaranteed QoS Pod Update Issues**: Fixed critical issues preventing updates to pods with Guaranteed Quality of Service class
+  - Added QoS class detection and preservation logic to maintain Guaranteed status during resource updates
+  - Changed from strategic merge patch to JSON patch for more reliable container resource updates
+  - Implemented proper handling of memory decrease restrictions in in-place resize operations
+  - Added configuration options to control QoS preservation behavior (`PreserveGuaranteedQoS`, `ForceGuaranteedForCritical`)
+  - Ensured that for Guaranteed pods, resource limits always equal requests after updates
+  - Fixed patch structure issues that were causing "Forbidden" errors when updating Guaranteed pods
   - Removed duplicate success messages in batch processing
   - Eliminated redundant resize notifications for the same pod operations
   - Achieved ~40-50% reduction in log volume during resize operations

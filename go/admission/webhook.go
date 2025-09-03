@@ -29,6 +29,7 @@ import (
 
 	admissionv1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
@@ -309,6 +310,12 @@ func (ws *WebhookServer) mutatePodResources(review *admissionv1.AdmissionReview)
 		return admissionv1.AdmissionReview{Response: response}
 	}
 
+	// Check current QoS class before mutation
+	currentQoS := ws.getQoSClass(&pod)
+	if currentQoS == corev1.PodQOSGuaranteed {
+		logger.Debug("Pod %s/%s has Guaranteed QoS, will maintain during mutation", pod.Namespace, pod.Name)
+	}
+
 	// Apply mutations
 	patches := ws.generateResourcePatches(&pod)
 	if len(patches) > 0 {
@@ -322,7 +329,7 @@ func (ws *WebhookServer) mutatePodResources(review *admissionv1.AdmissionReview)
 		response.Patch = patchBytes
 		response.PatchType = &patchType
 
-		logger.Info("Applied resource patches to pod %s/%s", pod.Namespace, pod.Name)
+		logger.Info("Applied resource patches to pod %s/%s (QoS: %s)", pod.Namespace, pod.Name, currentQoS)
 	}
 
 	return admissionv1.AdmissionReview{Response: response}
@@ -406,16 +413,46 @@ func (ws *WebhookServer) areResourceListsEqual(old, new corev1.ResourceList) boo
 func (ws *WebhookServer) generateResourcePatches(pod *corev1.Pod) []JSONPatch {
 	var patches []JSONPatch
 
+	// Determine if we should maintain Guaranteed QoS
+	maintainGuaranteed := false
+	if pod.Annotations != nil {
+		if qos, exists := pod.Annotations["rightsizer.io/qos-class"]; exists && qos == "Guaranteed" {
+			maintainGuaranteed = true
+		}
+	}
+
 	// Add default resource requests if missing
 	for i, container := range pod.Spec.Containers {
 		if container.Resources.Requests == nil {
+			cpuRequest := fmt.Sprintf("%dm", ws.config.MinCPURequest)
+			memRequest := fmt.Sprintf("%dMi", ws.config.MinMemoryRequest)
+
 			patches = append(patches, JSONPatch{
 				Op:   "add",
 				Path: fmt.Sprintf("/spec/containers/%d/resources/requests", i),
 				Value: map[string]string{
-					"cpu":    fmt.Sprintf("%dm", ws.config.MinCPURequest),
-					"memory": fmt.Sprintf("%dMi", ws.config.MinMemoryRequest),
+					"cpu":    cpuRequest,
+					"memory": memRequest,
 				},
+			})
+
+			// If maintaining Guaranteed QoS, also add matching limits
+			if maintainGuaranteed {
+				patches = append(patches, JSONPatch{
+					Op:   "add",
+					Path: fmt.Sprintf("/spec/containers/%d/resources/limits", i),
+					Value: map[string]string{
+						"cpu":    cpuRequest,
+						"memory": memRequest,
+					},
+				})
+			}
+		} else if maintainGuaranteed && container.Resources.Limits == nil {
+			// If we have requests but no limits and need Guaranteed QoS, add matching limits
+			patches = append(patches, JSONPatch{
+				Op:    "add",
+				Path:  fmt.Sprintf("/spec/containers/%d/resources/limits", i),
+				Value: container.Resources.Requests,
 			})
 		}
 
@@ -443,6 +480,72 @@ type JSONPatch struct {
 	Op    string      `json:"op"`
 	Path  string      `json:"path"`
 	Value interface{} `json:"value,omitempty"`
+}
+
+// getQoSClass determines the QoS class of a pod
+func (ws *WebhookServer) getQoSClass(pod *corev1.Pod) corev1.PodQOSClass {
+	requests := make(corev1.ResourceList)
+	limits := make(corev1.ResourceList)
+	zeroQuantity := resource.MustParse("0")
+	isGuaranteed := true
+
+	for _, container := range pod.Spec.Containers {
+		// Accumulate requests
+		for name, quantity := range container.Resources.Requests {
+			if value, exists := requests[name]; !exists {
+				requests[name] = quantity.DeepCopy()
+			} else {
+				value.Add(quantity)
+				requests[name] = value
+			}
+		}
+
+		// Accumulate limits
+		for name, quantity := range container.Resources.Limits {
+			if value, exists := limits[name]; !exists {
+				limits[name] = quantity.DeepCopy()
+			} else {
+				value.Add(quantity)
+				limits[name] = value
+			}
+		}
+	}
+
+	// Check if guaranteed - must have both CPU and memory requests/limits and they must be equal
+	if len(requests) < 2 || len(limits) < 2 {
+		isGuaranteed = false
+	} else {
+		// Check CPU and Memory specifically
+		cpuReq, hasCPUReq := requests[corev1.ResourceCPU]
+		cpuLim, hasCPULim := limits[corev1.ResourceCPU]
+		memReq, hasMemReq := requests[corev1.ResourceMemory]
+		memLim, hasMemLim := limits[corev1.ResourceMemory]
+
+		if !hasCPUReq || !hasCPULim || !hasMemReq || !hasMemLim {
+			isGuaranteed = false
+		} else if cpuReq.Cmp(cpuLim) != 0 || memReq.Cmp(memLim) != 0 {
+			isGuaranteed = false
+		}
+	}
+
+	if isGuaranteed {
+		return corev1.PodQOSGuaranteed
+	}
+
+	// Check if burstable (has some requests or limits)
+	for _, req := range requests {
+		if req.Cmp(zeroQuantity) != 0 {
+			return corev1.PodQOSBurstable
+		}
+	}
+
+	for _, limit := range limits {
+		if limit.Cmp(zeroQuantity) != 0 {
+			return corev1.PodQOSBurstable
+		}
+	}
+
+	return corev1.PodQOSBestEffort
 }
 
 // readRequestBody reads and validates the request body

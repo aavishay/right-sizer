@@ -401,17 +401,37 @@ func (r *AdaptiveRightSizer) updatePodInPlace(ctx context.Context, update Resour
 		return "", err
 	}
 
-	// Find the container to check current resources
+	// Find the container index and check current resources
 	var currentResources *corev1.ResourceRequirements
-	for _, container := range pod.Spec.Containers {
+	containerIndex := -1
+	for i, container := range pod.Spec.Containers {
 		if container.Name == update.ContainerName {
 			currentResources = &container.Resources
+			containerIndex = i
 			break
 		}
 	}
 
-	if currentResources == nil {
+	if currentResources == nil || containerIndex == -1 {
 		return "", fmt.Errorf("container %s not found in pod", update.ContainerName)
+	}
+
+	// Check the current QoS class
+	cfg := config.Get()
+	currentQoS := getQoSClass(&pod)
+	isGuaranteed := currentQoS == corev1.PodQOSGuaranteed
+
+	// If pod is Guaranteed and config says to preserve it, ensure we maintain the QoS class
+	if isGuaranteed && cfg.PreserveGuaranteedQoS {
+		// For Guaranteed pods, requests must equal limits
+		update.NewResources.Limits = make(corev1.ResourceList)
+		for k, v := range update.NewResources.Requests {
+			update.NewResources.Limits[k] = v.DeepCopy()
+		}
+		log.Printf("🔒 Maintaining Guaranteed QoS for pod %s/%s (requests = limits)", update.Namespace, update.Name)
+	} else if isGuaranteed && !cfg.PreserveGuaranteedQoS && cfg.QoSTransitionWarning {
+		// Warn if QoS class will change
+		log.Printf("⚠️  QoS class for pod %s/%s may change from Guaranteed", update.Namespace, update.Name)
 	}
 
 	// Check if memory limit is being decreased (not allowed for in-place resize)
@@ -442,46 +462,55 @@ func (r *AdaptiveRightSizer) updatePodInPlace(ctx context.Context, update Resour
 		if currentMemRequest != nil {
 			update.NewResources.Requests[corev1.ResourceMemory] = currentMemRequest.DeepCopy()
 		}
+
+		// If Guaranteed and preserving QoS, ensure requests still equal limits for memory
+		if isGuaranteed && cfg.PreserveGuaranteedQoS && currentMemLimit != nil {
+			update.NewResources.Requests[corev1.ResourceMemory] = currentMemLimit.DeepCopy()
+		}
+
 		cpuOnly = true
 	}
 
-	// Create the resize patch
-	type ContainerResourcesPatch struct {
-		Name      string                      `json:"name"`
-		Resources corev1.ResourceRequirements `json:"resources"`
+	// Create JSON patch for the resize operation
+	// Using JSON patch is more reliable for resize subresource
+	type JSONPatchOp struct {
+		Op    string      `json:"op"`
+		Path  string      `json:"path"`
+		Value interface{} `json:"value"`
 	}
 
-	type PodSpecPatch struct {
-		Containers []ContainerResourcesPatch `json:"containers"`
+	var patchOps []JSONPatchOp
+
+	// Patch requests
+	if update.NewResources.Requests != nil {
+		patchOps = append(patchOps, JSONPatchOp{
+			Op:    "replace",
+			Path:  fmt.Sprintf("/spec/containers/%d/resources/requests", containerIndex),
+			Value: update.NewResources.Requests,
+		})
 	}
 
-	type PodResizePatch struct {
-		Spec PodSpecPatch `json:"spec"`
-	}
-
-	resizePatch := PodResizePatch{
-		Spec: PodSpecPatch{
-			Containers: []ContainerResourcesPatch{
-				{
-					Name:      update.ContainerName,
-					Resources: update.NewResources,
-				},
-			},
-		},
+	// Patch limits
+	if update.NewResources.Limits != nil {
+		patchOps = append(patchOps, JSONPatchOp{
+			Op:    "replace",
+			Path:  fmt.Sprintf("/spec/containers/%d/resources/limits", containerIndex),
+			Value: update.NewResources.Limits,
+		})
 	}
 
 	// Marshal the patch
-	patchData, err := json.Marshal(resizePatch)
+	patchData, err := json.Marshal(patchOps)
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal resize patch: %w", err)
 	}
 
 	// Use the Kubernetes client-go to patch with the resize subresource
-	// This is the key difference - using the resize subresource endpoint
+	// Using JSONPatch type for more precise control
 	_, err = r.ClientSet.CoreV1().Pods(update.Namespace).Patch(
 		ctx,
 		update.Name,
-		types.StrategicMergePatchType,
+		types.JSONPatchType,
 		patchData,
 		metav1.PatchOptions{},
 		"resize", // This is the crucial part - specifying the resize subresource
@@ -489,11 +518,13 @@ func (r *AdaptiveRightSizer) updatePodInPlace(ctx context.Context, update Resour
 
 	if err != nil {
 		// Check for specific memory decrease error
-		if strings.Contains(err.Error(), "memory limits cannot be decreased") {
-			log.Printf("⚠️  Cannot decrease memory for pod %s/%s", update.Namespace, update.Name)
-			log.Printf("   💡 Pod needs RestartContainer policy for memory decreases. Skipping resize.")
+		if strings.Contains(err.Error(), "memory limits cannot be decreased") ||
+			strings.Contains(err.Error(), "Forbidden: pod updates may not change fields") ||
+			strings.Contains(err.Error(), "resize is not supported") {
+			log.Printf("⚠️  Cannot resize pod %s/%s: %v", update.Namespace, update.Name, err)
+			log.Printf("   💡 Pod may need RestartPolicy or in-place resize may not be supported")
 			// Return empty string to not count this as an error
-			return "Skipped resize (memory decrease not allowed)", nil
+			return "Skipped resize (not supported or forbidden)", nil
 		}
 		return "", fmt.Errorf("failed to resize pod: %w", err)
 	}
@@ -729,6 +760,27 @@ func (r *AdaptiveRightSizer) calculateOptimalResourcesWithDecision(usage metrics
 		memLimit = 256 // Fallback to 256MB if still 0
 	}
 
+	// Ensure CPU limit is never less than request
+	if cpuLimit < cpuRequest {
+		cpuLimit = cpuRequest
+	}
+
+	// Check if we should maintain Guaranteed QoS based on config and multiplier settings
+	// This is a common pattern for workloads that need predictable performance
+	maintainGuaranteed := cfg.PreserveGuaranteedQoS &&
+		(cfg.CPULimitMultiplier == 1.0 && cfg.CPULimitAddition == 0 &&
+			cfg.MemoryLimitMultiplier == 1.0 && cfg.MemoryLimitAddition == 0)
+
+	// Also maintain Guaranteed if explicitly configured for critical workloads
+	if cfg.ForceGuaranteedForCritical || maintainGuaranteed {
+		// For Guaranteed QoS, requests must equal limits
+		cpuLimit = cpuRequest
+		memLimit = memRequest
+		if cfg.QoSTransitionWarning {
+			log.Printf("📌 Maintaining Guaranteed QoS pattern (requests = limits)")
+		}
+	}
+
 	return corev1.ResourceRequirements{
 		Requests: corev1.ResourceList{
 			corev1.ResourceCPU:    *resource.NewMilliQuantity(cpuRequest, resource.DecimalSI),
@@ -914,6 +966,72 @@ func (r *AdaptiveRightSizer) shouldProcessNamespace(namespace string) bool {
 	}
 
 	return false
+}
+
+// getQoSClass determines the QoS class of a pod
+func getQoSClass(pod *corev1.Pod) corev1.PodQOSClass {
+	requests := make(corev1.ResourceList)
+	limits := make(corev1.ResourceList)
+	zeroQuantity := resource.MustParse("0")
+	isGuaranteed := true
+
+	for _, container := range pod.Spec.Containers {
+		// Accumulate requests
+		for name, quantity := range container.Resources.Requests {
+			if value, exists := requests[name]; !exists {
+				requests[name] = quantity.DeepCopy()
+			} else {
+				value.Add(quantity)
+				requests[name] = value
+			}
+		}
+
+		// Accumulate limits
+		for name, quantity := range container.Resources.Limits {
+			if value, exists := limits[name]; !exists {
+				limits[name] = quantity.DeepCopy()
+			} else {
+				value.Add(quantity)
+				limits[name] = value
+			}
+		}
+	}
+
+	// Check if guaranteed - must have both CPU and memory requests/limits and they must be equal
+	if len(requests) < 2 || len(limits) < 2 {
+		isGuaranteed = false
+	} else {
+		// Check CPU and Memory specifically
+		cpuReq, hasCPUReq := requests[corev1.ResourceCPU]
+		cpuLim, hasCPULim := limits[corev1.ResourceCPU]
+		memReq, hasMemReq := requests[corev1.ResourceMemory]
+		memLim, hasMemLim := limits[corev1.ResourceMemory]
+
+		if !hasCPUReq || !hasCPULim || !hasMemReq || !hasMemLim {
+			isGuaranteed = false
+		} else if cpuReq.Cmp(cpuLim) != 0 || memReq.Cmp(memLim) != 0 {
+			isGuaranteed = false
+		}
+	}
+
+	if isGuaranteed {
+		return corev1.PodQOSGuaranteed
+	}
+
+	// Check if burstable (has some requests or limits)
+	for _, req := range requests {
+		if req.Cmp(zeroQuantity) != 0 {
+			return corev1.PodQOSBurstable
+		}
+	}
+
+	for _, limit := range limits {
+		if limit.Cmp(zeroQuantity) != 0 {
+			return corev1.PodQOSBurstable
+		}
+	}
+
+	return corev1.PodQOSBestEffort
 }
 
 // SetupAdaptiveRightSizer creates and starts the adaptive rightsizer

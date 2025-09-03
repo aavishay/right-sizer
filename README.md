@@ -33,6 +33,8 @@ docker pull aavishay/right-sizer:latest # Latest version
 
 **Key Benefits:** 🚀 Zero-downtime resizing • 💰 30-50% cost reduction • 🎯 Automatic optimization • 📊 Real-time monitoring
 
+**Latest Fix:** ✅ Resolved issues with Guaranteed QoS pods - now correctly preserves QoS class during resource updates
+
 ---
 
 ## 📚 Table of Contents

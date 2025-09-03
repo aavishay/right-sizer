@@ -84,6 +84,11 @@ type Config struct {
 	// Feature flags
 	EnableInPlaceResize bool // Enable in-place pod resizing (Kubernetes 1.33+)
 
+	// QoS preservation settings
+	PreserveGuaranteedQoS      bool // Preserve Guaranteed QoS class during resizing
+	ForceGuaranteedForCritical bool // Force Guaranteed QoS for critical workloads
+	QoSTransitionWarning       bool // Warn when QoS class would change
+
 	// Scaling thresholds
 	MemoryScaleUpThreshold   float64 // Memory usage percentage to trigger scale up (0-1)
 	MemoryScaleDownThreshold float64 // Memory usage percentage to trigger scale down (0-1)
@@ -116,6 +121,11 @@ func GetDefaults() *Config {
 		MaxMemoryLimit:          8192,
 		MinCPURequest:           10,
 		MinMemoryRequest:        64,
+
+		// Default QoS preservation settings
+		PreserveGuaranteedQoS:      true,
+		ForceGuaranteedForCritical: false,
+		QoSTransitionWarning:       true,
 
 		// Default operational settings
 		ResizeInterval: 30 * time.Second,
