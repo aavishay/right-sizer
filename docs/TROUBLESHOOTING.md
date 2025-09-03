@@ -10,6 +10,8 @@ This guide provides solutions for common issues encountered with the Right-Sizer
   - [Controller-Runtime Logger Warning](#controller-runtime-logger-warning)
   - [In-Place Resize Not Working](#in-place-resize-not-working)
   - [Metrics Server Not Available](#metrics-server-not-available)
+  - [Pods Being Restarted Instead of Resized](#pods-being-restarted-instead-of-resized)
+  - [Excessive Log Spam for No-Op Operations](#excessive-log-spam-for-no-op-operations)
 - [Diagnostic Commands](#diagnostic-commands)
 - [Monitoring and Debugging](#monitoring-and-debugging)
 - [Recovery Procedures](#recovery-procedures)
@@ -48,6 +50,89 @@ We provide automated scripts to fix RBAC issues:
 
 # Verify all permissions are correctly set
 ./scripts/rbac/verify-permissions.sh
+```
+
+### Pods Being Restarted Instead of Resized
+
+#### Symptoms
+- Pods are being recreated with new ReplicaSets when resources are adjusted
+- Rolling updates triggered on Deployments/StatefulSets
+- Service disruptions during resource optimization
+- Multiple old ReplicaSets shown in deployment history:
+```
+OldReplicaSets: demo-nginx-59dbbffc4d (0/0 replicas created), demo-nginx-56dd6c9bfb (0/0 replicas created)...
+```
+
+#### Cause
+This critical issue occurred in versions prior to 0.1.1 where the RightSizerPolicy controller was updating Deployment/StatefulSet/DaemonSet resources directly, which triggers rolling updates and pod restarts.
+
+#### Solution
+
+##### Upgrade to Version 0.1.1 or Later
+The issue has been fixed in commit `b74390a`. The operator now:
+- Never updates workload controllers (Deployments, StatefulSets, DaemonSets)
+- Only performs in-place pod resizing directly
+- Guarantees zero-downtime resource optimization
+
+##### Verify the Fix
+Check that pods are being resized without restarts:
+```bash
+# Monitor a pod for restarts
+kubectl get pod <pod-name> -n <namespace> --watch
+
+# Check restart count
+kubectl describe pod <pod-name> -n <namespace> | grep "Restart Count"
+
+# Verify deployment template hasn't changed
+kubectl get deployment <deployment-name> -n <namespace> -o jsonpath='{.spec.template.spec.containers[0].resources}' | jq
+```
+
+##### Prevention
+- Always use in-place resize when available (Kubernetes 1.27+)
+- Never modify deployment specs for resource updates
+- Monitor pod restart counts in production
+
+### Excessive Log Spam for No-Op Operations
+
+#### Symptoms
+- Repeated log entries showing no actual changes:
+```
+Successfully resized pod (CPU only: 108m→108m, memory decrease skipped)
+Found 1 resources needing adjustment
+[REPEATED EVERY 30 SECONDS]
+```
+- Logs cluttered with operations that don't modify resources
+- Difficulty troubleshooting actual issues
+
+#### Cause
+Prior to version 0.1.1 (fixed in commit `d9ecfb6`), the operator would:
+- Attempt to resize pods even when resources were already at target values
+- Log success messages for no-op operations
+- Process pods that couldn't be modified due to Kubernetes limitations
+
+#### Solution
+
+##### Upgrade to Version 0.1.1 or Later
+The fix includes:
+- Comprehensive no-op detection before API calls
+- Skipping operations where neither CPU nor memory would change
+- Suppressing logs for skipped operations
+- Comparing actual pod resources to detect true changes
+
+##### Verify Clean Logging
+Monitor logs to ensure only actual changes are logged:
+```bash
+# Watch operator logs
+kubectl logs -n right-sizer deploy/right-sizer -f
+
+# Check for repeated entries
+kubectl logs -n right-sizer deploy/right-sizer --since=5m | grep "108m→108m" | wc -l
+```
+
+##### Best Practices
+- Set appropriate resize intervals to reduce unnecessary checks
+- Use namespace filters to skip pods that shouldn't be touched
+- Enable debug logging only when troubleshooting
 ```
 
 ##### Fix Using Helm
