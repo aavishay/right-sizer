@@ -381,65 +381,88 @@ func (r *RightSizerPolicyReconciler) processResource(ctx context.Context, policy
 		return false, 0, 0, nil
 	}
 
-	// Get current resource specifications
-	var podTemplate *corev1.PodTemplateSpec
+	// IMPORTANT: We NEVER update Deployments, StatefulSets, DaemonSets, Jobs, or CronJobs directly
+	// as that would cause pod restarts. We ONLY resize pods in-place.
+
+	// For all workload types, we find their pods and resize them directly
+	var labelSelector map[string]string
+	var namespace string
+
 	switch res := obj.(type) {
 	case *appsv1.Deployment:
-		podTemplate = &res.Spec.Template
+		labelSelector = res.Spec.Selector.MatchLabels
+		namespace = res.Namespace
+		logger.Info("Processing pods for Deployment %s/%s", namespace, res.Name)
 	case *appsv1.StatefulSet:
-		podTemplate = &res.Spec.Template
+		labelSelector = res.Spec.Selector.MatchLabels
+		namespace = res.Namespace
+		logger.Info("Processing pods for StatefulSet %s/%s", namespace, res.Name)
 	case *appsv1.DaemonSet:
-		podTemplate = &res.Spec.Template
+		labelSelector = res.Spec.Selector.MatchLabels
+		namespace = res.Namespace
+		logger.Info("Processing pods for DaemonSet %s/%s", namespace, res.Name)
 	case *batchv1.Job:
-		podTemplate = &res.Spec.Template
+		labelSelector = res.Spec.Selector.MatchLabels
+		namespace = res.Namespace
+		logger.Info("Processing pods for Job %s/%s", namespace, res.Name)
 	case *batchv1.CronJob:
-		podTemplate = &res.Spec.JobTemplate.Spec.Template
+		// CronJobs don't have running pods unless a job is active
+		// Skip CronJobs to avoid issues
+		logger.Info("Skipping CronJob %s/%s - CronJobs are not resized", res.Namespace, res.Name)
+		return false, 0, 0, nil
 	case *corev1.Pod:
-		// For pods, we need to use in-place resize if available
+		// For standalone pods, resize directly
 		return r.processPod(ctx, policy, res)
 	default:
 		return false, 0, 0, fmt.Errorf("unsupported resource type: %T", res)
 	}
 
-	// Calculate new resources based on policy
-	newResources, cpuSaved, memorySaved, err := r.calculateNewResources(ctx, policy, obj, podTemplate)
-	if err != nil {
+	// Find all pods matching the workload's selector
+	podList := &corev1.PodList{}
+	if err := r.List(ctx, podList,
+		client.InNamespace(namespace),
+		client.MatchingLabels(labelSelector)); err != nil {
 		return false, 0, 0, err
 	}
 
-	// Check if resources need to be updated
-	if !r.needsUpdate(podTemplate, newResources) {
+	if len(podList.Items) == 0 {
+		logger.Info("No pods found for %s/%s", namespace, obj.GetName())
 		return false, 0, 0, nil
 	}
 
-	// Apply resource changes
-	for i := range podTemplate.Spec.Containers {
-		if containerResources, ok := newResources[podTemplate.Spec.Containers[i].Name]; ok {
-			podTemplate.Spec.Containers[i].Resources = containerResources
+	// Process each pod individually with in-place resizing
+	var totalResized int
+	var totalCPUSaved, totalMemorySaved int64
+
+	for _, pod := range podList.Items {
+		// Skip pods that are not running
+		if pod.Status.Phase != corev1.PodRunning {
+			continue
+		}
+
+		resized, cpuSaved, memorySaved, err := r.processPod(ctx, policy, &pod)
+		if err != nil {
+			logger.Warn("Failed to resize pod %s/%s: %v", pod.Namespace, pod.Name, err)
+			continue
+		}
+
+		if resized {
+			totalResized++
+			totalCPUSaved += cpuSaved
+			totalMemorySaved += memorySaved
 		}
 	}
 
-	// Add annotations
-	if policy.Spec.ResourceAnnotations != nil {
-		if podTemplate.Annotations == nil {
-			podTemplate.Annotations = make(map[string]string)
-		}
-		for k, v := range policy.Spec.ResourceAnnotations {
-			podTemplate.Annotations[k] = v
-		}
-		podTemplate.Annotations["rightsizer.io/last-resized"] = time.Now().Format(time.RFC3339)
-		podTemplate.Annotations["rightsizer.io/policy"] = policy.Name
+	if totalResized > 0 {
+		logger.Info("✅ Successfully resized %d pods for %s/%s (CPU saved: %dm, Memory saved: %dMi)",
+			totalResized, namespace, obj.GetName(), totalCPUSaved, totalMemorySaved/(1024*1024))
+
+		// Create an event for the workload
+		r.createEvent(ctx, obj, policy, "PodsResized",
+			fmt.Sprintf("Resized %d pods by policy %s", totalResized, policy.Name))
 	}
 
-	// Update the resource
-	if err := r.Update(ctx, obj); err != nil {
-		return false, 0, 0, err
-	}
-
-	// Create an event
-	r.createEvent(ctx, obj, policy, "ResourceResized", fmt.Sprintf("Resized by policy %s", policy.Name))
-
-	return true, cpuSaved, memorySaved, nil
+	return totalResized > 0, totalCPUSaved, totalMemorySaved, nil
 }
 
 // processPod handles in-place pod resizing
