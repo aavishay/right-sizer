@@ -83,38 +83,7 @@ kubectl get rightsizerpolicies
 | `rightsizerConfig.operationalConfig.resizeInterval` | How often to check resources | `5m` |
 | `rightsizerConfig.namespaceConfig.excludeNamespaces` | Namespaces to exclude | `[kube-system, kube-public]` |
 
-### Example Configuration</text>
-
-<old_text line=75>
-```yaml
-# values.yaml
-image:
-  repository: aavishay/right-sizer
-  tag: "0.1.3"
-  pullPolicy: IfNotPresent
-
-replicaCount: 1
-
-serviceAccount:
-  create: true
-  name: right-sizer
-
-rbac:
-  create: true
-
-metrics:
-  enabled: true
-
-webhook:
-  enabled: false
-
-# Custom resource configuration
-config:
-  enabled: true
-  mode: balanced
-  resizeInterval: "30s"
-  dryRun: false
-```
+### Example Configuration
 
 ```yaml
 # values.yaml
@@ -216,7 +185,7 @@ spec:
   operationalConfig:
     resizeMode: "InPlace"
     resizeInterval: "5m"
-```</text>
+```
 
 
 ### Workload-Specific Policy
