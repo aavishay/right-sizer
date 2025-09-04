@@ -16,9 +16,13 @@
 package controllers
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"math"
+	"net/http"
+	"net/smtp"
 	"time"
 
 	"right-sizer/audit"
@@ -508,13 +512,90 @@ func (r *PodMemoryController) checkMemoryPressureAlert(namespace, pod, container
 			r.lastPressureCheck[key] = time.Now()
 
 			// Send notification if configured
-			// TODO: Add NotificationConfig to Config struct when implementing notifications
-			// if r.Config.NotificationConfig != nil && r.Config.NotificationConfig.EnableNotifications {
-			//	// This would trigger actual notifications in a production system
-			//	logger.Info("[MEMORY_NOTIFICATION] Would send memory pressure alert for %s", key)
-			// }
+			if r.Config.NotificationConfig != nil && r.Config.NotificationConfig.EnableNotifications {
+				message := fmt.Sprintf("🚨 High memory pressure detected for %s: %s", key, level.String())
+				if err := r.sendNotification(message); err != nil {
+					logger.Warn("[MEMORY_NOTIFICATION] Failed to send notification: %v", err)
+				} else {
+					logger.Info("[MEMORY_NOTIFICATION] Notification sent for %s", key)
+				}
+			}
 		}
 	}
+}
+
+// sendNotification sends a notification using configured channels
+func (r *PodMemoryController) sendNotification(message string) error {
+	if r.Config.NotificationConfig == nil {
+		return fmt.Errorf("notification config not available")
+	}
+
+	var lastErr error
+
+	// Send Slack notification if configured
+	if r.Config.NotificationConfig.SlackWebhookURL != "" {
+		if err := r.sendSlackNotification(message); err != nil {
+			logger.Warn("[NOTIFICATION] Slack notification failed: %v", err)
+			lastErr = err
+		}
+	}
+
+	// Send email notification if configured
+	if len(r.Config.NotificationConfig.EmailRecipients) > 0 && r.Config.NotificationConfig.SMTPHost != "" {
+		if err := r.sendEmailNotification(message); err != nil {
+			logger.Warn("[NOTIFICATION] Email notification failed: %v", err)
+			lastErr = err
+		}
+	}
+
+	return lastErr
+}
+
+// sendSlackNotification sends a notification to Slack
+func (r *PodMemoryController) sendSlackNotification(message string) error {
+	payload := map[string]string{
+		"text": message,
+	}
+	jsonPayload, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("failed to marshal Slack payload: %w", err)
+	}
+
+	resp, err := http.Post(r.Config.NotificationConfig.SlackWebhookURL, "application/json", bytes.NewBuffer(jsonPayload))
+	if err != nil {
+		return fmt.Errorf("failed to send Slack notification: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("Slack notification failed with status: %d", resp.StatusCode)
+	}
+
+	return nil
+}
+
+// sendEmailNotification sends a notification via email
+func (r *PodMemoryController) sendEmailNotification(message string) error {
+	// Simple email implementation - in production, use a proper email library
+	auth := smtp.PlainAuth("", r.Config.NotificationConfig.SMTPUsername, r.Config.NotificationConfig.SMTPPassword, r.Config.NotificationConfig.SMTPHost)
+
+	subject := "Right-Sizer Memory Pressure Alert"
+	body := fmt.Sprintf("Subject: %s\r\n\r\n%s\r\n", subject, message)
+
+	for _, recipient := range r.Config.NotificationConfig.EmailRecipients {
+		err := smtp.SendMail(
+			fmt.Sprintf("%s:%d", r.Config.NotificationConfig.SMTPHost, r.Config.NotificationConfig.SMTPPort),
+			auth,
+			r.Config.NotificationConfig.SMTPUsername, // from
+			[]string{recipient},
+			[]byte(body),
+		)
+		if err != nil {
+			return fmt.Errorf("failed to send email to %s: %w", recipient, err)
+		}
+	}
+
+	return nil
 }
 
 // ContainerRecommendation holds memory sizing recommendations for a container

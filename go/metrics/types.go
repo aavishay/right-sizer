@@ -15,6 +15,7 @@
 package metrics
 
 import (
+	metricsclient "k8s.io/metrics/pkg/client/clientset/versioned"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -31,7 +32,8 @@ type Provider interface {
 
 // MetricsServerProvider fetches metrics from metrics-server
 type MetricsServerProvider struct {
-	Client client.Client
+	Client        client.Client
+	MetricsClient *metricsclient.Clientset
 }
 
 // PrometheusProvider implements Provider for Prometheus

@@ -24,6 +24,17 @@ import (
 
 // Config holds all configuration for resource sizing
 // This configuration is now loaded from CRDs instead of environment variables
+// NotificationConfig holds notification settings
+type NotificationConfig struct {
+	EnableNotifications bool     // Enable sending notifications
+	SlackWebhookURL     string   // Slack webhook URL for notifications
+	EmailRecipients     []string // Email addresses to notify
+	SMTPHost            string   // SMTP server host
+	SMTPPort            int      // SMTP server port
+	SMTPUsername        string   // SMTP username
+	SMTPPassword        string   // SMTP password
+}
+
 type Config struct {
 	mu sync.RWMutex
 
@@ -95,6 +106,9 @@ type Config struct {
 	CPUScaleUpThreshold      float64 // CPU usage percentage to trigger scale up (0-1)
 	CPUScaleDownThreshold    float64 // CPU usage percentage to trigger scale down (0-1)
 
+	// Notification configuration
+	NotificationConfig *NotificationConfig // Notification settings
+
 	// Configuration source tracking
 	ConfigSource string // "default" or "crd"
 }
@@ -160,6 +174,17 @@ func GetDefaults() *Config {
 		MemoryScaleDownThreshold: 0.3, // Scale down when memory usage is below 30%
 		CPUScaleUpThreshold:      0.8, // Scale up when CPU usage exceeds 80%
 		CPUScaleDownThreshold:    0.3, // Scale down when CPU usage is below 30%
+
+		// Default notification configuration
+		NotificationConfig: &NotificationConfig{
+			EnableNotifications: false,
+			SlackWebhookURL:     "",
+			EmailRecipients:     []string{},
+			SMTPHost:            "",
+			SMTPPort:            587,
+			SMTPUsername:        "",
+			SMTPPassword:        "",
+		},
 
 		// Mark as default configuration
 		ConfigSource: "default",
@@ -370,6 +395,7 @@ func (c *Config) ResetToDefaults() {
 	c.MemoryScaleDownThreshold = defaults.MemoryScaleDownThreshold
 	c.CPUScaleUpThreshold = defaults.CPUScaleUpThreshold
 	c.CPUScaleDownThreshold = defaults.CPUScaleDownThreshold
+	c.NotificationConfig = defaults.NotificationConfig
 	c.ConfigSource = defaults.ConfigSource
 }
 
@@ -583,6 +609,22 @@ func (c *Config) Clone() *Config {
 	if len(c.CustomMetrics) > 0 {
 		clone.CustomMetrics = make([]string, len(c.CustomMetrics))
 		copy(clone.CustomMetrics, c.CustomMetrics)
+	}
+
+	// Deep copy notification config
+	if c.NotificationConfig != nil {
+		clone.NotificationConfig = &NotificationConfig{
+			EnableNotifications: c.NotificationConfig.EnableNotifications,
+			SlackWebhookURL:     c.NotificationConfig.SlackWebhookURL,
+			SMTPHost:            c.NotificationConfig.SMTPHost,
+			SMTPPort:            c.NotificationConfig.SMTPPort,
+			SMTPUsername:        c.NotificationConfig.SMTPUsername,
+			SMTPPassword:        c.NotificationConfig.SMTPPassword,
+		}
+		if len(c.NotificationConfig.EmailRecipients) > 0 {
+			clone.NotificationConfig.EmailRecipients = make([]string, len(c.NotificationConfig.EmailRecipients))
+			copy(clone.NotificationConfig.EmailRecipients, c.NotificationConfig.EmailRecipients)
+		}
 	}
 
 	return clone

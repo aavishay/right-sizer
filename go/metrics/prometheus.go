@@ -29,25 +29,26 @@ func NewPrometheusProvider(promURL string) Provider {
 
 // FetchPodMetrics queries Prometheus for CPU and memory usage for a pod
 func (p *PrometheusProvider) FetchPodMetrics(namespace, podName string) (Metrics, error) {
-	// TODO: Implement real Prometheus queries
-	// For now, return test data similar to metrics-server provider
-
-	// Generate variable test data based on pod name hash
-	hash := 0
-	for _, c := range podName {
-		hash += int(c)
+	// Query CPU usage (millicores)
+	cpuQuery := fmt.Sprintf(`sum(rate(container_cpu_usage_seconds_total{namespace="%s", pod="%s"}[5m])) * 1000`, namespace, podName)
+	cpuMilli, err := p.queryPrometheus(cpuQuery)
+	if err != nil {
+		return Metrics{}, fmt.Errorf("failed to query CPU metrics: %w", err)
 	}
 
-	// Create some variation in the metrics
-	baseCPU := float64(50 + (hash % 100))  // 50-150 millicores
-	baseMem := float64(128 + (hash % 256)) // 128-384 MB
+	// Query memory usage (bytes)
+	memQuery := fmt.Sprintf(`sum(container_memory_usage_bytes{namespace="%s", pod="%s"})`, namespace, podName)
+	memBytes, err := p.queryPrometheus(memQuery)
+	if err != nil {
+		return Metrics{}, fmt.Errorf("failed to query memory metrics: %w", err)
+	}
 
-	// Add some time-based variation
-	variation := float64(hash%20) / 10.0 // 0-2x multiplier
+	// Convert bytes to MB
+	memMB := memBytes / (1024 * 1024)
 
 	return Metrics{
-		CPUMilli: baseCPU * (1 + variation*0.5),
-		MemMB:    baseMem * (1 + variation*0.3),
+		CPUMilli: cpuMilli,
+		MemMB:    memMB,
 	}, nil
 }
 

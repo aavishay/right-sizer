@@ -31,6 +31,7 @@ import (
 	"right-sizer/retry"
 	"right-sizer/validation"
 	"runtime"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -173,6 +174,31 @@ func main() {
 
 	fmt.Println("========================================")
 
+	// Configure leader election from environment variables
+	enableLeaderElection := false
+	if envVal := os.Getenv("ENABLE_LEADER_ELECTION"); envVal != "" {
+		if parsed, err := strconv.ParseBool(envVal); err == nil {
+			enableLeaderElection = parsed
+			logger.Info("🔧 Leader election configured from environment: %v", enableLeaderElection)
+		}
+	}
+
+	leaderElectionID := "right-sizer-leader-election"
+	if envVal := os.Getenv("LEADER_ELECTION_ID"); envVal != "" {
+		leaderElectionID = envVal
+	}
+
+	leaderElectionNamespace := os.Getenv("OPERATOR_NAMESPACE")
+	if leaderElectionNamespace == "" {
+		leaderElectionNamespace = "right-sizer"
+	}
+
+	if enableLeaderElection {
+		logger.Info("👑 Leader election enabled:")
+		logger.Info("   ID: %s", leaderElectionID)
+		logger.Info("   Namespace: %s", leaderElectionNamespace)
+	}
+
 	// Create controller manager with rate limiting and resource protection
 	mgr, err := manager.New(kubeConfig, manager.Options{
 		// Limit the number of concurrent reconciles per controller
@@ -185,9 +211,9 @@ func main() {
 		GracefulShutdownTimeout: &[]time.Duration{30 * time.Second}[0],
 
 		// Leader election helps prevent multiple instances from making changes simultaneously
-		LeaderElection:          false, // Enable this in production with multiple replicas
-		LeaderElectionID:        "right-sizer-leader-election",
-		LeaderElectionNamespace: "default",
+		LeaderElection:          enableLeaderElection,
+		LeaderElectionID:        leaderElectionID,
+		LeaderElectionNamespace: leaderElectionNamespace,
 
 		// Health and readiness probes
 		HealthProbeBindAddress: ":8081",
