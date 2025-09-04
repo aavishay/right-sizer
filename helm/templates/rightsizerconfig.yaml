@@ -15,107 +15,112 @@ spec:
   # Default resource sizing strategy
   defaultResourceStrategy:
     cpu:
-      requestMultiplier: {{ .Values.rightsizerConfig.sizingStrategy.scalingFactors.cpuRequestMultiplier | default 1.2 }}
-      requestAddition: {{ .Values.rightsizerConfig.resourceDefaults.cpu.requestAddition | default 0 }}
-      limitMultiplier: {{ .Values.rightsizerConfig.sizingStrategy.scalingFactors.cpuLimitMultiplier | default 2.0 }}
-      limitAddition: {{ .Values.rightsizerConfig.resourceDefaults.cpu.limitAddition | default 0 }}
-      minRequest: {{ .Values.rightsizerConfig.resourceDefaults.cpu.minRequest | default 10 }}
-      maxLimit: {{ .Values.rightsizerConfig.resourceDefaults.cpu.maxLimit | default 4000 }}
-      scaleUpThreshold: {{ .Values.rightsizerConfig.sizingStrategy.thresholds.cpuScaleUpThreshold | default 0.8 }}
-      scaleDownThreshold: {{ .Values.rightsizerConfig.sizingStrategy.thresholds.cpuScaleDownThreshold | default 0.3 }}
+      requestMultiplier: 1.2
+      requestAddition: 0
+      limitMultiplier: 2.0
+      limitAddition: 0
+      minRequest: 10
+      maxLimit: 4000
+      scaleUpThreshold: 0.8
+      scaleDownThreshold: 0.3
     memory:
-      requestMultiplier: {{ .Values.rightsizerConfig.sizingStrategy.scalingFactors.memoryRequestMultiplier | default 1.2 }}
-      requestAddition: {{ .Values.rightsizerConfig.resourceDefaults.memory.requestAddition | default 0 }}
-      limitMultiplier: {{ .Values.rightsizerConfig.sizingStrategy.scalingFactors.memoryLimitMultiplier | default 2.0 }}
-      limitAddition: {{ .Values.rightsizerConfig.resourceDefaults.memory.limitAddition | default 0 }}
-      minRequest: {{ .Values.rightsizerConfig.resourceDefaults.memory.minRequest | default 64 }}
-      maxLimit: {{ .Values.rightsizerConfig.resourceDefaults.memory.maxLimit | default 8192 }}
-      scaleUpThreshold: {{ .Values.rightsizerConfig.sizingStrategy.thresholds.memoryScaleUpThreshold | default 0.8 }}
-      scaleDownThreshold: {{ .Values.rightsizerConfig.sizingStrategy.thresholds.memoryScaleDownThreshold | default 0.3 }}
-    historyWindow: {{ .Values.rightsizerConfig.sizingStrategy.lookbackPeriod | default "7d" | quote }}
-    algorithm: {{ .Values.rightsizerConfig.sizingStrategy.algorithm | default "percentile" | quote }}
-    percentile: {{ .Values.rightsizerConfig.sizingStrategy.percentile | default 95 }}
+      requestMultiplier: 1.2
+      requestAddition: 0
+      limitMultiplier: 2.0
+      limitAddition: 0
+      minRequest: 64
+      maxLimit: 8192
+      scaleUpThreshold: 0.8
+      scaleDownThreshold: 0.3
+    historyWindow: "7d"
+    algorithm: "percentile"
+    percentile: 95
 
   # Global constraints for resource changes
   globalConstraints:
-    maxChangePercentage: {{ .Values.rightsizerConfig.sizingStrategy.scalingFactors.maxChangePercentage | default 50 }}
-    minChangeThreshold: {{ .Values.rightsizerConfig.sizingStrategy.scalingFactors.minChangeThreshold | default 10 }}
-    maxMemoryGB: {{ .Values.rightsizerConfig.constraints.maxMemoryGB | default 32 }}
-    maxCPUCores: {{ .Values.rightsizerConfig.constraints.maxCPUCores | default 16 }}
-    preventOOMKill: {{ .Values.rightsizerConfig.constraints.preventOOMKill | default true }}
-    respectPodDisruptionBudget: {{ .Values.rightsizerConfig.constraints.respectPodDisruptionBudget | default true }}
+    maxChangePercentage: 50
+    minChangeThreshold: 10
+    maxMemoryGB: 32
+    maxCPUCores: 16
+    preventOOMKill: true
+    respectPodDisruptionBudget: true
 
   # Metrics configuration
   metricsConfig:
     provider: {{ .Values.rightsizerConfig.monitoring.metricsProvider | default "metrics-server" | quote }}
-    {{- if .Values.rightsizerConfig.monitoring.prometheusURL }}
-    prometheusEndpoint: {{ .Values.rightsizerConfig.monitoring.prometheusURL | quote }}
+    {{- with .Values.rightsizerConfig.monitoring }}
+    {{- if .prometheusURL }}
+    prometheusEndpoint: {{ .prometheusURL | quote }}
     {{- end }}
-    {{- if .Values.rightsizerConfig.monitoring.metricsServerEndpoint }}
-    metricsServerEndpoint: {{ .Values.rightsizerConfig.monitoring.metricsServerEndpoint | quote }}
+    {{- if .metricsServerEndpoint }}
+    metricsServerEndpoint: {{ .metricsServerEndpoint | quote }}
     {{- end }}
-    scrapeInterval: {{ .Values.rightsizerConfig.monitoring.scrapeInterval | default "30s" | quote }}
-    historyRetention: {{ .Values.rightsizerConfig.monitoring.retentionPeriod | default "30d" | quote }}
-    aggregationMethod: {{ .Values.rightsizerConfig.monitoring.aggregationMethod | default "avg" | quote }}
-    includeCustomMetrics: {{ .Values.rightsizerConfig.monitoring.includeCustomMetrics | default false }}
+    {{- end }}
+    scrapeInterval: "30s"
+    historyRetention: "30d"
+    aggregationMethod: "avg"
+    includeCustomMetrics: false
 
   # Observability configuration
   observabilityConfig:
     logLevel: {{ .Values.rightsizerConfig.logging.level | default "info" | quote }}
     logFormat: {{ .Values.rightsizerConfig.logging.format | default "json" | quote }}
     enableAuditLogging: {{ .Values.rightsizerConfig.logging.enableAudit | default true }}
-    enableMetricsExport: {{ .Values.rightsizerConfig.observability.enableMetricsExport | default true }}
-    metricsPort: {{ .Values.rightsizerConfig.observability.metricsPort | default 9090 }}
-    enableTracing: {{ .Values.rightsizerConfig.observability.enableTracing | default false }}
-    {{- if .Values.rightsizerConfig.observability.tracingEndpoint }}
-    tracingEndpoint: {{ .Values.rightsizerConfig.observability.tracingEndpoint | quote }}
+    enableMetricsExport: true
+    metricsPort: 9090
+    enableTracing: false
+    {{- with .Values.rightsizerConfig.observability }}
+    {{- if .tracingEndpoint }}
+    tracingEndpoint: {{ .tracingEndpoint | quote }}
     {{- end }}
-    enableProfiling: {{ .Values.rightsizerConfig.observability.enableProfiling | default false }}
-    profilingPort: {{ .Values.rightsizerConfig.observability.profilingPort | default 6060 }}
+    {{- end }}
+    enableProfiling: false
+    profilingPort: 6060
 
   # Security configuration
   securityConfig:
-    enableAdmissionController: {{ .Values.rightsizerConfig.security.enableAdmissionController | default false }}
-    admissionWebhookPort: {{ .Values.rightsizerConfig.security.admissionWebhookPort | default 8443 }}
-    requireAnnotation: {{ .Values.rightsizerConfig.security.requireAnnotation | default false }}
-    annotationKey: {{ .Values.rightsizerConfig.security.annotationKey | default "rightsizer.io/enable" | quote }}
-    enableMutatingWebhook: {{ .Values.rightsizerConfig.security.enableMutatingWebhook | default false }}
-    enableValidatingWebhook: {{ .Values.rightsizerConfig.security.enableValidatingWebhook | default false }}
-    tlsCertDir: {{ .Values.rightsizerConfig.security.tlsCertDir | default "/tmp/certs" | quote }}
-    webhookTimeoutSeconds: {{ .Values.rightsizerConfig.security.webhookTimeoutSeconds | default 10 }}
+    enableAdmissionController: false
+    admissionWebhookPort: 8443
+    requireAnnotation: false
+    annotationKey: "rightsizer.io/enable"
+    enableMutatingWebhook: false
+    enableValidatingWebhook: false
+    tlsCertDir: "/tmp/certs"
+    webhookTimeoutSeconds: 10
 
   # Operator configuration
   operatorConfig:
-    leaderElection: {{ .Values.rightsizerConfig.operator.leaderElection | default true }}
-    leaderElectionNamespace: {{ .Values.rightsizerConfig.operator.leaderElectionNamespace | default .Release.Namespace | quote }}
-    leaderElectionID: {{ .Values.rightsizerConfig.operator.leaderElectionID | default "right-sizer-leader" | quote }}
-    leaderElectionLeaseDuration: {{ .Values.rightsizerConfig.operator.leaderElectionLeaseDuration | default "15s" | quote }}
-    leaderElectionRenewDeadline: {{ .Values.rightsizerConfig.operator.leaderElectionRenewDeadline | default "10s" | quote }}
-    leaderElectionRetryPeriod: {{ .Values.rightsizerConfig.operator.leaderElectionRetryPeriod | default "2s" | quote }}
-    syncPeriod: {{ .Values.rightsizerConfig.operator.syncPeriod | default "30s" | quote }}
-    maxConcurrentReconciles: {{ .Values.rightsizerConfig.operator.maxConcurrentReconciles | default 3 }}
-    workerThreads: {{ .Values.rightsizerConfig.operator.workerThreads | default 10 }}
-    qps: {{ .Values.rightsizerConfig.operator.qps | default 20 }}
-    burst: {{ .Values.rightsizerConfig.operator.burst | default 30 }}
-    retryAttempts: {{ .Values.rightsizerConfig.operationalConfig.retryAttempts | default 3 }}
-    retryInterval: {{ .Values.rightsizerConfig.operationalConfig.retryInterval | default "5s" | quote }}
-    healthProbePort: {{ .Values.rightsizerConfig.operator.healthProbePort | default 8081 }}
-    readinessEndpoint: {{ .Values.rightsizerConfig.operator.readinessEndpoint | default "/readyz" | quote }}
-    livenessEndpoint: {{ .Values.rightsizerConfig.operator.livenessEndpoint | default "/healthz" | quote }}
+    leaderElection: true
+    leaderElectionNamespace: {{ .Release.Namespace | quote }}
+    leaderElectionID: "right-sizer-leader"
+    leaderElectionLeaseDuration: "15s"
+    leaderElectionRenewDeadline: "10s"
+    leaderElectionRetryPeriod: "2s"
+    syncPeriod: "30s"
+    maxConcurrentReconciles: 3
+    workerThreads: 10
+    qps: 20
+    burst: 30
+    retryAttempts: 3
+    retryInterval: "5s"
+    healthProbePort: 8081
+    readinessEndpoint: "/readyz"
+    livenessEndpoint: "/healthz"
 
   # Namespace configuration
   namespaceConfig:
-    {{- if .Values.rightsizerConfig.namespaceConfig.includeNamespaces }}
+    {{- with .Values.rightsizerConfig.namespaceConfig }}
+    {{- if .includeNamespaces }}
     includeNamespaces:
-    {{- range .Values.rightsizerConfig.namespaceConfig.includeNamespaces }}
+    {{- range .includeNamespaces }}
       - {{ . | quote }}
     {{- end }}
     {{- else }}
     includeNamespaces: []
     {{- end }}
-    {{- if .Values.rightsizerConfig.namespaceConfig.excludeNamespaces }}
+    {{- if .excludeNamespaces }}
     excludeNamespaces:
-    {{- range .Values.rightsizerConfig.namespaceConfig.excludeNamespaces }}
+    {{- range .excludeNamespaces }}
       - {{ . | quote }}
     {{- end }}
     {{- else }}
@@ -123,11 +128,14 @@ spec:
       - "kube-system"
       - "kube-public"
       - "kube-node-lease"
-      - {{ .Release.Namespace | quote }}
+      - "cert-manager"
+      - "ingress-nginx"
+      - "istio-system"
+      - {{ $.Release.Namespace | quote }}
     {{- end }}
-    {{- if .Values.rightsizerConfig.namespaceConfig.systemNamespaces }}
+    {{- if .systemNamespaces }}
     systemNamespaces:
-    {{- range .Values.rightsizerConfig.namespaceConfig.systemNamespaces }}
+    {{- range .systemNamespaces }}
       - {{ . | quote }}
     {{- end }}
     {{- else }}
@@ -139,68 +147,82 @@ spec:
       - "ingress-nginx"
       - "istio-system"
     {{- end }}
-    {{- if .Values.rightsizerConfig.namespaceConfig.namespaceLabels }}
+    {{- if .namespaceLabels }}
     namespaceLabels:
-      {{- toYaml .Values.rightsizerConfig.namespaceConfig.namespaceLabels | nindent 6 }}
+      {{- toYaml .namespaceLabels | nindent 6 }}
+    {{- end }}
+    {{- else }}
+    includeNamespaces: []
+    excludeNamespaces:
+      - "kube-system"
+      - "kube-public"
+      - "kube-node-lease"
+      - "cert-manager"
+      - "ingress-nginx"
+      - "istio-system"
+      - {{ $.Release.Namespace | quote }}
+    systemNamespaces:
+      - "kube-system"
+      - "kube-public"
+      - "kube-node-lease"
+      - "cert-manager"
+      - "ingress-nginx"
+      - "istio-system"
     {{- end }}
 
   # Notification configuration
-  {{- if .Values.rightsizerConfig.notifications.enabled }}
   notificationConfig:
+    {{- with .Values.rightsizerConfig.notifications }}
+    {{- if .enabled }}
     enableNotifications: true
-    {{- if .Values.rightsizerConfig.notifications.slack }}
+    {{- with .slack }}
     slackConfig:
-      webhookURL: {{ .Values.rightsizerConfig.notifications.slack.webhookURL | quote }}
-      channel: {{ .Values.rightsizerConfig.notifications.slack.channel | default "#right-sizer" | quote }}
-      username: {{ .Values.rightsizerConfig.notifications.slack.username | default "RightSizer" | quote }}
-      iconEmoji: {{ .Values.rightsizerConfig.notifications.slack.iconEmoji | default ":robot:" | quote }}
-      notifyOnSuccess: {{ .Values.rightsizerConfig.notifications.slack.notifyOnSuccess | default false }}
-      notifyOnFailure: {{ .Values.rightsizerConfig.notifications.slack.notifyOnFailure | default true }}
-      notifyOnDryRun: {{ .Values.rightsizerConfig.notifications.slack.notifyOnDryRun | default false }}
+      webhookURL: {{ .webhookURL | quote }}
+      channel: {{ .channel | default "#right-sizer" | quote }}
+      username: {{ .username | default "RightSizer" | quote }}
+      iconEmoji: {{ .iconEmoji | default ":robot:" | quote }}
+      notifyOnSuccess: {{ .notifyOnSuccess | default false }}
+      notifyOnFailure: {{ .notifyOnFailure | default true }}
+      notifyOnDryRun: {{ .notifyOnDryRun | default false }}
     {{- end }}
-    {{- if .Values.rightsizerConfig.notifications.email }}
+    {{- with .email }}
     emailConfig:
-      smtpHost: {{ .Values.rightsizerConfig.notifications.email.smtpHost | quote }}
-      smtpPort: {{ .Values.rightsizerConfig.notifications.email.smtpPort | default 587 }}
-      smtpUsername: {{ .Values.rightsizerConfig.notifications.email.smtpUsername | quote }}
-      smtpPasswordSecret: {{ .Values.rightsizerConfig.notifications.email.smtpPasswordSecret | quote }}
-      from: {{ .Values.rightsizerConfig.notifications.email.from | quote }}
+      smtpHost: {{ .smtpHost | quote }}
+      smtpPort: {{ .smtpPort | default 587 }}
+      smtpUsername: {{ .smtpUsername | quote }}
+      smtpPasswordSecret: {{ .smtpPasswordSecret | quote }}
+      from: {{ .from | quote }}
       to:
-      {{- range .Values.rightsizerConfig.notifications.email.to }}
+      {{- range .to }}
         - {{ . | quote }}
       {{- end }}
-      subject: {{ .Values.rightsizerConfig.notifications.email.subject | default "RightSizer Alert" | quote }}
+      subject: {{ .subject | default "RightSizer Alert" | quote }}
     {{- end }}
-    {{- if .Values.rightsizerConfig.notifications.webhook }}
+    {{- with .webhook }}
     webhookConfig:
-      - url: {{ .Values.rightsizerConfig.notifications.webhook.url | quote }}
-        method: {{ .Values.rightsizerConfig.notifications.webhook.method | default "POST" | quote }}
-        {{- if .Values.rightsizerConfig.notifications.webhook.headers }}
+      - url: {{ .url | quote }}
+        method: {{ .method | default "POST" | quote }}
+        {{- if .headers }}
         headers:
-          {{- toYaml .Values.rightsizerConfig.notifications.webhook.headers | nindent 10 }}
+          {{- toYaml .headers | nindent 10 }}
         {{- end }}
-        retryCount: {{ .Values.rightsizerConfig.notifications.webhook.retryCount | default 3 }}
-        retryDelay: {{ .Values.rightsizerConfig.notifications.webhook.retryDelay | default "5s" | quote }}
+        retryCount: {{ .retryCount | default 3 }}
+        retryDelay: {{ .retryDelay | default "5s" | quote }}
     {{- end }}
-  {{- else }}
-  notificationConfig:
+    {{- else }}
     enableNotifications: false
-  {{- end }}
+    {{- end }}
+    {{- else }}
+    enableNotifications: false
+    {{- end }}
 
   # Feature gates for experimental features
-  {{- if .Values.rightsizerConfig.featureGates }}
   featureGates:
-    {{- range $key, $value := .Values.rightsizerConfig.featureGates }}
-    {{ $key }}: {{ $value }}
-    {{- end }}
-  {{- else }}
-  featureGates:
-    EnableInPlaceResize: {{ .Values.rightsizerConfig.featureGates.enableInPlaceResize | default true }}
-    EnablePredictiveScaling: {{ .Values.rightsizerConfig.featureGates.enablePredictiveScaling | default false }}
-    EnableCostOptimization: {{ .Values.rightsizerConfig.featureGates.enableCostOptimization | default false }}
-    EnableMultiCluster: {{ .Values.rightsizerConfig.featureGates.enableMultiCluster | default false }}
-    EnableAutoLearning: {{ .Values.rightsizerConfig.featureGates.enableAutoLearning | default false }}
-    EnableWorkloadProfiling: {{ .Values.rightsizerConfig.featureGates.enableWorkloadProfiling | default false }}
-    EnableAdvancedScheduling: {{ .Values.rightsizerConfig.featureGates.enableAdvancedScheduling | default false }}
-  {{- end }}
+    EnableInPlaceResize: true
+    EnablePredictiveScaling: false
+    EnableCostOptimization: false
+    EnableMultiCluster: false
+    EnableAutoLearning: false
+    EnableWorkloadProfiling: false
+    EnableAdvancedScheduling: false
 {{- end }}

@@ -1,0 +1,190 @@
+# This is a comprehensive example of RightSizerConfig with all available fields
+# Most users won't need all these settings - this serves as a reference
+apiVersion: rightsizer.io/v1alpha1
+kind: RightSizerConfig
+metadata:
+  name: right-sizer-config-full-example
+spec:
+  # Core configuration
+  enabled: true                    # Enable/disable the right-sizer globally
+  defaultMode: "balanced"           # Options: aggressive, balanced, conservative, custom
+  resizeInterval: "5m"              # How often to check and resize resources
+  dryRun: false                     # If true, only logs recommendations without applying
+
+  # Default resource sizing strategy
+  defaultResourceStrategy:
+    cpu:
+      requestMultiplier: 1.2        # Multiply usage by this to get request
+      requestAddition: 10           # Add this many millicores to request
+      limitMultiplier: 2.0          # Multiply request by this to get limit
+      limitAddition: 0              # Add this many millicores to limit
+      minRequest: 10                # Minimum CPU request in millicores
+      maxLimit: 4000                # Maximum CPU limit in millicores
+      scaleUpThreshold: 0.8         # Scale up when usage exceeds 80%
+      scaleDownThreshold: 0.3       # Scale down when usage is below 30%
+    memory:
+      requestMultiplier: 1.2        # Multiply usage by this to get request
+      requestAddition: 64           # Add this many MB to request
+      limitMultiplier: 2.0          # Multiply request by this to get limit
+      limitAddition: 0              # Add this many MB to limit
+      minRequest: 64                # Minimum memory request in MB
+      maxLimit: 8192                # Maximum memory limit in MB
+      scaleUpThreshold: 0.8         # Scale up when usage exceeds 80%
+      scaleDownThreshold: 0.3       # Scale down when usage is below 30%
+    historyWindow: "7d"             # How much historical data to consider
+    algorithm: "percentile"         # Options: percentile, peak, average
+    percentile: 95                  # Which percentile to use (if algorithm is percentile)
+
+  # Global constraints for resource changes
+  globalConstraints:
+    maxChangePercentage: 50         # Maximum % change allowed in a single update
+    minChangeThreshold: 10          # Minimum % change required to trigger update
+    maxMemoryGB: 32                 # Maximum memory limit in GB
+    maxCPUCores: 16                 # Maximum CPU limit in cores
+    preventOOMKill: true            # Prevent changes that might cause OOM
+    respectPodDisruptionBudget: true # Respect PDB during updates
+
+  # Metrics configuration
+  metricsConfig:
+    provider: "metrics-server"      # Options: metrics-server, prometheus, custom
+    prometheusEndpoint: "http://prometheus:9090"  # If using Prometheus
+    metricsServerEndpoint: "http://metrics-server:8080"  # If using custom endpoint
+    scrapeInterval: "30s"           # How often to collect metrics
+    historyRetention: "30d"         # How long to keep historical data
+    aggregationMethod: "avg"        # Options: avg, max, min, percentile
+    includeCustomMetrics: false     # Include custom metrics in calculations
+
+  # Observability configuration
+  observabilityConfig:
+    logLevel: "info"                # Options: debug, info, warn, error
+    logFormat: "json"               # Options: json, text
+    enableAuditLogging: true        # Log all resource changes
+    enableMetricsExport: true       # Export Prometheus metrics
+    metricsPort: 9090               # Port for metrics endpoint
+    enableTracing: false            # Enable OpenTelemetry tracing
+    tracingEndpoint: "http://jaeger:4318"  # Tracing collector endpoint
+    enableProfiling: false          # Enable Go pprof profiling
+    profilingPort: 6060             # Port for pprof endpoint
+
+  # Security configuration
+  securityConfig:
+    enableAdmissionController: false # Enable admission webhook
+    admissionWebhookPort: 8443      # Port for admission webhook
+    requireAnnotation: false        # Require explicit annotation to resize
+    annotationKey: "rightsizer.io/enable"  # Annotation key to check
+    enableMutatingWebhook: false    # Enable mutating webhook
+    enableValidatingWebhook: false  # Enable validating webhook
+    tlsCertDir: "/tmp/certs"        # Directory for TLS certificates
+    webhookTimeoutSeconds: 10       # Webhook timeout in seconds
+
+  # Operator configuration
+  operatorConfig:
+    leaderElection: true            # Enable leader election for HA
+    leaderElectionNamespace: "right-sizer-system"  # Namespace for leader election
+    leaderElectionID: "right-sizer-leader"  # Leader election lock name
+    leaderElectionLeaseDuration: "15s"  # Leader lease duration
+    leaderElectionRenewDeadline: "10s"  # Leader renewal deadline
+    leaderElectionRetryPeriod: "2s"     # Leader election retry period
+    syncPeriod: "30s"               # Controller sync period
+    maxConcurrentReconciles: 3      # Max concurrent reconciliations per controller
+    workerThreads: 10               # Number of worker threads
+    qps: 20                         # Queries per second to K8s API
+    burst: 30                       # Burst capacity for K8s API
+    retryAttempts: 3                # Number of retry attempts
+    retryInterval: "5s"             # Interval between retries
+    healthProbePort: 8081           # Port for health probes
+    readinessEndpoint: "/readyz"   # Readiness probe endpoint
+    livenessEndpoint: "/healthz"   # Liveness probe endpoint
+
+  # Namespace configuration
+  namespaceConfig:
+    # Namespaces to include (empty means all)
+    includeNamespaces:
+      - "default"
+      - "production"
+      - "staging"
+
+    # Namespaces to exclude from right-sizing
+    excludeNamespaces:
+      - "kube-system"
+      - "kube-public"
+      - "kube-node-lease"
+      - "cert-manager"
+      - "ingress-nginx"
+      - "istio-system"
+      - "monitoring"
+
+    # System namespaces that should never be modified
+    systemNamespaces:
+      - "kube-system"
+      - "kube-public"
+      - "kube-node-lease"
+      - "cert-manager"
+      - "ingress-nginx"
+      - "istio-system"
+
+    # Select namespaces by labels
+    namespaceLabels:
+      environment: "production"
+      team: "platform"
+      rightsizer: "enabled"
+
+  # Notification configuration
+  notificationConfig:
+    enableNotifications: true       # Enable notifications globally
+
+    # Slack notifications
+    slackConfig:
+      webhookURL: "https://hooks.slack.com/services/YOUR/WEBHOOK/URL"
+      channel: "#right-sizer-alerts"
+      username: "RightSizer Bot"
+      iconEmoji: ":robot:"
+      notifyOnSuccess: false        # Notify on successful resizing
+      notifyOnFailure: true         # Notify on failures
+      notifyOnDryRun: false         # Notify for dry-run actions
+
+    # Email notifications
+    emailConfig:
+      smtpHost: "smtp.gmail.com"
+      smtpPort: 587
+      smtpUsername: "notifications@example.com"
+      smtpPasswordSecret: "smtp-password-secret"  # K8s secret name
+      from: "rightsizer@example.com"
+      to:
+        - "ops-team@example.com"
+        - "platform@example.com"
+        - "devops@example.com"
+      subject: "RightSizer Alert - Resource Optimization"
+
+    # Webhook notifications
+    webhookConfig:
+      - url: "https://your-webhook.example.com/alerts"
+        method: "POST"
+        headers:
+          Authorization: "Bearer YOUR_TOKEN"
+          Content-Type: "application/json"
+          X-Custom-Header: "custom-value"
+        retryCount: 3
+        retryDelay: "5s"
+
+  # Feature gates for experimental features
+  featureGates:
+    EnableInPlaceResize: true       # Use in-place pod resizing (K8s 1.27+)
+    EnablePredictiveScaling: false  # ML-based predictive scaling
+    EnableCostOptimization: false   # Cost-aware resource optimization
+    EnableMultiCluster: false       # Multi-cluster support
+    EnableAutoLearning: false       # Auto-learn optimal resource patterns
+    EnableWorkloadProfiling: false  # Profile workload patterns
+    EnableAdvancedScheduling: false # Advanced scheduling optimizations
+
+---
+# Example of a minimal configuration for comparison
+apiVersion: rightsizer.io/v1alpha1
+kind: RightSizerConfig
+metadata:
+  name: right-sizer-config-minimal
+spec:
+  enabled: true
+  defaultMode: "balanced"
+  resizeInterval: "5m"
+  dryRun: false
