@@ -5,7 +5,7 @@
 
 set -e
 
-NAMESPACE="right-sizer-test"
+NAMESPACE="right-sizer"
 RELEASE_NAME="right-sizer"
 TEST_DEPLOYMENT="test-nginx"
 

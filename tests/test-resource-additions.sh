@@ -17,7 +17,7 @@ echo -e "${BLUE}Right-Sizer Addition Feature Tests${NC}"
 echo -e "${BLUE}========================================${NC}"
 
 # Test configuration
-NAMESPACE=${TEST_NAMESPACE:-"right-sizer-test"}
+NAMESPACE=${TEST_NAMESPACE:-"right-sizer"}
 DEPLOYMENT_NAME="test-app-additions"
 
 # Helper functions

@@ -113,9 +113,9 @@ fi
 # 6. Build Test
 print_color $YELLOW "\n🔨 Running Build Test..."
 TOTAL_TESTS=$((TOTAL_TESTS + 1))
-if run_test "Build Test" "cd go && go build -o ../right-sizer-test ."; then
+if run_test "Build Test" "cd go && go build -o ../right-sizer-build ."; then
   PASSED_TESTS=$((PASSED_TESTS + 1))
-  rm -f right-sizer-test
+  rm -f right-sizer-build
 else
   FAILED_TESTS=$((FAILED_TESTS + 1))
   FAILED_TEST_NAMES+=("Build Test")

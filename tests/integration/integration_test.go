@@ -42,7 +42,7 @@ func SetupTestSuite(t *testing.T) *TestSuite {
 	require.NoError(t, err, "Failed to create Kubernetes client")
 
 	// Use a test namespace
-	namespace := "right-sizer-test"
+	namespace := "right-sizer"
 
 	return &TestSuite{
 		client:    client,

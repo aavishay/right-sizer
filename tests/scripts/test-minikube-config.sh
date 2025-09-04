@@ -3,7 +3,6 @@
 # Copyright (C) 2024 right-sizer contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-
 # Test script for right-sizer operator with configurable multipliers in Minikube
 # This script deploys the operator with custom configuration and tests the functionality
 
@@ -46,7 +45,7 @@ if ! command -v kubectl &>/dev/null; then
 fi
 
 # Configuration options
-NAMESPACE="right-sizer-test"
+NAMESPACE="right-sizer"
 DEPLOYMENT_NAME="right-sizer"
 TEST_APP_NAME="nginx-test"
 

@@ -372,7 +372,7 @@ if [ "$IN_CLUSTER" = false ]; then
 
   print_test "Compiling right-sizer..."
 
-  if go build -o /tmp/right-sizer-test main.go 2>/dev/null; then
+  if go build -o /tmp/right-sizer-build main.go 2>/dev/null; then
     print_status "Compilation successful"
 
     # Test with environment variables
@@ -382,7 +382,7 @@ if [ "$IN_CLUSTER" = false ]; then
     export LOG_LEVEL=debug
 
     # Run briefly to check configuration loading
-    timeout 2 /tmp/right-sizer-test 2>&1 | head -20 >/tmp/run_test.out || true
+    timeout 2 /tmp/right-sizer-build 2>&1 | head -20 >/tmp/run_test.out || true
 
     if grep -q "CPU_REQUEST_MULTIPLIER set to: 1.70" /tmp/run_test.out; then
       print_status "Runtime configuration loading works"

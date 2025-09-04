@@ -30,20 +30,20 @@ spec:
         right-sizer.io/max-memory: "2Gi"
     spec:
       containers:
-      - name: nginx
-        image: nginx:alpine
-        ports:
-        - containerPort: 80
-        resources:
-          requests:
-            cpu: "1000m"      # Intentionally oversized - nginx typically uses ~10m
-            memory: "1Gi"     # Intentionally oversized - nginx typically uses ~50Mi
-          limits:
-            cpu: "2000m"      # Very high limit
-            memory: "2Gi"     # Very high limit
-        env:
-        - name: NGINX_PORT
-          value: "80"
+        - name: nginx
+          image: nginx:alpine
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              cpu: "1000m" # Intentionally oversized - nginx typically uses ~10m
+              memory: "1Gi" # Intentionally oversized - nginx typically uses ~50Mi
+            limits:
+              cpu: "2000m" # Very high limit
+              memory: "2Gi" # Very high limit
+          env:
+            - name: NGINX_PORT
+              value: "80"
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -70,28 +70,28 @@ spec:
         right-sizer.io/max-memory: "1Gi"
     spec:
       containers:
-      - name: stress-app
-        image: busybox:latest
-        command: ["/bin/sh"]
-        args:
-        - "-c"
-        - |
-          echo "Starting simulated workload..."
-          while true; do
-            # Simulate some CPU usage (but not much)
-            for i in $(seq 1 100); do
-              echo "Working... $i" > /dev/null
-            done
-            # Sleep to keep CPU usage low
-            sleep 10
-          done
-        resources:
-          requests:
-            cpu: "500m"       # Oversized for a simple loop
-            memory: "512Mi"   # Oversized for busybox
-          limits:
-            cpu: "1000m"
-            memory: "1Gi"
+        - name: stress-app
+          image: busybox:latest
+          command: ["/bin/sh"]
+          args:
+            - "-c"
+            - |
+              echo "Starting simulated workload..."
+              while true; do
+                # Simulate some CPU usage (but not much)
+                for i in $(seq 1 100); do
+                  echo "Working... $i" > /dev/null
+                done
+                # Sleep to keep CPU usage low
+                sleep 10
+              done
+          resources:
+            requests:
+              cpu: "500m" # Oversized for a simple loop
+              memory: "512Mi" # Oversized for busybox
+            limits:
+              cpu: "1000m"
+              memory: "1Gi"
 ---
 apiVersion: v1
 kind: Service
@@ -102,14 +102,14 @@ spec:
   selector:
     app: nginx-test
   ports:
-  - port: 80
-    targetPort: 80
+    - port: 80
+      targetPort: 80
   type: ClusterIP
 ---
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: right-sizer-test-config
+  name: right-sizer-config
   namespace: test-apps
 data:
   description: |

@@ -15,9 +15,9 @@ NC='\033[0m' # No Color
 
 # Test configuration
 TEST_NAMESPACE="rbac-test-$(date +%s)"
-SERVICE_ACCOUNT="right-sizer-test"
-CLUSTER_ROLE="right-sizer-test"
-HELM_RELEASE="right-sizer-test"
+SERVICE_ACCOUNT="right-sizer"
+CLUSTER_ROLE="right-sizer"
+HELM_RELEASE="right-sizer"
 CLEANUP_ON_EXIT=${CLEANUP_ON_EXIT:-true}
 VERBOSE=${VERBOSE:-false}
 

@@ -14,7 +14,7 @@ CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
 # Configuration
-NAMESPACE=${NAMESPACE:-right-sizer-test}
+NAMESPACE=${NAMESPACE:-right-sizer}
 TEST_NAMESPACE=${TEST_NAMESPACE:-test-workloads}
 
 print_color() {
@@ -126,7 +126,7 @@ metadata:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: right-sizer-test
+  name: right-sizer
 rules:
 - apiGroups: [""]
   resources: ["*"]
@@ -144,11 +144,11 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: right-sizer-test
+  name: right-sizer
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: right-sizer-test
+  name: right-sizer
 subjects:
 - kind: ServiceAccount
   name: right-sizer
