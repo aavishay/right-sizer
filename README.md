@@ -31,7 +31,7 @@ docker pull aavishay/right-sizer:0.1.0  # Specific version
 docker pull aavishay/right-sizer:latest # Latest version
 ```
 
-**Key Benefits:** 🚀 Zero-downtime resizing • 💰 30-50% cost reduction • 🎯 Automatic optimization • 📊 Real-time monitoring
+**Key Benefits:** 🚀 Zero-downtime resizing • 💰 20-40% cost reduction • 🎯 Automatic optimization • 📊 Real-time monitoring
 
 ---
 
@@ -295,94 +295,45 @@ curl http://localhost:8081/readyz
 
 ## 🏗️ Architecture
 
+### 🏛️ High-Level Architecture
+
 ```mermaid
 graph TB
-    subgraph "Kubernetes Cluster"
-        subgraph "Metrics Sources"
-            MS[Metrics Server]
-            PR[Prometheus]
-        end
-
-        subgraph "Right-Sizer Components"
-            OP[Operator Core]
-            PC[Policy Controller]
-            AC[Admission Controller]
-            HC[Health Checker]
-        end
-
-        subgraph "Resources"
-            CR[Custom Resources]
-            P1[Pod 1]
-            P2[Pod 2]
-            P3[Pod N]
-        end
-
-        MS --> OP
-        PR --> OP
-        OP --> PC
-        PC --> CR
-        AC --> P1
-        AC --> P2
-        AC --> P3
-        CR --> RC[RightSizerConfig]
-        CR --> RP[RightSizerPolicy]
-        HC --> OP
-    end
+    MS[📊 Metrics Server] --> OP[🎯 Right-Sizer Operator]
+    PR[📈 Prometheus] --> OP
+    OP --> P1[🔧 Pod Resources]
+    OP --> P2[🔧 Pod Resources]
 ```
 
 ### Component Overview
 
-| Component | Purpose | Key Features |
-|-----------|---------|--------------|
-| **Operator Core** | Main control loop | Resource monitoring, decision making |
-| **Policy Controller** | Policy management | Priority evaluation, rule matching |
-| **Admission Controller** | Request validation | Webhook validation, mutation |
-| **Health Checker** | Health monitoring | Liveness, readiness probes |
-| **Metrics Collector** | Data gathering | Multi-source metrics aggregation |
+| Component | Module | Purpose | Key Features |
+|-----------|--------|---------|--------------|
+| **Main Entry** | `main.go` | Application bootstrap | Configuration loading, component initialization |
+| **Config Manager** | `go/config` | Configuration handling | CRD-based config, environment variables |
+| **Controllers** | `go/controllers` | Reconciliation logic | RightSizer, Policy, Config controllers |
+| **Admission** | `go/admission` | Webhook validation | Request validation, mutation webhooks |
+| **Validation** | `go/validation` | Resource validation | Safety checks, constraint validation |
+| **Policy Engine** | `go/policy` | Policy evaluation | Priority matching, rule application |
+| **Metrics** | `go/metrics` | Data collection | Multi-provider support, aggregation |
+| **Audit** | `go/audit` | Change tracking | Comprehensive logging, compliance |
+| **Health** | `go/health` | System monitoring | Liveness, readiness, detailed health |
+| **Logger** | `go/logger` | Structured logging | Configurable levels, structured output |
+| **Retry** | `go/retry` | Resilience | Circuit breaker, exponential backoff |
 
 ---
 
 ## 🚢 Deployment & Distribution
 
-### Deployment Architecture
+### 🚀 Simple Deployment Flow
 
-Right-Sizer is distributed through multiple channels for maximum accessibility:
+How Right-Sizer gets from code to your cluster:
 
 ```mermaid
 graph LR
-    subgraph "Source"
-        GH[GitHub Repository]
-    end
-    
-    subgraph "CI/CD Pipeline"
-        GA[GitHub Actions]
-        B1[Build & Test]
-        B2[Security Scan]
-        B3[Multi-arch Build]
-    end
-    
-    subgraph "Distribution Channels"
-        DH[Docker Hub<br/>aavishay/right-sizer]
-        HR[Helm Repository<br/>GitHub Pages]
-        GR[GitHub Releases]
-    end
-    
-    subgraph "Installation Methods"
-        H1[Helm Install]
-        D1[Docker Pull]
-        K1[Kubectl Apply]
-    end
-    
-    GH --> GA
-    GA --> B1
-    B1 --> B2
-    B2 --> B3
-    B3 --> DH
-    B3 --> HR
-    B3 --> GR
-    HR --> H1
-    DH --> D1
-    GR --> K1
+    GH[📝 GitHub<br/>Code] --> GA[🔄 Build<br/>Test] --> DH[📦 Package<br/>Docker + Helm] --> INST[🚀 Install<br/>Your Cluster]
+
+    INST --> K8s[☸️ Kubernetes<br/>Running]
 ```
 
 ### Distribution Channels
@@ -397,6 +348,17 @@ graph LR
 ### CI/CD Pipeline
 
 The project uses GitHub Actions for automated building, testing, and deployment:
+
+#### 🔄 Detailed CI/CD Workflow
+
+```mermaid
+stateDiagram-v2
+    [*] --> Code: Push Code
+    Code --> Build: Build
+    Build --> Test: Test
+    Test --> Deploy: Deploy
+    Deploy --> [*]: Done
+```
 
 #### Automated Workflows
 
@@ -425,15 +387,7 @@ The project uses GitHub Actions for automated building, testing, and deployment:
    - Generates changelog
    - Updates Docker tags
 
-#### Build Matrix
 
-| Platform | Architecture | Base Image | Size |
-|----------|-------------|------------|------|
-| Linux | amd64 | Distroless Debian 11 Debug | ~55MB |
-| Linux | arm64 | Distroless Debian 11 Debug | ~55MB |
-| Darwin | amd64 | Binary only | ~35MB |
-| Darwin | arm64 | Binary only | ~35MB |
-| Windows | amd64 | Binary only | ~35MB |
 
 ### Installation Methods Comparison
 
@@ -450,18 +404,12 @@ The project uses GitHub Actions for automated building, testing, and deployment:
 graph TD
     A[Code Change] --> B{Type?}
     B -->|Feature| C[Main Branch]
-    B -->|Release| D[Tag Version]
-    
-    C --> E[Build & Test]
-    E --> F[Push to Docker Hub]
-    F --> G[Update Helm Chart]
-    G --> H[Publish to GH Pages]
-    
-    D --> I[Create Release]
-    I --> J[Build Multi-platform]
-    J --> K[Generate Changelog]
-    K --> L[Publish Assets]
-    L --> M[Update Latest Tags]
+    B -->|Release| D[Tag Release]
+
+    C --> E[Build & Deploy]
+    D --> F[Create Release]
+    E --> G[Ready]
+    F --> G
 ```
 
 ### Quick Deployment Commands
@@ -699,40 +647,7 @@ kubectl create configmap grafana-dashboard \
 
 ---
 
-## ❓ Frequently Asked Questions
 
-### General Questions
-
-**Q: Will Right-Sizer cause downtime?**
-A: With Kubernetes 1.33+, CPU adjustments use in-place resizing without downtime.
-
-**Q: How does it differ from VPA (Vertical Pod Autoscaler)?**
-A: Right-Sizer offers more control, custom policies, better production safety features, and works alongside HPA. It's designed for production use with extensive safety mechanisms.
-
-**Q: Can I exclude certain pods?**
-A: Yes, use namespace exclusions, pod annotations (`right-sizer.io/exclude: "true"`), or label selectors in policies.
-
-**Q: What metrics providers are supported?**
-A: Metrics Server and Prometheus are fully supported. Custom providers can be integrated via the metrics interface.
-
-**Q: How quickly does it react to load changes?**
-A: By default, it evaluates every 30 seconds with a 5-minute cooldown between changes. This is configurable.
-
-### Technical Questions
-
-**Q: Does it work with HPA (Horizontal Pod Autoscaler)?**
-A: Yes, Right-Sizer adjusts vertical resources while HPA handles horizontal scaling. They complement each other.
-
-**Q: What happens during operator downtime?**
-A: Existing pod resources remain unchanged. The operator resumes monitoring when it starts again.
-
-**Q: Can it handle stateful workloads?**
-A: Yes, with appropriate policies.
-
-**Q: Is there a rollback mechanism?**
-A: Yes, you can enable dry-run mode, use audit logs to track changes, and manually revert if needed.
-
----
 
 ## 🔍 Troubleshooting
 
