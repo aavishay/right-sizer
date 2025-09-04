@@ -1,0 +1,18 @@
+apiVersion: v2
+name: right-sizer
+description: A Helm chart for Kubernetes Right-Sizer operator
+type: application
+version: 0.1.2
+appVersion: "0.1.2"
+keywords:
+  - kubernetes
+  - operator
+  - right-sizing
+  - resources
+  - autoscaling
+home: https://github.com/aavishay/right-sizer
+sources:
+  - https://github.com/aavishay/right-sizer
+maintainers:
+  - name: Right-Sizer Contributors
+    email: maintainers@right-sizer.dev
