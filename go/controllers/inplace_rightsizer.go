@@ -626,12 +626,43 @@ func (r *InPlaceRightSizer) applyInPlaceResize(ctx context.Context, pod *corev1.
 		}
 	}
 
-	// Create the resize patch
+	// Create the resize patch - ensure we never try to remove existing resources
 	containers := make([]ContainerResourcesPatch, 0, len(newResourcesMap))
-	for containerName, resources := range newResourcesMap {
+	for containerName, newResources := range newResourcesMap {
+		// Find the current container to ensure we preserve existing resource structure
+		var currentResources corev1.ResourceRequirements
+		for _, container := range pod.Spec.Containers {
+			if container.Name == containerName {
+				currentResources = container.Resources
+				break
+			}
+		}
+
+		// Debug logging for resource patch issue
+		logger.Info("🔧 Preparing resize patch for pod %s/%s container %s", pod.Namespace, pod.Name, containerName)
+		logger.Info("   📊 Current resources - CPU Req: %s, CPU Lim: %s, Mem Req: %s, Mem Lim: %s",
+			formatResource(currentResources.Requests[corev1.ResourceCPU]),
+			formatResource(currentResources.Limits[corev1.ResourceCPU]),
+			formatMemory(currentResources.Requests[corev1.ResourceMemory]),
+			formatMemory(currentResources.Limits[corev1.ResourceMemory]))
+		logger.Info("   🎯 Desired resources - CPU Req: %s, CPU Lim: %s, Mem Req: %s, Mem Lim: %s",
+			formatResource(newResources.Requests[corev1.ResourceCPU]),
+			formatResource(newResources.Limits[corev1.ResourceCPU]),
+			formatMemory(newResources.Requests[corev1.ResourceMemory]),
+			formatMemory(newResources.Limits[corev1.ResourceMemory]))
+
+		// Ensure the patch always includes both requests and limits to prevent removal
+		safeResources := ensureSafeResourcePatch(currentResources, newResources)
+
+		logger.Info("   ✅ Safe resources - CPU Req: %s, CPU Lim: %s, Mem Req: %s, Mem Lim: %s",
+			formatResource(safeResources.Requests[corev1.ResourceCPU]),
+			formatResource(safeResources.Limits[corev1.ResourceCPU]),
+			formatMemory(safeResources.Requests[corev1.ResourceMemory]),
+			formatMemory(safeResources.Limits[corev1.ResourceMemory]))
+
 		containers = append(containers, ContainerResourcesPatch{
 			Name:      containerName,
-			Resources: resources,
+			Resources: safeResources,
 		})
 	}
 
@@ -646,6 +677,10 @@ func (r *InPlaceRightSizer) applyInPlaceResize(ctx context.Context, pod *corev1.
 	if err != nil {
 		return fmt.Errorf("failed to marshal resize patch: %w", err)
 	}
+
+	// Debug logging for the actual patch data
+	logger.Info("📋 Generated resize patch for pod %s/%s:", pod.Namespace, pod.Name)
+	logger.Info("   📄 Patch data: %s", string(patchData))
 
 	// Use the Kubernetes client-go to patch with the resize subresource
 	// Apply the patch using the resize subresource
@@ -704,6 +739,52 @@ func (r *InPlaceRightSizer) shouldProcessNamespace(namespace string) bool {
 }
 
 // fallbackPatch is deprecated as regular patches cannot modify pod resources
+// ensureSafeResourcePatch ensures the patch never tries to remove existing resource fields
+func ensureSafeResourcePatch(current, desired corev1.ResourceRequirements) corev1.ResourceRequirements {
+	logger.Info("🛡️  Ensuring safe resource patch...")
+
+	result := desired.DeepCopy()
+
+	// Always ensure Requests map exists and has both CPU and Memory
+	if result.Requests == nil {
+		result.Requests = make(corev1.ResourceList)
+		logger.Info("   📝 Created new Requests map")
+	}
+	if _, exists := result.Requests[corev1.ResourceCPU]; !exists {
+		if cpuReq, exists := current.Requests[corev1.ResourceCPU]; exists && !cpuReq.IsZero() {
+			result.Requests[corev1.ResourceCPU] = cpuReq
+			logger.Info("   🔄 Preserved existing CPU request: %s", formatResource(cpuReq))
+		}
+	}
+	if _, exists := result.Requests[corev1.ResourceMemory]; !exists {
+		if memReq, exists := current.Requests[corev1.ResourceMemory]; exists && !memReq.IsZero() {
+			result.Requests[corev1.ResourceMemory] = memReq
+			logger.Info("   🔄 Preserved existing Memory request: %s", formatMemory(memReq))
+		}
+	}
+
+	// Always ensure Limits map exists and has both CPU and Memory
+	if result.Limits == nil {
+		result.Limits = make(corev1.ResourceList)
+		logger.Info("   📝 Created new Limits map")
+	}
+	if _, exists := result.Limits[corev1.ResourceCPU]; !exists {
+		if cpuLim, exists := current.Limits[corev1.ResourceCPU]; exists && !cpuLim.IsZero() {
+			result.Limits[corev1.ResourceCPU] = cpuLim
+			logger.Info("   🔄 Preserved existing CPU limit: %s", formatResource(cpuLim))
+		}
+	}
+	if _, exists := result.Limits[corev1.ResourceMemory]; !exists {
+		if memLim, exists := current.Limits[corev1.ResourceMemory]; exists && !memLim.IsZero() {
+			result.Limits[corev1.ResourceMemory] = memLim
+			logger.Info("   🔄 Preserved existing Memory limit: %s", formatMemory(memLim))
+		}
+	}
+
+	logger.Info("✅ Safe resource patch completed")
+	return *result
+}
+
 func (r *InPlaceRightSizer) fallbackPatch(ctx context.Context, pod *corev1.Pod, newResourcesMap map[string]corev1.ResourceRequirements) error {
 	// Regular patches cannot modify pod resources after creation
 	// This is a Kubernetes limitation - only the resize subresource can change resources
