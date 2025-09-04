@@ -739,50 +739,89 @@ func (r *InPlaceRightSizer) shouldProcessNamespace(namespace string) bool {
 }
 
 // fallbackPatch is deprecated as regular patches cannot modify pod resources
-// ensureSafeResourcePatch ensures the patch never tries to remove existing resource fields
+// ensureSafeResourcePatch ensures the patch never tries to remove or add resource fields
+// Only existing resource types in the current pod can be modified
 func ensureSafeResourcePatch(current, desired corev1.ResourceRequirements) corev1.ResourceRequirements {
 	logger.Info("🛡️  Ensuring safe resource patch...")
 
-	result := desired.DeepCopy()
+	result := corev1.ResourceRequirements{}
 
-	// Always ensure Requests map exists and has both CPU and Memory
-	if result.Requests == nil {
+	// Only include requests that already exist in the current pod
+	if current.Requests != nil && len(current.Requests) > 0 {
 		result.Requests = make(corev1.ResourceList)
-		logger.Info("   📝 Created new Requests map")
-	}
-	if _, exists := result.Requests[corev1.ResourceCPU]; !exists {
-		if cpuReq, exists := current.Requests[corev1.ResourceCPU]; exists && !cpuReq.IsZero() {
-			result.Requests[corev1.ResourceCPU] = cpuReq
-			logger.Info("   🔄 Preserved existing CPU request: %s", formatResource(cpuReq))
+
+		// Only update CPU request if it exists in current
+		if cpuReq, exists := current.Requests[corev1.ResourceCPU]; exists {
+			if desiredCPU, desiredExists := desired.Requests[corev1.ResourceCPU]; desiredExists {
+				result.Requests[corev1.ResourceCPU] = desiredCPU
+				logger.Info("   ✅ Updating existing CPU request: %s -> %s", formatResource(cpuReq), formatResource(desiredCPU))
+			} else {
+				// Keep the current value if desired doesn't specify it
+				result.Requests[corev1.ResourceCPU] = cpuReq
+				logger.Info("   🔄 Preserving existing CPU request: %s", formatResource(cpuReq))
+			}
 		}
-	}
-	if _, exists := result.Requests[corev1.ResourceMemory]; !exists {
-		if memReq, exists := current.Requests[corev1.ResourceMemory]; exists && !memReq.IsZero() {
-			result.Requests[corev1.ResourceMemory] = memReq
-			logger.Info("   🔄 Preserved existing Memory request: %s", formatMemory(memReq))
+
+		// Only update Memory request if it exists in current
+		if memReq, exists := current.Requests[corev1.ResourceMemory]; exists {
+			if desiredMem, desiredExists := desired.Requests[corev1.ResourceMemory]; desiredExists {
+				result.Requests[corev1.ResourceMemory] = desiredMem
+				logger.Info("   ✅ Updating existing Memory request: %s -> %s", formatMemory(memReq), formatMemory(desiredMem))
+			} else {
+				// Keep the current value if desired doesn't specify it
+				result.Requests[corev1.ResourceMemory] = memReq
+				logger.Info("   🔄 Preserving existing Memory request: %s", formatMemory(memReq))
+			}
 		}
 	}
 
-	// Always ensure Limits map exists and has both CPU and Memory
-	if result.Limits == nil {
+	// Only include limits that already exist in the current pod
+	if current.Limits != nil && len(current.Limits) > 0 {
 		result.Limits = make(corev1.ResourceList)
-		logger.Info("   📝 Created new Limits map")
-	}
-	if _, exists := result.Limits[corev1.ResourceCPU]; !exists {
-		if cpuLim, exists := current.Limits[corev1.ResourceCPU]; exists && !cpuLim.IsZero() {
-			result.Limits[corev1.ResourceCPU] = cpuLim
-			logger.Info("   🔄 Preserved existing CPU limit: %s", formatResource(cpuLim))
+
+		// Only update CPU limit if it exists in current
+		if cpuLim, exists := current.Limits[corev1.ResourceCPU]; exists {
+			if desiredCPU, desiredExists := desired.Limits[corev1.ResourceCPU]; desiredExists {
+				result.Limits[corev1.ResourceCPU] = desiredCPU
+				logger.Info("   ✅ Updating existing CPU limit: %s -> %s", formatResource(cpuLim), formatResource(desiredCPU))
+			} else {
+				// Keep the current value if desired doesn't specify it
+				result.Limits[corev1.ResourceCPU] = cpuLim
+				logger.Info("   🔄 Preserving existing CPU limit: %s", formatResource(cpuLim))
+			}
+		}
+
+		// Only update Memory limit if it exists in current
+		if memLim, exists := current.Limits[corev1.ResourceMemory]; exists {
+			if desiredMem, desiredExists := desired.Limits[corev1.ResourceMemory]; desiredExists {
+				result.Limits[corev1.ResourceMemory] = desiredMem
+				logger.Info("   ✅ Updating existing Memory limit: %s -> %s", formatMemory(memLim), formatMemory(desiredMem))
+			} else {
+				// Keep the current value if desired doesn't specify it
+				result.Limits[corev1.ResourceMemory] = memLim
+				logger.Info("   🔄 Preserving existing Memory limit: %s", formatMemory(memLim))
+			}
 		}
 	}
-	if _, exists := result.Limits[corev1.ResourceMemory]; !exists {
-		if memLim, exists := current.Limits[corev1.ResourceMemory]; exists && !memLim.IsZero() {
-			result.Limits[corev1.ResourceMemory] = memLim
-			logger.Info("   🔄 Preserved existing Memory limit: %s", formatMemory(memLim))
+
+	// Log what we're NOT including to help debug
+	if desired.Requests != nil {
+		for resType, resVal := range desired.Requests {
+			if _, exists := current.Requests[resType]; !exists {
+				logger.Info("   ⚠️  Skipping new request type %s: %s (not in current pod)", resType, formatResource(resVal))
+			}
+		}
+	}
+	if desired.Limits != nil {
+		for resType, resVal := range desired.Limits {
+			if _, exists := current.Limits[resType]; !exists {
+				logger.Info("   ⚠️  Skipping new limit type %s: %s (not in current pod)", resType, formatResource(resVal))
+			}
 		}
 	}
 
 	logger.Info("✅ Safe resource patch completed")
-	return *result
+	return result
 }
 
 func (r *InPlaceRightSizer) fallbackPatch(ctx context.Context, pod *corev1.Pod, newResourcesMap map[string]corev1.ResourceRequirements) error {
