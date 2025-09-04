@@ -5,7 +5,7 @@ All notable changes to the Right Sizer project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.1.3] - 2025-09-04
 
 ### Added
 - Comprehensive RBAC documentation in `docs/RBAC.md` with detailed permission explanations
@@ -61,7 +61,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Security
 - Implemented comprehensive RBAC with minimal required permissions
 - Added security best practices documentation for RBAC configuration
-- Included network policy examples for additional security hardening
+Included network policy examples for additional security hardening
+
+## [Unreleased]
+
+### Added
+
+### Changed
+
+### Fixed
+
+### Security
 
 ## [0.2.0] - 2024-01-15
 
