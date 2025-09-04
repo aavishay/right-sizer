@@ -59,132 +59,198 @@ rightsizerConfig:
   # Create a default RightSizerConfig resource
   create: true
 
-  # Enable or disable the right-sizer operator
+  # Core configuration
   enabled: true
-
-  # Operating mode: adaptive, aggressive, conservative, or custom
-  mode: "adaptive"
-
-  # Dry-run mode - only logs recommendations without applying changes
+  mode: "balanced" # balanced, aggressive, conservative, custom
   dryRun: false
 
-  # Resource defaults and limits
+  # Resource defaults and sizing configuration
   resourceDefaults:
     cpu:
-      defaultRequest: "100m"
-      defaultLimit: "2000m"
-      requestToLimitRatio: 2.0
-      minRequest: "10m"
-      maxLimit: "4000m"
+      minRequest: 10 # millicores
+      maxLimit: 4000 # millicores
+      requestAddition: 0 # millicores to add to calculated request
+      limitAddition: 0 # millicores to add to calculated limit
     memory:
-      defaultRequest: "128Mi"
-      defaultLimit: "2Gi"
-      requestToLimitRatio: 1.5
-      minRequest: "64Mi"
-      maxLimit: "8Gi"
+      minRequest: 64 # MB
+      maxLimit: 8192 # MB
+      requestAddition: 0 # MB to add to calculated request
+      limitAddition: 0 # MB to add to calculated limit
 
   # Sizing strategy configuration
   sizingStrategy:
-    # Algorithm: percentile, peak, average
-    algorithm: "percentile"
-    # Historical data analysis period
+    algorithm: "percentile" # percentile, peak, average
     lookbackPeriod: "7d"
-    # Metrics sampling interval
-    sampleInterval: "1m"
-    # Percentile to use (if algorithm is percentile)
     percentile: 95
 
-    # Scaling factors
+    # Scaling factors and multipliers
     scalingFactors:
-      # Multiplier for scaling up resources
-      scaleUpMultiplier: 1.2
-      # Multiplier for scaling down resources
-      scaleDownMultiplier: 0.9
-      # Minimum percentage change required to trigger resize
+      cpuRequestMultiplier: 1.2
+      cpuLimitMultiplier: 2.0
+      memoryRequestMultiplier: 1.2
+      memoryLimitMultiplier: 2.0
+      maxChangePercentage: 50
       minChangeThreshold: 10
 
-    # Buffer/burst capacity configuration
-    burstCapacity:
-      # Additional CPU capacity for bursts (percentage)
-      cpuBurstPercentage: 30
-      # Additional memory capacity for bursts (percentage)
-      memoryBurstPercentage: 20
+    # Thresholds for scaling decisions
+    thresholds:
+      cpuScaleUpThreshold: 0.8 # 80% utilization triggers scale up
+      cpuScaleDownThreshold: 0.3 # 30% utilization triggers scale down
+      memoryScaleUpThreshold: 0.8
+      memoryScaleDownThreshold: 0.3
 
-  # Monitoring configuration
+  # Global constraints
+  constraints:
+    maxMemoryGB: 32
+    maxCPUCores: 16
+    preventOOMKill: true
+    respectPodDisruptionBudget: true
+
+  # Monitoring and metrics configuration
   monitoring:
-    # Metrics provider: metrics-server, prometheus
-    metricsProvider: "metrics-server"
-    # prometheusURL: "http://prometheus:9090"  # Optional
+    metricsProvider: "metrics-server" # metrics-server, prometheus, custom
+    # prometheusURL: "http://prometheus:9090"
+    # metricsServerEndpoint: "http://metrics-server:8080"
     scrapeInterval: "30s"
     retentionPeriod: "30d"
+    aggregationMethod: "avg" # avg, max, min, percentile
+    includeCustomMetrics: false
+
+  # Observability configuration
+  observability:
+    enableMetricsExport: true
+    metricsPort: 9090
+    enableTracing: false
+    # tracingEndpoint: "http://jaeger:4318"
+    enableProfiling: false
+    profilingPort: 6060
+
+  # Security configuration
+  security:
+    enableAdmissionController: false
+    admissionWebhookPort: 8443
+    requireAnnotation: false
+    annotationKey: "rightsizer.io/enable"
+    enableMutatingWebhook: false
+    enableValidatingWebhook: false
+    tlsCertDir: "/tmp/certs"
+    webhookTimeoutSeconds: 10
+
+  # Operator configuration
+  operator:
+    leaderElection: true
+    leaderElectionNamespace: "" # Uses release namespace if empty
+    leaderElectionID: "right-sizer-leader"
+    leaderElectionLeaseDuration: "15s"
+    leaderElectionRenewDeadline: "10s"
+    leaderElectionRetryPeriod: "2s"
+    syncPeriod: "30s"
+    maxConcurrentReconciles: 3
+    workerThreads: 10
+    qps: 20
+    burst: 30
+    healthProbePort: 8081
+    readinessEndpoint: "/readyz"
+    livenessEndpoint: "/healthz"
 
   # Operational configuration
   operationalConfig:
-    # Resize mode: InPlace (for k8s 1.27+) or Rolling
-    resizeMode: "InPlace"
-    # How often to check and resize resources
     resizeInterval: "5m"
-    # Number of workloads to process in a batch
-    batchSize: 10
-    # Number of concurrent resize operations
-    concurrentOperations: 5
-    # Retry configuration
     retryAttempts: 3
-    retryBackoff: "exponential"
-
-    # Maintenance window configuration (optional)
-    maintenanceWindow:
-      enabled: false
-      schedule: "0 2 * * *" # 2 AM daily
-      duration: "2h"
-      timezone: "UTC"
+    retryInterval: "5s"
+    batchSize: 3
+    delayBetweenBatches: "5s"
+    delayBetweenPods: "500ms"
+    maxUpdatesPerRun: 50
 
   # Namespace configuration
   namespaceConfig:
-    # Namespaces to include for right-sizing (empty means all)
+    # Namespaces to include (empty means all)
     includeNamespaces: []
-    # - "default"
-    # - "production"
+    # Example:
+    # includeNamespaces:
+    #   - "default"
+    #   - "production"
 
     # Namespaces to exclude from right-sizing
     excludeNamespaces:
-      - kube-system
-      - kube-public
-      - kube-node-lease
-      # The operator's own namespace is automatically excluded
+      - "kube-system"
+      - "kube-public"
+      - "kube-node-lease"
+      - "cert-manager"
+      - "ingress-nginx"
+      - "istio-system"
+
+    # System namespaces that should never be modified
+    systemNamespaces:
+      - "kube-system"
+      - "kube-public"
+      - "kube-node-lease"
+      - "cert-manager"
+      - "ingress-nginx"
+      - "istio-system"
+
+    # Select namespaces by labels
+    namespaceLabels: {}
+    # Example:
+    # namespaceLabels:
+    #   environment: "production"
+    #   team: "platform"
 
   # Logging configuration
   logging:
     level: "info" # debug, info, warn, error
     format: "json" # json, text
     enableAudit: true
-    # auditLogPath: "/var/log/right-sizer/audit.log"  # Optional
 
-  # Notification configuration (optional)
+  # Notification configuration
   notifications:
     enabled: false
-    channels: []
-    # Example configurations:
-    # channels:
-    #   - type: "slack"
-    #     slack:
-    #       webhook: "https://hooks.slack.com/services/YOUR/WEBHOOK/URL"
-    #       channel: "#right-sizer-alerts"
-    #   - type: "webhook"
-    #     webhook: "https://your-webhook-endpoint.com/alerts"
-    #   - type: "email"
-    #     email: "ops-team@example.com"
 
-  # Custom annotations to add to modified workloads
-  annotations: {}
-  # Example:
-  # annotations:
-  #   right-sizer.io/last-modified: "timestamp"
-  #   right-sizer.io/reason: "optimization"
+    # Slack notifications
+    slack: {}
+    # Example:
+    # slack:
+    #   webhookURL: "https://hooks.slack.com/services/YOUR/WEBHOOK/URL"
+    #   channel: "#right-sizer"
+    #   username: "RightSizer"
+    #   iconEmoji: ":robot:"
+    #   notifyOnSuccess: false
+    #   notifyOnFailure: true
+    #   notifyOnDryRun: false
 
-  # Custom labels to add to modified workloads
-  labels: {}
-  # Example:
-  # labels:
-  #   managed-by: "right-sizer"
-  #   optimization-status: "active"
+    # Email notifications
+    email: {}
+    # Example:
+    # email:
+    #   smtpHost: "smtp.gmail.com"
+    #   smtpPort: 587
+    #   smtpUsername: "notifications@example.com"
+    #   smtpPasswordSecret: "smtp-password-secret"
+    #   from: "rightsizer@example.com"
+    #   to:
+    #     - "ops-team@example.com"
+    #     - "platform@example.com"
+    #   subject: "RightSizer Alert"
+
+    # Webhook notifications
+    webhook: {}
+    # Example:
+    # webhook:
+    #   url: "https://your-webhook.example.com/alerts"
+    #   method: "POST"
+    #   headers:
+    #     Authorization: "Bearer YOUR_TOKEN"
+    #     Content-Type: "application/json"
+    #   retryCount: 3
+    #   retryDelay: "5s"
+
+  # Feature gates for experimental features
+  featureGates:
+    enableInPlaceResize: true # Use in-place pod resizing (K8s 1.27+)
+    enablePredictiveScaling: false # ML-based predictive scaling
+    enableCostOptimization: false # Cost-aware resource optimization
+    enableMultiCluster: false # Multi-cluster support
+    enableAutoLearning: false # Auto-learn optimal resource patterns
+    enableWorkloadProfiling: false # Profile workload patterns
+    enableAdvancedScheduling: false # Advanced scheduling optimizations

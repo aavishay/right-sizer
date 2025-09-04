@@ -78,6 +78,11 @@ type Config struct {
 	DryRun                  bool    // Only log recommendations without applying changes
 	SafetyThreshold         float64 // Safety threshold for resource changes (0-1)
 
+	// Batch processing configuration for API server protection
+	BatchSize           int           // Number of pods to process per batch
+	DelayBetweenBatches time.Duration // Delay between processing batches
+	DelayBetweenPods    time.Duration // Delay between individual pod updates
+
 	// Namespace filters
 	NamespaceInclude []string // Namespaces to include
 	NamespaceExclude []string // Namespaces to exclude
@@ -156,6 +161,11 @@ func GetDefaults() *Config {
 		AuditEnabled:            true,
 		DryRun:                  false,
 		SafetyThreshold:         0.5, // 50% change threshold
+
+		// Default batch processing values
+		BatchSize:           3,
+		DelayBetweenBatches: 5 * time.Second,
+		DelayBetweenPods:    500 * time.Millisecond,
 
 		// Default advanced features
 		HistoryDays:         7,

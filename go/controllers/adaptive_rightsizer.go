@@ -63,6 +63,8 @@ type AdaptiveRightSizer struct {
 	InPlaceEnabled  bool       // Will be auto-detected
 	DryRun          bool       // If true, only log recommendations without applying
 	updateMutex     sync.Mutex // Prevents concurrent update operations
+	isRunning       bool       // Tracks if a rightsizing operation is in progress
+	runningMutex    sync.Mutex // Protects the isRunning flag
 }
 
 // ResourceUpdate represents a pending resource update
@@ -160,6 +162,32 @@ func (r *AdaptiveRightSizer) testInPlaceCapability(ctx context.Context) bool {
 
 // performRightSizing processes all pods for optimization using in-place resize
 func (r *AdaptiveRightSizer) performRightSizing(ctx context.Context) {
+	startTime := time.Now()
+
+	// Check if a rightsizing operation is already in progress
+	r.runningMutex.Lock()
+	if r.isRunning {
+		r.runningMutex.Unlock()
+		log.Printf("⏭️  Skipping rightsizing run - previous run still in progress")
+		return
+	}
+	r.isRunning = true
+	r.runningMutex.Unlock()
+
+	// Ensure we clear the running flag when done
+	defer func() {
+		r.runningMutex.Lock()
+		r.isRunning = false
+		r.runningMutex.Unlock()
+
+		// Log summary of the rightsizing run
+		duration := time.Since(startTime)
+		log.Printf("✅ Rightsizing run completed in %v", duration)
+		if duration > r.Interval {
+			log.Printf("⚠️  WARNING: Run took longer (%v) than the configured interval (%v)", duration, r.Interval)
+		}
+	}()
+
 	updates := []ResourceUpdate{}
 
 	// Analyze ALL pods directly (including those from deployments, statefulsets, etc)
@@ -306,12 +334,31 @@ func (r *AdaptiveRightSizer) applyUpdates(ctx context.Context, updates []Resourc
 		log.Printf("📊 Found %d resources needing adjustment", len(updates))
 	}
 
+	// Protect API server from too many updates at once
+	const maxUpdatesPerRun = 50 // Maximum updates to process in a single run
+	if len(updates) > maxUpdatesPerRun {
+		log.Printf("⚠️  Too many updates pending (%d > %d). Processing first %d to protect API server",
+			len(updates), maxUpdatesPerRun, maxUpdatesPerRun)
+		log.Printf("   Remaining updates will be processed in the next run")
+		updates = updates[:maxUpdatesPerRun]
+	}
+
 	// Configuration for batching to prevent API server overload
-	const (
-		batchSize           = 5                      // Process max 5 pods per batch
-		delayBetweenBatches = 2 * time.Second        // Wait 2 seconds between batches
-		delayBetweenPods    = 200 * time.Millisecond // Small delay between individual pods
-	)
+	cfg := config.Get()
+	batchSize := cfg.BatchSize
+	delayBetweenBatches := cfg.DelayBetweenBatches
+	delayBetweenPods := cfg.DelayBetweenPods
+
+	// Use defaults if not configured
+	if batchSize <= 0 {
+		batchSize = 3
+	}
+	if delayBetweenBatches <= 0 {
+		delayBetweenBatches = 5 * time.Second
+	}
+	if delayBetweenPods <= 0 {
+		delayBetweenPods = 500 * time.Millisecond
+	}
 
 	// Log all updates first if in dry-run mode
 	if r.DryRun {
