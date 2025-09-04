@@ -45,7 +45,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 # Alternative base images if gcr.io is unavailable:
 # - alpine:3.18 (requires adding ca-certificates)
 # - scratch (most minimal, requires copying ca-certificates from builder)
-FROM gcr.io/distroless/static:nonroot
+FROM gcr.io/distroless/static-debian11:debug
 
 # Labels for OCI compliance
 LABEL org.opencontainers.image.title="Right-Sizer" \
@@ -59,7 +59,7 @@ LABEL org.opencontainers.image.title="Right-Sizer" \
 # Copy the binary from builder
 COPY --from=builder /build/right-sizer /app/right-sizer
 
-# Use nonroot user (UID 65532)
+# Use nonroot user (already set in base image)
 USER nonroot:nonroot
 
 WORKDIR /app
