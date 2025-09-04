@@ -20,7 +20,7 @@ entries:
       artifacthub.io/repository: https://github.com/aavishay/right-sizer
     apiVersion: v2
     appVersion: 0.1.2
-    created: "2025-09-03T14:00:40.303352+03:00"
+    created: "2025-09-04T07:48:57.13418768Z"
     description: A Kubernetes operator for automatic pod resource right-sizing
     digest: 65b8da6a51b5b1e9f469c69a30dfdb7a9b0982f1bb53f5c7cd2be41113a26ce1
     home: https://github.com/aavishay/right-sizer
@@ -40,6 +40,28 @@ entries:
     urls:
     - https://aavishay.github.io/right-sizer/charts/right-sizer-0.1.2.tgz
     version: 0.1.2
+  - apiVersion: v2
+    appVersion: latest
+    created: "2025-09-04T07:48:57.133062475Z"
+    description: A Helm chart for Kubernetes Right-Sizer operator
+    digest: c02d3996ef951614e4e45e3f60c4eb91ec56a08025715c681b528ee79e938e43
+    home: https://github.com/aavishay/right-sizer
+    keywords:
+    - kubernetes
+    - operator
+    - right-sizing
+    - resources
+    - autoscaling
+    maintainers:
+    - email: maintainers@right-sizer.dev
+      name: Right-Sizer Contributors
+    name: right-sizer
+    sources:
+    - https://github.com/aavishay/right-sizer
+    type: application
+    urls:
+    - https://aavishay.github.io/right-sizer/charts/right-sizer-0.1.2-20250904074856.tgz
+    version: 0.1.2-20250904074856
   - annotations:
       artifacthub.io/changes: |
         - kind: added
@@ -59,7 +81,7 @@ entries:
       artifacthub.io/repository: https://github.com/aavishay/right-sizer
     apiVersion: v2
     appVersion: latest
-    created: "2025-09-03T14:00:40.30257+03:00"
+    created: "2025-09-04T07:48:57.132752534Z"
     description: A Kubernetes operator for automatic pod resource right-sizing
     digest: c75e87fc2fe1a6ab3b65bb46844c15fe2381c3c47eef5d8db18eb1734653be8b
     home: https://github.com/aavishay/right-sizer
@@ -98,7 +120,7 @@ entries:
       artifacthub.io/repository: https://github.com/aavishay/right-sizer
     apiVersion: v2
     appVersion: latest
-    created: "2025-09-03T14:00:40.301727+03:00"
+    created: "2025-09-04T07:48:57.131589327Z"
     description: A Kubernetes operator for automatic pod resource right-sizing
     digest: e2c1f80cc92ef7537a941d0bc4eb1355850a44690f3ef914d8f8cb6e63f7cb78
     home: https://github.com/aavishay/right-sizer
@@ -137,7 +159,7 @@ entries:
       artifacthub.io/repository: https://github.com/aavishay/right-sizer
     apiVersion: v2
     appVersion: latest
-    created: "2025-09-03T14:00:40.300511+03:00"
+    created: "2025-09-04T07:48:57.129728682Z"
     description: A Kubernetes operator for automatic pod resource right-sizing
     digest: bd89da1e695ccd173d3a35263a739844f716d2e2e6c5109ffbc23b72232fc828
     home: https://github.com/aavishay/right-sizer
@@ -176,7 +198,7 @@ entries:
       artifacthub.io/repository: https://github.com/aavishay/right-sizer
     apiVersion: v2
     appVersion: latest
-    created: "2025-09-03T14:00:40.299637+03:00"
+    created: "2025-09-04T07:48:57.128495023Z"
     description: A Kubernetes operator for automatic pod resource right-sizing
     digest: c13af76ad1f8a1cadb37c8c1d2e6f7ffb53ead7839eb5144ce3e43e16b62aecf
     home: https://github.com/aavishay/right-sizer
@@ -215,7 +237,7 @@ entries:
       artifacthub.io/repository: https://github.com/aavishay/right-sizer
     apiVersion: v2
     appVersion: latest
-    created: "2025-09-03T14:00:40.29883+03:00"
+    created: "2025-09-04T07:48:57.127365579Z"
     description: A Kubernetes operator for automatic pod resource right-sizing
     digest: 2319849a1a3c50e93806e3aa0dd4261d8c59f1804273a021c3dd0841ec48972b
     home: https://github.com/aavishay/right-sizer
@@ -240,7 +262,7 @@ entries:
       artifacthub.io/repository: https://github.com/aavishay/right-sizer
     apiVersion: v2
     appVersion: latest
-    created: "2025-09-03T14:00:40.298042+03:00"
+    created: "2025-09-04T07:48:57.126150895Z"
     description: A Kubernetes operator for automatic pod resource right-sizing
     digest: a00130540280f266689dd3d255ac2e3253d9ffee8864a04c756e25e9de75051b
     home: https://github.com/aavishay/right-sizer
@@ -265,7 +287,7 @@ entries:
       artifacthub.io/repository: https://github.com/aavishay/right-sizer
     apiVersion: v2
     appVersion: latest
-    created: "2025-09-03T14:00:40.297123+03:00"
+    created: "2025-09-04T07:48:57.125027854Z"
     description: A Kubernetes operator for automatic pod resource right-sizing
     digest: a1f821e190359f777c70e4450bec225df3e05c51cc0dc4213abd07562beff170
     home: https://github.com/aavishay/right-sizer
@@ -298,7 +320,7 @@ entries:
       artifacthub.io/repository: https://github.com/aavishay/right-sizer
     apiVersion: v2
     appVersion: latest
-    created: "2025-09-03T14:00:40.295892+03:00"
+    created: "2025-09-04T07:48:57.12346322Z"
     description: A Kubernetes operator for automatic pod resource right-sizing
     digest: 3b515781ec5934aad96e98759f381ce874b00cbac87d0d8fb01fce9e0199b087
     home: https://github.com/aavishay/right-sizer
@@ -331,7 +353,7 @@ entries:
       artifacthub.io/repository: https://github.com/aavishay/right-sizer
     apiVersion: v2
     appVersion: latest
-    created: "2025-09-03T14:00:40.295159+03:00"
+    created: "2025-09-04T07:48:57.122092785Z"
     description: A Kubernetes operator for automatic pod resource right-sizing
     digest: 4eca30e073f488a875af3b1e04bb8b50c9b9f15662074d3c2546a4178fe310e7
     home: https://github.com/aavishay/right-sizer
@@ -364,7 +386,7 @@ entries:
       artifacthub.io/repository: https://github.com/aavishay/right-sizer
     apiVersion: v2
     appVersion: latest
-    created: "2025-09-03T14:00:40.294462+03:00"
+    created: "2025-09-04T07:48:57.120961408Z"
     description: A Kubernetes operator for automatic pod resource right-sizing
     digest: 22f0b8dc991ea082fb5c17836bb8c15dfd97081a62fc8a9270e0c2d7a951bfb7
     home: https://github.com/aavishay/right-sizer
@@ -384,4 +406,4 @@ entries:
     urls:
     - https://aavishay.github.io/right-sizer/charts/right-sizer-0.1.0-20250902063209.tgz
     version: 0.1.0-20250902063209
-generated: "2025-09-03T14:00:40.29369+03:00"
+generated: "2025-09-04T07:48:57.119644553Z"
