@@ -19,6 +19,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Scale subresource permissions for workload controllers
 
 ### Fixed
+- **CI/CD Pipeline Issues**: Resolved Docker image build and test failures in GitHub Actions workflow
+  - Fixed "exec: 'sh': executable file not found" error by updating base images from `gcr.io/distroless/static:nonroot` to `gcr.io/distroless/static-debian11:debug`
+  - This provides shell utilities needed for CI testing while maintaining security
+  - Enables proper testing of user permissions and binary executability in automated workflows
+  - Ensures compatibility with GitHub Actions and local `act` testing environments
+
+### Fixed
 - **Critical RBAC Issues**: Resolved permission errors preventing the operator from accessing required resources
   - Fixed "nodes is forbidden" error by ensuring proper ClusterRole configuration
   - Fixed metrics API access issues by adding explicit metrics.k8s.io permissions

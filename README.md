@@ -33,8 +33,6 @@ docker pull aavishay/right-sizer:latest # Latest version
 
 **Key Benefits:** 🚀 Zero-downtime resizing • 💰 30-50% cost reduction • 🎯 Automatic optimization • 📊 Real-time monitoring
 
-**Latest Fix:** ✅ Resolved issues with Guaranteed QoS pods - now correctly preserves QoS class during resource updates
-
 ---
 
 ## 📚 Table of Contents
@@ -402,11 +400,12 @@ The project uses GitHub Actions for automated building, testing, and deployment:
 
 #### Automated Workflows
 
-1. **Docker Build & Push** (`docker-build.yml`)
+1. **Docker Build & Push** (`docker-build.yml`) ✅ **WORKING**
    - Triggers: Push to main, PRs, tags
    - Multi-architecture builds (amd64, arm64)
    - Automated security scanning with Trivy
    - SBOM generation
+   - **Recent Fix**: Resolved "exec: 'sh': executable file not found" error by updating base images
    - Push to Docker Hub with tags:
      - `latest` (main branch)
      - `v{build-number}`
@@ -430,8 +429,8 @@ The project uses GitHub Actions for automated building, testing, and deployment:
 
 | Platform | Architecture | Base Image | Size |
 |----------|-------------|------------|------|
-| Linux | amd64 | Alpine 3.20 | ~50MB |
-| Linux | arm64 | Alpine 3.20 | ~50MB |
+| Linux | amd64 | Distroless Debian 11 Debug | ~55MB |
+| Linux | arm64 | Distroless Debian 11 Debug | ~55MB |
 | Darwin | amd64 | Binary only | ~35MB |
 | Darwin | arm64 | Binary only | ~35MB |
 | Windows | amd64 | Binary only | ~35MB |
@@ -768,6 +767,18 @@ spec:
   globalConstraints:
     maxConcurrentResizes: 5  # Reduce concurrent operations
     cooldownPeriod: "15m"   # Increase cooldown between resizes
+```
+
+#### 4. CI/CD Pipeline Issues
+```bash
+# If you encounter "exec: 'sh': executable file not found" errors:
+# This was fixed in recent versions by updating Docker base images
+# For local testing with act:
+act -j build --container-architecture linux/amd64
+
+# For GitHub Actions debugging:
+# Check the workflow logs for Docker build failures
+# Ensure your Docker images use compatible base images with shell utilities
 ```
 
 ### Debug Commands
