@@ -1162,59 +1162,69 @@ func ensureSafeResourcePatchAdaptive(current, desired corev1.ResourceRequirement
 
 	result := corev1.ResourceRequirements{}
 
-	// Only include requests that already exist in the current pod
+	// Handle requests - preserve ALL existing resource types
 	if current.Requests != nil && len(current.Requests) > 0 {
 		result.Requests = make(corev1.ResourceList)
 
-		// Only update CPU request if it exists in current
+		// First, copy ALL existing requests to preserve non-mutable resource types
+		for resType, resVal := range current.Requests {
+			result.Requests[resType] = resVal.DeepCopy()
+			// Log preservation of non-CPU/memory resources
+			if resType != corev1.ResourceCPU && resType != corev1.ResourceMemory {
+				logger.Info("   🔒 Preserving immutable resource request %s: %s", resType, formatResource(resVal))
+			}
+		}
+
+		// Then update only CPU if it exists in current and desired specifies it
 		if cpuReq, exists := current.Requests[corev1.ResourceCPU]; exists {
 			if desiredCPU, desiredExists := desired.Requests[corev1.ResourceCPU]; desiredExists {
 				result.Requests[corev1.ResourceCPU] = desiredCPU
 				logger.Info("   ✅ Updating existing CPU request: %s -> %s", formatResource(cpuReq), formatResource(desiredCPU))
 			} else {
-				// Keep the current value if desired doesn't specify it
-				result.Requests[corev1.ResourceCPU] = cpuReq
 				logger.Info("   🔄 Preserving existing CPU request: %s", formatResource(cpuReq))
 			}
 		}
 
-		// Only update Memory request if it exists in current
+		// Update Memory request if it exists in current and desired specifies it
 		if memReq, exists := current.Requests[corev1.ResourceMemory]; exists {
 			if desiredMem, desiredExists := desired.Requests[corev1.ResourceMemory]; desiredExists {
 				result.Requests[corev1.ResourceMemory] = desiredMem
 				logger.Info("   ✅ Updating existing Memory request: %s -> %s", formatMemory(memReq), formatMemory(desiredMem))
 			} else {
-				// Keep the current value if desired doesn't specify it
-				result.Requests[corev1.ResourceMemory] = memReq
 				logger.Info("   🔄 Preserving existing Memory request: %s", formatMemory(memReq))
 			}
 		}
 	}
 
-	// Only include limits that already exist in the current pod
+	// Handle limits - preserve ALL existing resource types
 	if current.Limits != nil && len(current.Limits) > 0 {
 		result.Limits = make(corev1.ResourceList)
 
-		// Only update CPU limit if it exists in current
+		// First, copy ALL existing limits to preserve non-mutable resource types
+		for resType, resVal := range current.Limits {
+			result.Limits[resType] = resVal.DeepCopy()
+			// Log preservation of non-CPU/memory resources
+			if resType != corev1.ResourceCPU && resType != corev1.ResourceMemory {
+				logger.Info("   🔒 Preserving immutable resource limit %s: %s", resType, formatResource(resVal))
+			}
+		}
+
+		// Then update only CPU if it exists in current and desired specifies it
 		if cpuLim, exists := current.Limits[corev1.ResourceCPU]; exists {
 			if desiredCPU, desiredExists := desired.Limits[corev1.ResourceCPU]; desiredExists {
 				result.Limits[corev1.ResourceCPU] = desiredCPU
 				logger.Info("   ✅ Updating existing CPU limit: %s -> %s", formatResource(cpuLim), formatResource(desiredCPU))
 			} else {
-				// Keep the current value if desired doesn't specify it
-				result.Limits[corev1.ResourceCPU] = cpuLim
 				logger.Info("   🔄 Preserving existing CPU limit: %s", formatResource(cpuLim))
 			}
 		}
 
-		// Only update Memory limit if it exists in current
+		// Update Memory limit if it exists in current and desired specifies it
 		if memLim, exists := current.Limits[corev1.ResourceMemory]; exists {
 			if desiredMem, desiredExists := desired.Limits[corev1.ResourceMemory]; desiredExists {
 				result.Limits[corev1.ResourceMemory] = desiredMem
 				logger.Info("   ✅ Updating existing Memory limit: %s -> %s", formatMemory(memLim), formatMemory(desiredMem))
 			} else {
-				// Keep the current value if desired doesn't specify it
-				result.Limits[corev1.ResourceMemory] = memLim
 				logger.Info("   🔄 Preserving existing Memory limit: %s", formatMemory(memLim))
 			}
 		}
