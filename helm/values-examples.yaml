@@ -1,0 +1,350 @@
+# Example values configurations for Right-Sizer Helm chart
+# These examples demonstrate different use cases and configurations
+
+# ============================================================================
+# EXAMPLE 1: Conservative Production Configuration
+# ============================================================================
+# This configuration is suitable for production environments where stability
+# is more important than aggressive resource optimization
+conservative-production:
+  rightsizerConfig:
+    create: true
+    enabled: true
+    mode: "conservative"
+    dryRun: false  # Set to true initially to preview changes
+
+    resourceDefaults:
+      cpu:
+        defaultRequest: "200m"
+        defaultLimit: "2000m"
+        requestToLimitRatio: 3.0  # Higher ratio for more headroom
+        minRequest: "50m"
+        maxLimit: "8000m"
+      memory:
+        defaultRequest: "256Mi"
+        defaultLimit: "4Gi"
+        requestToLimitRatio: 2.0
+        minRequest: "128Mi"
+        maxLimit: "16Gi"
+
+    sizingStrategy:
+      algorithm: "peak"  # Use peak values for safety
+      lookbackPeriod: "14d"  # Longer period for more data
+      sampleInterval: "5m"
+
+      scalingFactors:
+        scaleUpMultiplier: 1.5  # More generous scaling up
+        scaleDownMultiplier: 0.95  # Very conservative scaling down
+        minChangeThreshold: 20  # Only change if >20% difference
+
+      burstCapacity:
+        cpuBurstPercentage: 50
+        memoryBurstPercentage: 40
+
+    operationalConfig:
+      resizeMode: "Rolling"  # Safer than InPlace
+      resizeInterval: "30m"  # Less frequent checks
+      batchSize: 5
+      concurrentOperations: 2
+      retryAttempts: 5
+
+      maintenanceWindow:
+        enabled: true
+        schedule: "0 3 * * 0"  # Sunday 3 AM
+        duration: "4h"
+        timezone: "UTC"
+
+    namespaceConfig:
+      includeNamespaces:
+        - "production"
+        - "staging"
+      excludeNamespaces:
+        - kube-system
+        - kube-public
+        - kube-node-lease
+        - critical-services
+
+# ============================================================================
+# EXAMPLE 2: Aggressive Cost Optimization
+# ============================================================================
+# This configuration aggressively optimizes resources for maximum cost savings
+# Suitable for development/testing environments
+aggressive-cost-optimization:
+  rightsizerConfig:
+    create: true
+    enabled: true
+    mode: "aggressive"
+    dryRun: false
+
+    resourceDefaults:
+      cpu:
+        defaultRequest: "50m"
+        defaultLimit: "500m"
+        requestToLimitRatio: 1.5
+        minRequest: "10m"
+        maxLimit: "2000m"
+      memory:
+        defaultRequest: "64Mi"
+        defaultLimit: "512Mi"
+        requestToLimitRatio: 1.2
+        minRequest: "32Mi"
+        maxLimit: "2Gi"
+
+    sizingStrategy:
+      algorithm: "average"  # Use average for more aggressive sizing
+      lookbackPeriod: "3d"  # Shorter period for quicker adaptation
+      sampleInterval: "1m"
+
+      scalingFactors:
+        scaleUpMultiplier: 1.1  # Minimal scaling up
+        scaleDownMultiplier: 0.7  # Aggressive scaling down
+        minChangeThreshold: 5  # Change even for small differences
+
+      burstCapacity:
+        cpuBurstPercentage: 10
+        memoryBurstPercentage: 10
+
+    operationalConfig:
+      resizeMode: "InPlace"  # Faster resizing
+      resizeInterval: "1m"  # Frequent checks
+      batchSize: 20
+      concurrentOperations: 10
+      retryAttempts: 2
+
+    namespaceConfig:
+      includeNamespaces:
+        - "dev"
+        - "test"
+        - "sandbox"
+
+# ============================================================================
+# EXAMPLE 3: Adaptive with Prometheus Monitoring
+# ============================================================================
+# This configuration uses Prometheus for metrics and adaptive sizing
+adaptive-prometheus:
+  rightsizerConfig:
+    create: true
+    enabled: true
+    mode: "adaptive"
+    dryRun: false
+
+    sizingStrategy:
+      algorithm: "percentile"
+      lookbackPeriod: "7d"
+      sampleInterval: "30s"
+      percentile: 90
+
+      scalingFactors:
+        scaleUpMultiplier: 1.2
+        scaleDownMultiplier: 0.85
+        minChangeThreshold: 10
+
+    monitoring:
+      metricsProvider: "prometheus"
+      prometheusURL: "http://prometheus-server.monitoring.svc.cluster.local:9090"
+      scrapeInterval: "15s"
+      retentionPeriod: "30d"
+
+    operationalConfig:
+      resizeMode: "InPlace"
+      resizeInterval: "5m"
+      batchSize: 10
+      concurrentOperations: 5
+
+    notifications:
+      enabled: true
+      channels:
+        - type: "slack"
+          slack:
+            webhook: "https://hooks.slack.com/services/YOUR/WEBHOOK/URL"
+            channel: "#k8s-rightsizing"
+        - type: "webhook"
+          webhook: "https://your-monitoring-system.com/webhooks/rightsizer"
+
+# ============================================================================
+# EXAMPLE 4: Dry-Run Mode for Testing
+# ============================================================================
+# This configuration runs in dry-run mode to preview changes without applying
+dry-run-testing:
+  rightsizerConfig:
+    create: true
+    enabled: true
+    mode: "adaptive"
+    dryRun: true  # Only log recommendations, don't apply changes
+
+    sizingStrategy:
+      algorithm: "percentile"
+      lookbackPeriod: "7d"
+      percentile: 95
+
+    logging:
+      level: "debug"  # Verbose logging for analysis
+      format: "json"
+      enableAudit: true
+      auditLogPath: "/var/log/right-sizer/dry-run-audit.log"
+
+    namespaceConfig:
+      includeNamespaces:
+        - "staging"
+
+# ============================================================================
+# EXAMPLE 5: Namespace-Specific Configuration
+# ============================================================================
+# This configuration targets specific namespaces with different settings
+namespace-specific:
+  rightsizerConfig:
+    create: true
+    enabled: true
+    mode: "custom"
+
+    # Default conservative settings
+    resourceDefaults:
+      cpu:
+        requestToLimitRatio: 2.5
+      memory:
+        requestToLimitRatio: 2.0
+
+    namespaceConfig:
+      includeNamespaces:
+        - "frontend"  # UI services - can be more aggressive
+        - "backend"   # API services - moderate optimization
+        - "database"  # Database services - conservative
+      excludeNamespaces:
+        - kube-system
+        - kube-public
+        - kube-node-lease
+        - monitoring
+        - logging
+
+    # You would typically create separate RightSizerPolicy resources
+    # for each namespace with different settings
+
+# ============================================================================
+# EXAMPLE 6: Scheduled Maintenance Window
+# ============================================================================
+# This configuration only performs resizing during maintenance windows
+scheduled-maintenance:
+  rightsizerConfig:
+    create: true
+    enabled: true
+    mode: "balanced"
+
+    operationalConfig:
+      resizeMode: "Rolling"
+      resizeInterval: "10m"
+      batchSize: 3
+      concurrentOperations: 1
+
+      maintenanceWindow:
+        enabled: true
+        schedule: "0 2 * * 1,3,5"  # Monday, Wednesday, Friday at 2 AM
+        duration: "3h"
+        timezone: "America/New_York"
+
+    notifications:
+      enabled: true
+      channels:
+        - type: "email"
+          email: "ops-team@example.com"
+
+# ============================================================================
+# EXAMPLE 7: Development Environment with Minimal Resources
+# ============================================================================
+# This configuration minimizes resource usage for development environments
+development-minimal:
+  image:
+    pullPolicy: Always  # Always pull latest for dev
+
+  resources:
+    limits:
+      cpu: 200m
+      memory: 256Mi
+    requests:
+      cpu: 50m
+      memory: 64Mi
+
+  rightsizerConfig:
+    create: true
+    enabled: true
+    mode: "aggressive"
+    dryRun: false
+
+    resourceDefaults:
+      cpu:
+        defaultRequest: "10m"
+        defaultLimit: "200m"
+        minRequest: "5m"
+        maxLimit: "500m"
+      memory:
+        defaultRequest: "32Mi"
+        defaultLimit: "256Mi"
+        minRequest: "16Mi"
+        maxLimit: "512Mi"
+
+    operationalConfig:
+      resizeMode: "InPlace"
+      resizeInterval: "30s"  # Very frequent for testing
+      batchSize: 50
+      concurrentOperations: 20
+
+    logging:
+      level: "debug"
+      format: "text"  # Easier to read in development
+
+# ============================================================================
+# EXAMPLE 8: High Availability Production Setup
+# ============================================================================
+# This configuration ensures high availability for the operator itself
+high-availability:
+  replicaCount: 3  # Multiple replicas for HA
+
+  affinity:
+    podAntiAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        - labelSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values:
+                  - right-sizer
+          topologyKey: kubernetes.io/hostname
+
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+    requests:
+      cpu: 500m
+      memory: 512Mi
+
+  rightsizerConfig:
+    create: true
+    enabled: true
+    mode: "balanced"
+
+    operationalConfig:
+      resizeMode: "Rolling"  # Safer for production
+      batchSize: 5
+      concurrentOperations: 3
+      retryAttempts: 5
+      retryBackoff: "exponential"
+
+# ============================================================================
+# Usage Examples:
+# ============================================================================
+#
+# 1. Install with conservative production settings:
+#    helm install right-sizer ./helm -f helm/values-examples.yaml \
+#      --set-json "$(yq eval '.conservative-production' helm/values-examples.yaml -o=json)"
+#
+# 2. Install with aggressive cost optimization:
+#    helm install right-sizer ./helm -f helm/values-examples.yaml \
+#      --set-json "$(yq eval '.aggressive-cost-optimization' helm/values-examples.yaml -o=json)"
+#
+# 3. Install in dry-run mode:
+#    helm install right-sizer ./helm -f helm/values-examples.yaml \
+#      --set-json "$(yq eval '.dry-run-testing' helm/values-examples.yaml -o=json)"
+#
+# 4. Or extract a specific configuration to a separate file:
+#    yq eval '.adaptive-prometheus' helm/values-examples.yaml > my-values.yaml
+#    helm install right-sizer ./helm -f my-values.yaml

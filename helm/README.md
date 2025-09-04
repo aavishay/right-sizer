@@ -64,8 +64,57 @@ kubectl get rightsizerpolicies
 | `rbac.create` | Create RBAC resources | `true` |
 | `metrics.enabled` | Enable Prometheus metrics | `true` |
 | `webhook.enabled` | Enable admission webhooks | `false` |
+| `rightsizerConfig.create` | Create default RightSizerConfig | `true` |
+| `rightsizerConfig.enabled` | Enable right-sizing | `true` |
+| `rightsizerConfig.mode` | Operating mode (adaptive/aggressive/conservative) | `adaptive` |
+| `rightsizerConfig.dryRun` | Dry-run mode (preview only) | `false` |
 
-### Example Configuration
+### RightSizerConfig Parameters
+
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `rightsizerConfig.resourceDefaults.cpu.minRequest` | Minimum CPU request | `10m` |
+| `rightsizerConfig.resourceDefaults.cpu.maxLimit` | Maximum CPU limit | `4000m` |
+| `rightsizerConfig.resourceDefaults.memory.minRequest` | Minimum memory request | `64Mi` |
+| `rightsizerConfig.resourceDefaults.memory.maxLimit` | Maximum memory limit | `8Gi` |
+| `rightsizerConfig.sizingStrategy.algorithm` | Algorithm (percentile/peak/average) | `percentile` |
+| `rightsizerConfig.sizingStrategy.percentile` | Percentile value (if using percentile) | `95` |
+| `rightsizerConfig.operationalConfig.resizeMode` | Resize mode (InPlace/Rolling) | `InPlace` |
+| `rightsizerConfig.operationalConfig.resizeInterval` | How often to check resources | `5m` |
+| `rightsizerConfig.namespaceConfig.excludeNamespaces` | Namespaces to exclude | `[kube-system, kube-public]` |
+
+### Example Configuration</text>
+
+<old_text line=75>
+```yaml
+# values.yaml
+image:
+  repository: aavishay/right-sizer
+  tag: "0.1.3"
+  pullPolicy: IfNotPresent
+
+replicaCount: 1
+
+serviceAccount:
+  create: true
+  name: right-sizer
+
+rbac:
+  create: true
+
+metrics:
+  enabled: true
+
+webhook:
+  enabled: false
+
+# Custom resource configuration
+config:
+  enabled: true
+  mode: balanced
+  resizeInterval: "30s"
+  dryRun: false
+```
 
 ```yaml
 # values.yaml
@@ -119,18 +168,56 @@ config:
 
 ## 🔧 Usage Examples
 
+### Install with Different Profiles
+
+```bash
+# Conservative mode for production
+helm install right-sizer right-sizer/right-sizer \
+  --set rightsizerConfig.mode=conservative \
+  --set rightsizerConfig.sizingStrategy.algorithm=peak \
+  --set rightsizerConfig.operationalConfig.resizeInterval=30m
+
+# Aggressive mode for development
+helm install right-sizer right-sizer/right-sizer \
+  --set rightsizerConfig.mode=aggressive \
+  --set rightsizerConfig.sizingStrategy.algorithm=average \
+  --set rightsizerConfig.operationalConfig.resizeInterval=1m
+
+# Dry-run mode for testing
+helm install right-sizer right-sizer/right-sizer \
+  --set rightsizerConfig.dryRun=true \
+  --set rightsizerConfig.logging.level=debug
+```
+
 ### Basic Configuration
+The Helm chart automatically creates a default RightSizerConfig:
 ```yaml
 apiVersion: rightsizer.io/v1alpha1
 kind: RightSizerConfig
 metadata:
-  name: default
+  name: right-sizer-config
 spec:
   enabled: true
-  defaultMode: balanced
-  resizeInterval: "30s"
+  mode: adaptive
   dryRun: false
-```
+  
+  resourceDefaults:
+    cpu:
+      minRequest: "10m"
+      maxLimit: "4000m"
+    memory:
+      minRequest: "64Mi"
+      maxLimit: "8Gi"
+  
+  sizingStrategy:
+    algorithm: "percentile"
+    percentile: 95
+  
+  operationalConfig:
+    resizeMode: "InPlace"
+    resizeInterval: "5m"
+```</text>
+
 
 ### Workload-Specific Policy
 ```yaml

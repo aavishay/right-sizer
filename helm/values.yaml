@@ -53,3 +53,138 @@ nodeSelector: {}
 tolerations: []
 
 affinity: {}
+
+# RightSizerConfig CRD configuration
+rightsizerConfig:
+  # Create a default RightSizerConfig resource
+  create: true
+
+  # Enable or disable the right-sizer operator
+  enabled: true
+
+  # Operating mode: adaptive, aggressive, conservative, or custom
+  mode: "adaptive"
+
+  # Dry-run mode - only logs recommendations without applying changes
+  dryRun: false
+
+  # Resource defaults and limits
+  resourceDefaults:
+    cpu:
+      defaultRequest: "100m"
+      defaultLimit: "2000m"
+      requestToLimitRatio: 2.0
+      minRequest: "10m"
+      maxLimit: "4000m"
+    memory:
+      defaultRequest: "128Mi"
+      defaultLimit: "2Gi"
+      requestToLimitRatio: 1.5
+      minRequest: "64Mi"
+      maxLimit: "8Gi"
+
+  # Sizing strategy configuration
+  sizingStrategy:
+    # Algorithm: percentile, peak, average
+    algorithm: "percentile"
+    # Historical data analysis period
+    lookbackPeriod: "7d"
+    # Metrics sampling interval
+    sampleInterval: "1m"
+    # Percentile to use (if algorithm is percentile)
+    percentile: 95
+
+    # Scaling factors
+    scalingFactors:
+      # Multiplier for scaling up resources
+      scaleUpMultiplier: 1.2
+      # Multiplier for scaling down resources
+      scaleDownMultiplier: 0.9
+      # Minimum percentage change required to trigger resize
+      minChangeThreshold: 10
+
+    # Buffer/burst capacity configuration
+    burstCapacity:
+      # Additional CPU capacity for bursts (percentage)
+      cpuBurstPercentage: 30
+      # Additional memory capacity for bursts (percentage)
+      memoryBurstPercentage: 20
+
+  # Monitoring configuration
+  monitoring:
+    # Metrics provider: metrics-server, prometheus
+    metricsProvider: "metrics-server"
+    # prometheusURL: "http://prometheus:9090"  # Optional
+    scrapeInterval: "30s"
+    retentionPeriod: "30d"
+
+  # Operational configuration
+  operationalConfig:
+    # Resize mode: InPlace (for k8s 1.27+) or Rolling
+    resizeMode: "InPlace"
+    # How often to check and resize resources
+    resizeInterval: "5m"
+    # Number of workloads to process in a batch
+    batchSize: 10
+    # Number of concurrent resize operations
+    concurrentOperations: 5
+    # Retry configuration
+    retryAttempts: 3
+    retryBackoff: "exponential"
+
+    # Maintenance window configuration (optional)
+    maintenanceWindow:
+      enabled: false
+      schedule: "0 2 * * *" # 2 AM daily
+      duration: "2h"
+      timezone: "UTC"
+
+  # Namespace configuration
+  namespaceConfig:
+    # Namespaces to include for right-sizing (empty means all)
+    includeNamespaces: []
+    # - "default"
+    # - "production"
+
+    # Namespaces to exclude from right-sizing
+    excludeNamespaces:
+      - kube-system
+      - kube-public
+      - kube-node-lease
+      # The operator's own namespace is automatically excluded
+
+  # Logging configuration
+  logging:
+    level: "info" # debug, info, warn, error
+    format: "json" # json, text
+    enableAudit: true
+    # auditLogPath: "/var/log/right-sizer/audit.log"  # Optional
+
+  # Notification configuration (optional)
+  notifications:
+    enabled: false
+    channels: []
+    # Example configurations:
+    # channels:
+    #   - type: "slack"
+    #     slack:
+    #       webhook: "https://hooks.slack.com/services/YOUR/WEBHOOK/URL"
+    #       channel: "#right-sizer-alerts"
+    #   - type: "webhook"
+    #     webhook: "https://your-webhook-endpoint.com/alerts"
+    #   - type: "email"
+    #     email: "ops-team@example.com"
+
+  # Custom annotations to add to modified workloads
+  annotations: {}
+  # Example:
+  # annotations:
+  #   right-sizer.io/last-modified: "timestamp"
+  #   right-sizer.io/reason: "optimization"
+
+  # Custom labels to add to modified workloads
+  labels: {}
+  # Example:
+  # labels:
+  #   managed-by: "right-sizer"
+  #   optimization-status: "active"
