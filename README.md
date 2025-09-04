@@ -85,7 +85,7 @@ Right-Sizer is a Kubernetes operator that automatically optimizes pod resource a
 
 ### 🚀 Core Functionality
 - **In-Place Pod Resizing** (Kubernetes 1.33+): Zero-downtime resource adjustments - **right-sizer does not restart any pods**
-- **Multiple Sizing Strategies**: Adaptive, conservative, aggressive, and custom modes
+- **Multiple Sizing Strategies**: adaptive, conservative, aggressive, and custom modes
 - **Multi-Source Metrics**: Supports Metrics Server and Prometheus
 - **Intelligent Validation**: Respects node capacity, quotas, and limit ranges
 - **Batch Processing**: Efficient handling of large-scale deployments

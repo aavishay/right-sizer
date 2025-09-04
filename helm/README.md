@@ -150,7 +150,7 @@ config:
 
 ### 🚀 Core Functionality
 - **Zero-downtime resizing** with Kubernetes 1.33+ in-place updates
-- **Multi-strategy optimization**: Adaptive, conservative, aggressive modes
+- **Multi-strategy optimization**: adaptive, conservative, aggressive modes
 - **Multi-source metrics**: Metrics Server and Prometheus support
 - **Intelligent validation**: Respects node capacity and quotas
 
@@ -200,7 +200,7 @@ spec:
   enabled: true
   mode: adaptive
   dryRun: false
-  
+
   resourceDefaults:
     cpu:
       minRequest: "10m"
@@ -208,11 +208,11 @@ spec:
     memory:
       minRequest: "64Mi"
       maxLimit: "8Gi"
-  
+
   sizingStrategy:
     algorithm: "percentile"
     percentile: 95
-  
+
   operationalConfig:
     resizeMode: "InPlace"
     resizeInterval: "5m"
