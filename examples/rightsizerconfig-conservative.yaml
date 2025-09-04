@@ -1,0 +1,170 @@
+# Conservative RightSizerConfig to reduce Kubernetes API load
+# This configuration prioritizes stability and minimal API impact
+apiVersion: rightsizer.io/v1alpha1
+kind: RightSizerConfig
+metadata:
+  name: right-sizer-config-conservative
+spec:
+  # Core configuration - Conservative settings
+  enabled: true
+  defaultMode: "conservative"        # Use conservative sizing mode
+  resizeInterval: "30m"              # Check every 30 minutes (reduce API calls)
+  dryRun: true                       # Start with dry-run to observe behavior
+
+  # Default resource sizing strategy - Conservative approach
+  defaultResourceStrategy:
+    cpu:
+      requestMultiplier: 1.5        # More buffer for CPU (50% above usage)
+      requestAddition: 20           # Add 20m minimum buffer
+      limitMultiplier: 2.5          # Conservative limit (2.5x request)
+      limitAddition: 50             # Additional limit buffer
+      minRequest: 50                # Higher minimum to avoid tiny allocations
+      maxLimit: 2000                # Lower max to prevent huge allocations
+      scaleUpThreshold: 0.85        # Only scale up at 85% utilization
+      scaleDownThreshold: 0.20      # Only scale down below 20% utilization
+    memory:
+      requestMultiplier: 1.4        # 40% buffer for memory
+      requestAddition: 128          # Add 128MB minimum buffer
+      limitMultiplier: 2.0          # Conservative limit (2x request)
+      limitAddition: 256            # Additional memory buffer
+      minRequest: 128               # Higher minimum memory
+      maxLimit: 4096                # Reasonable max memory (4GB)
+      scaleUpThreshold: 0.85        # Only scale up at 85% utilization
+      scaleDownThreshold: 0.25      # Only scale down below 25% utilization
+    historyWindow: "14d"            # Look at 2 weeks of data for stability
+    algorithm: "percentile"
+    percentile: 98                  # Use 98th percentile (more conservative)
+
+  # Global constraints - Strict limits to reduce changes
+  globalConstraints:
+    maxChangePercentage: 30         # Maximum 30% change per update
+    minChangeThreshold: 20          # Only update if change is >20%
+    maxMemoryGB: 8                  # Cap at 8GB memory
+    maxCPUCores: 4                  # Cap at 4 CPU cores
+    preventOOMKill: true            # Always prevent OOM scenarios
+    respectPodDisruptionBudget: true
+
+  # Operational configuration - Reduce API load
+  operationalConfig:
+    batchSize: 3                    # Process only 3 pods at a time
+    batchDelaySeconds: 10           # Wait 10 seconds between batches
+    maxConcurrentUpdates: 2         # Max 2 concurrent pod updates
+    cooldownPeriod: "5m"            # Wait 5 minutes between resize cycles
+    retryAttempts: 2                # Fewer retry attempts
+    retryBackoffSeconds: 30         # Longer backoff between retries
+
+  # Rate limiting configuration
+  rateLimiting:
+    enabled: true
+    requestsPerSecond: 2            # Max 2 API requests per second
+    burst: 5                        # Allow burst of 5 requests
+
+  # Metrics configuration
+  metricsConfig:
+    provider: "metrics-server"
+    scrapeInterval: "60s"           # Less frequent metric collection
+    minDataPoints: 10               # Require more data points before acting
+    staleDataThresholdMinutes: 15   # Ignore data older than 15 minutes
+
+  # Operator configuration
+  operatorConfig:
+    leaderElection: true
+    syncPeriod: "60s"               # Longer sync period
+    maxConcurrentReconciles: 2      # Fewer concurrent reconciles
+    workerThreads: 5                # Fewer worker threads
+    qps: 10                         # Lower QPS limit
+    burst: 15                       # Lower burst limit
+    healthProbePort: 8081
+
+  # Namespace configuration - Exclude busy/critical namespaces
+  namespaceConfig:
+    # Only include specific namespaces that need rightsizing
+    includeNamespaces:
+      - "default"
+      - "development"
+      - "staging"
+      - "memory-test"
+
+    # Exclude all system and critical namespaces
+    excludeNamespaces:
+      - "kube-system"
+      - "kube-public"
+      - "kube-node-lease"
+      - "cert-manager"
+      - "ingress-nginx"
+      - "istio-system"
+      - "right-sizer"
+      - "prometheus"
+      - "mongodb"
+      - "redis"
+      - "rook-ceph"
+      - "datadog"
+      - "ox-security"  # Exclude busy namespace causing issues
+
+  # Pod filtering - Skip problematic pod types
+  podFilters:
+    skipPodPatterns:
+      - ".*-job-.*"                 # Skip job pods
+      - ".*-cronjob-.*"             # Skip cronjob pods
+      - ".*-canary-.*"              # Skip canary deployments
+      - ".*-test-.*"                # Skip test pods
+    skipPodWithAnnotations:
+      - "rightsizer.io/exclude=true"
+      - "kritical.io/pod=true"
+    minPodAgeMinutes: 60            # Only resize pods older than 1 hour
+    requireStableMetrics: true      # Require stable metrics before resizing
+
+  # Memory decrease handling
+  memoryHandling:
+    strategy: "cpu-only"            # Only update CPU when memory would decrease
+    trackPendingDecreases: true     # Track pods needing memory decrease
+    logMemorySkips: true            # Log when memory updates are skipped
+
+  # Workload-specific configurations
+  workloadConfig:
+    deployment:
+      enabled: true
+      minReplicas: 2                # Only resize deployments with 2+ replicas
+    statefulset:
+      enabled: false                # Disable StatefulSet resizing
+    daemonset:
+      enabled: false                # Disable DaemonSet resizing
+    job:
+      enabled: false                # Disable Job resizing
+
+  # QoS handling
+  qosConfig:
+    preserveGuaranteedQoS: true     # Always preserve Guaranteed QoS
+    skipBestEffortPods: true        # Don't resize BestEffort pods
+    maintainQoSClass: true          # Never change QoS class
+
+  # Safety features
+  safetyConfig:
+    enableCircuitBreaker: true      # Stop if too many failures
+    circuitBreakerThreshold: 5      # Stop after 5 consecutive failures
+    circuitBreakerResetMinutes: 30  # Reset circuit breaker after 30 minutes
+    enableEmergencyStop: true       # Allow emergency stop via annotation
+    validateBeforeApply: true       # Validate all changes before applying
+
+  # Logging configuration
+  observabilityConfig:
+    logLevel: "info"                # Info level logging
+    logFormat: "json"
+    enableAuditLogging: true        # Keep audit trail
+    enableMetricsExport: true
+    metricsPort: 9090
+    suppressRepetitiveLogs: true    # Reduce log spam
+
+  # Notification configuration - Minimal notifications
+  notificationConfig:
+    enableNotifications: false       # Disable notifications for now
+
+  # Feature gates - Conservative feature set
+  featureGates:
+    EnableInPlaceResize: true       # Keep in-place resize
+    EnablePredictiveScaling: false  # Disable predictive features
+    EnableCostOptimization: false   # Disable cost optimization
+    EnableMultiCluster: false       # Single cluster only
+    EnableAutoLearning: false       # No auto-learning
+    EnableWorkloadProfiling: false  # No profiling
+    EnableAdvancedScheduling: false # No advanced scheduling

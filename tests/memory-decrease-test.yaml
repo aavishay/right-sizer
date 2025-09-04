@@ -1,0 +1,149 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: memory-test
+  labels:
+    rightsizer.io/enabled: "true"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: memory-decrease-test
+  namespace: memory-test
+  labels:
+    app: memory-test
+    test: memory-decrease
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: memory-test
+  template:
+    metadata:
+      labels:
+        app: memory-test
+      annotations:
+        rightsizer.io/enabled: "true"
+        rightsizer.io/test: "memory-decrease"
+    spec:
+      containers:
+      - name: stress-high-memory
+        image: polinux/stress
+        command: ["stress"]
+        args:
+          - "--vm"
+          - "1"
+          - "--vm-bytes"
+          - "50M"  # Actually use only 50M
+          - "--vm-hang"
+          - "1"
+          - "--verbose"
+        resources:
+          requests:
+            memory: "256Mi"  # Over-allocated memory (will need decrease)
+            cpu: "200m"      # Over-allocated CPU
+          limits:
+            memory: "256Mi"  # Guaranteed QoS
+            cpu: "200m"
+        resizePolicy:
+        - resourceName: cpu
+          restartPolicy: NotRequired
+        - resourceName: memory
+          restartPolicy: RestartContainer  # Memory decrease requires restart
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cpu-only-resize-test
+  namespace: memory-test
+  labels:
+    app: cpu-test
+    test: cpu-only-resize
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cpu-test
+  template:
+    metadata:
+      labels:
+        app: cpu-test
+      annotations:
+        rightsizer.io/enabled: "true"
+        rightsizer.io/test: "cpu-only-resize"
+    spec:
+      containers:
+      - name: nginx-overprovisioned
+        image: nginx:alpine
+        resources:
+          requests:
+            memory: "512Mi"  # Way over-allocated for nginx
+            cpu: "500m"      # Over-allocated CPU
+          limits:
+            memory: "512Mi"  # Guaranteed QoS
+            cpu: "500m"
+        resizePolicy:
+        - resourceName: cpu
+          restartPolicy: NotRequired
+        - resourceName: memory
+          restartPolicy: RestartContainer
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 5
+          periodSeconds: 5
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: burstable-memory-test
+  namespace: memory-test
+  labels:
+    app: burstable-test
+    test: burstable-memory
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: burstable-test
+  template:
+    metadata:
+      labels:
+        app: burstable-test
+      annotations:
+        rightsizer.io/enabled: "true"
+        rightsizer.io/test: "burstable-memory-decrease"
+    spec:
+      containers:
+      - name: busybox-burstable
+        image: busybox
+        command: ["sh", "-c"]
+        args:
+          - |
+            echo "Starting busybox with memory allocation test..."
+            # Allocate about 20MB of memory
+            dd if=/dev/zero of=/tmp/file bs=1M count=20
+            # Keep the container running
+            while true; do
+              echo "Running... $(date)"
+              sleep 30
+            done
+        resources:
+          requests:
+            memory: "128Mi"  # Over-allocated request
+            cpu: "100m"
+          limits:
+            memory: "256Mi"  # Higher limit (Burstable QoS)
+            cpu: "200m"
+        resizePolicy:
+        - resourceName: cpu
+          restartPolicy: NotRequired
+        - resourceName: memory
+          restartPolicy: RestartContainer
