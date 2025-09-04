@@ -819,7 +819,7 @@ This project is licensed under the **GNU Affero General Public License v3.0 (AGP
 ### Community Support
 
 - 💬 [GitHub Discussions](https://github.com/right-sizer/right-sizer/discussions) - Ask questions, share ideas
-- 🐛 [GitHub Issues](https://github.com/right-sizer/right-sizer/issues) - Report bugs, request features
+- 🐛 [GitHub Issues](https://github.com/aavishay/right-sizer/issues) - Report bugs, request features
 - 📖 [Documentation](./docs) - Comprehensive guides and references
 - 💡 [Examples](./examples) - Sample configurations and use cases
 
