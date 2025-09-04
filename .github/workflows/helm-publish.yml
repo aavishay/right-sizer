@@ -5,7 +5,7 @@ on:
     branches:
       - main
     paths:
-      - 'helm/**'
+      - "helm/**"
   release:
     types: [published]
   workflow_dispatch:
@@ -32,7 +32,7 @@ jobs:
       - name: Install Helm
         uses: azure/setup-helm@v4
         with:
-          version: 'latest'
+          version: "latest"
 
       - name: Get chart version
         id: chart_version
@@ -42,11 +42,12 @@ jobs:
             VERSION="${{ github.event.release.tag_name }}"
             VERSION="${VERSION#v}"  # Remove 'v' prefix if present
           else
-            # Use chart version from Chart.yaml with timestamp for non-release builds
-            VERSION=$(grep '^version:' helm/Chart.yaml | awk '{print $2}')
-            if [[ "${{ github.event_name }}" == "push" ]]; then
-              # Append timestamp for main branch pushes
-              VERSION="${VERSION}-$(date +%Y%m%d%H%M%S)"
+            # Use version from VERSION file
+            if [ -f VERSION ]; then
+              VERSION=$(cat VERSION)
+            else
+              # Fallback to Chart.yaml if VERSION file doesn't exist
+              VERSION=$(grep '^version:' helm/Chart.yaml | awk '{print $2}')
             fi
           fi
           echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
@@ -55,14 +56,15 @@ jobs:
       - name: Update Chart versions
         run: |
           VERSION="${{ steps.chart_version.outputs.VERSION }}"
-          # Update version in Chart.yaml
+          # Update version in Chart.yaml to match VERSION file
           sed -i "s/^version:.*/version: ${VERSION}/" helm/Chart.yaml
 
-          # Update appVersion to match Docker image tag
+          # Update appVersion to match the version
           if [[ "${{ github.event_name }}" == "release" ]]; then
             APP_VERSION="${{ github.event.release.tag_name }}"
           else
-            APP_VERSION="latest"
+            # Use the VERSION for appVersion to ensure consistency
+            APP_VERSION="${VERSION}"
           fi
           sed -i "s/^appVersion:.*/appVersion: \"${APP_VERSION}\"/" helm/Chart.yaml
 

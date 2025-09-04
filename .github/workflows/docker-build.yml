@@ -28,6 +28,26 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Read VERSION file
+        id: version
+        run: |
+          VERSION=$(cat VERSION)
+          echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
+          echo "Version from VERSION file: ${VERSION}"
+
+          # Determine if this is a release or development build
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            # For tags, use the tag version
+            TAG_VERSION="${{ github.ref_name }}"
+            TAG_VERSION="${TAG_VERSION#v}"  # Remove 'v' prefix
+            echo "TAG_VERSION=${TAG_VERSION}" >> $GITHUB_OUTPUT
+            echo "IS_RELEASE=true" >> $GITHUB_OUTPUT
+          else
+            # For non-tags, use VERSION file
+            echo "TAG_VERSION=${VERSION}" >> $GITHUB_OUTPUT
+            echo "IS_RELEASE=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
         with:
@@ -60,14 +80,14 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=raw,value=v${{ github.run_number }}
-            type=raw,value=v${{ github.run_number }}-${{ github.sha }}
-            type=ref,event=branch,suffix=-v${{ github.run_number }}
-            type=ref,event=pr,suffix=-v${{ github.run_number }}
-            type=semver,pattern={{version}},suffix=-v${{ github.run_number }}
+            type=raw,value=${{ steps.version.outputs.VERSION }}
+            type=raw,value=${{ steps.version.outputs.VERSION }}-${{ github.run_number }}
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
             type=raw,value=latest,enable={{is_default_branch}}
-            type=sha,prefix=sha-,format=short
-            type=raw,value={{date 'YYYYMMDD'}}-v${{ github.run_number }}
+            type=sha,prefix=sha-
           labels: |
             org.opencontainers.image.title=Right-Sizer
             org.opencontainers.image.description=Kubernetes operator for automatic pod resource right-sizing
@@ -89,7 +109,7 @@ jobs:
           cache-to: |
             type=inline
           build-args: |
-            VERSION=${{ github.sha }}
+            VERSION=${{ steps.version.outputs.VERSION }}
             BUILD_DATE=${{ github.event.repository.updated_at }}
             TARGETARCH=amd64
             TARGETOS=linux
@@ -110,7 +130,7 @@ jobs:
           cache-to: |
             type=inline
           build-args: |
-            VERSION=${{ github.sha }}
+            VERSION=${{ steps.version.outputs.VERSION }}
             BUILD_DATE=${{ github.event.repository.updated_at }}
             TARGETARCH=amd64
             TARGETOS=linux
@@ -142,7 +162,7 @@ jobs:
           cache-to: |
             type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache,mode=max
           build-args: |
-            VERSION=${{ github.sha }}
+            VERSION=${{ steps.version.outputs.VERSION }}
             BUILD_DATE=${{ github.event.repository.updated_at }}
           provenance: false
           sbom: false
@@ -163,7 +183,7 @@ jobs:
           cache-to: |
             type=inline
           build-args: |
-            VERSION=${{ github.sha }}
+            VERSION=${{ steps.version.outputs.VERSION }}
             BUILD_DATE=${{ github.event.repository.updated_at }}
 
       - name: Run Trivy vulnerability scanner
@@ -209,6 +229,7 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Registry:** \`${{ env.REGISTRY }}\`" >> $GITHUB_STEP_SUMMARY
           echo "**Image:** \`${{ env.IMAGE_NAME }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** \`${{ steps.version.outputs.VERSION }}\`" >> $GITHUB_STEP_SUMMARY
           echo "**Build ID:** \`${{ github.run_number }}\`" >> $GITHUB_STEP_SUMMARY
           echo "**Commit SHA:** \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
           if [ -n "${{ steps.build-multiplatform.outputs.digest }}" ]; then
@@ -226,12 +247,12 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**For AMD64:**" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
-          echo "docker pull --platform linux/amd64 ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:v${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
+          echo "docker pull --platform linux/amd64 ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.VERSION }}" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**For ARM64:**" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
-          echo "docker pull --platform linux/arm64 ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:v${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
+          echo "docker pull --platform linux/arm64 ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.VERSION }}" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Auto-detect platform:**" >> $GITHUB_STEP_SUMMARY
