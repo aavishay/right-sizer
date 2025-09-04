@@ -564,21 +564,24 @@ func (r *AdaptiveRightSizer) updatePodInPlace(ctx context.Context, update Resour
 
 	var patchOps []JSONPatchOp
 
-	// Patch requests
-	if update.NewResources.Requests != nil {
+	// Ensure safe resource patch - never try to remove existing resources
+	safeResources := ensureSafeResourcePatchAdaptive(*currentResources, update.NewResources)
+
+	// Patch requests only if they exist and are different
+	if safeResources.Requests != nil && len(safeResources.Requests) > 0 {
 		patchOps = append(patchOps, JSONPatchOp{
 			Op:    "replace",
 			Path:  fmt.Sprintf("/spec/containers/%d/resources/requests", containerIndex),
-			Value: update.NewResources.Requests,
+			Value: safeResources.Requests,
 		})
 	}
 
-	// Patch limits
-	if update.NewResources.Limits != nil {
+	// Patch limits only if they exist and are different
+	if safeResources.Limits != nil && len(safeResources.Limits) > 0 {
 		patchOps = append(patchOps, JSONPatchOp{
 			Op:    "replace",
 			Path:  fmt.Sprintf("/spec/containers/%d/resources/limits", containerIndex),
-			Value: update.NewResources.Limits,
+			Value: safeResources.Limits,
 		})
 	}
 
@@ -1149,4 +1152,51 @@ func SetupAdaptiveRightSizer(mgr manager.Manager, provider metrics.Provider, dry
 	}()
 
 	return nil
+}
+
+// ensureSafeResourcePatchAdaptive ensures the patch never tries to remove existing resource fields
+// This is the adaptive rightsizer version of the safety function
+func ensureSafeResourcePatchAdaptive(current, desired corev1.ResourceRequirements) corev1.ResourceRequirements {
+	logger.Info("🛡️  Ensuring safe resource patch (adaptive)...")
+
+	result := desired.DeepCopy()
+
+	// Always ensure Requests map exists and has both CPU and Memory
+	if result.Requests == nil {
+		result.Requests = make(corev1.ResourceList)
+		logger.Info("   📝 Created new Requests map")
+	}
+	if _, exists := result.Requests[corev1.ResourceCPU]; !exists {
+		if cpuReq, exists := current.Requests[corev1.ResourceCPU]; exists && !cpuReq.IsZero() {
+			result.Requests[corev1.ResourceCPU] = cpuReq
+			logger.Info("   🔄 Preserved existing CPU request: %s", cpuReq.String())
+		}
+	}
+	if _, exists := result.Requests[corev1.ResourceMemory]; !exists {
+		if memReq, exists := current.Requests[corev1.ResourceMemory]; exists && !memReq.IsZero() {
+			result.Requests[corev1.ResourceMemory] = memReq
+			logger.Info("   🔄 Preserved existing Memory request: %s", memReq.String())
+		}
+	}
+
+	// Always ensure Limits map exists and has both CPU and Memory
+	if result.Limits == nil {
+		result.Limits = make(corev1.ResourceList)
+		logger.Info("   📝 Created new Limits map")
+	}
+	if _, exists := result.Limits[corev1.ResourceCPU]; !exists {
+		if cpuLim, exists := current.Limits[corev1.ResourceCPU]; exists && !cpuLim.IsZero() {
+			result.Limits[corev1.ResourceCPU] = cpuLim
+			logger.Info("   🔄 Preserved existing CPU limit: %s", cpuLim.String())
+		}
+	}
+	if _, exists := result.Limits[corev1.ResourceMemory]; !exists {
+		if memLim, exists := current.Limits[corev1.ResourceMemory]; exists && !memLim.IsZero() {
+			result.Limits[corev1.ResourceMemory] = memLim
+			logger.Info("   🔄 Preserved existing Memory limit: %s", memLim.String())
+		}
+	}
+
+	logger.Info("✅ Safe resource patch completed (adaptive)")
+	return *result
 }
