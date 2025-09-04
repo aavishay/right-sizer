@@ -22,13 +22,13 @@
 
 ```bash
 # Install directly from Docker Hub OCI registry
-helm install right-sizer oci://docker.io/aavishay/right-sizer \
+helm install right-sizer oci://registry-1.docker.io/aavishay/right-sizer \
   --version 0.1.6 \
   --namespace right-sizer \
   --create-namespace
 
 # Install with custom values
-helm install right-sizer oci://docker.io/aavishay/right-sizer \
+helm install right-sizer oci://registry-1.docker.io/aavishay/right-sizer \
   --version 0.1.6 \
   --namespace right-sizer \
   --create-namespace \
