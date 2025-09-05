@@ -3,7 +3,7 @@ entries:
   right-sizer:
   - apiVersion: v2
     appVersion: 0.1.13
-    created: "2025-09-06T00:54:59.949737+03:00"
+    created: "2025-09-06T01:07:26.640737+03:00"
     description: A Helm chart for Kubernetes Right-Sizer operator
     digest: 61f86c38ba7f195845d0552a8db37990940af40f01ef0f706701205dfebcdd05
     home: https://github.com/aavishay/right-sizer
@@ -24,4 +24,188 @@ entries:
     urls:
     - right-sizer-0.1.13.tgz
     version: 0.1.13
-generated: "2025-09-06T00:54:59.948218+03:00"
+  - apiVersion: v2
+    appVersion: 0.1.12
+    created: "2025-09-06T01:07:26.639551+03:00"
+    description: A Helm chart for Kubernetes Right-Sizer operator
+    digest: d62b4e4bec119fbe2c313d92c02803d3108ce9626062ce6bdb6df994468b7582
+    home: https://github.com/aavishay/right-sizer
+    icon: https://raw.githubusercontent.com/aavishay/right-sizer/main/docs/assets/icon.svg
+    keywords:
+    - kubernetes
+    - operator
+    - right-sizing
+    - resources
+    - autoscaling
+    maintainers:
+    - email: maintainers@right-sizer.dev
+      name: Right-Sizer Contributors
+    name: right-sizer
+    sources:
+    - https://github.com/aavishay/right-sizer
+    type: application
+    urls:
+    - right-sizer-0.1.12.tgz
+    version: 0.1.12
+  - apiVersion: v2
+    appVersion: 0.1.11
+    created: "2025-09-06T01:07:26.638748+03:00"
+    description: A Helm chart for Kubernetes Right-Sizer operator
+    digest: 8e16d354c4ddde1ffcca96cad2ca31e72f97e64d37ea221221b9f0ecad36b741
+    home: https://github.com/aavishay/right-sizer
+    icon: https://raw.githubusercontent.com/aavishay/right-sizer/main/docs/assets/icon.svg
+    keywords:
+    - kubernetes
+    - operator
+    - right-sizing
+    - resources
+    - autoscaling
+    maintainers:
+    - email: maintainers@right-sizer.dev
+      name: Right-Sizer Contributors
+    name: right-sizer
+    sources:
+    - https://github.com/aavishay/right-sizer
+    type: application
+    urls:
+    - right-sizer-0.1.11.tgz
+    version: 0.1.11
+  - apiVersion: v2
+    appVersion: 0.1.10
+    created: "2025-09-06T01:07:26.637952+03:00"
+    description: A Helm chart for Kubernetes Right-Sizer operator
+    digest: 1f47233d826074023dffad351268dc04ce9159de8905ccb41d9b473b3204806d
+    home: https://github.com/aavishay/right-sizer
+    icon: https://raw.githubusercontent.com/aavishay/right-sizer/main/docs/assets/icon.svg
+    keywords:
+    - kubernetes
+    - operator
+    - right-sizing
+    - resources
+    - autoscaling
+    maintainers:
+    - email: maintainers@right-sizer.dev
+      name: Right-Sizer Contributors
+    name: right-sizer
+    sources:
+    - https://github.com/aavishay/right-sizer
+    type: application
+    urls:
+    - right-sizer-0.1.10.tgz
+    version: 0.1.10
+  - apiVersion: v2
+    appVersion: 0.1.9
+    created: "2025-09-06T01:07:26.645268+03:00"
+    description: A Helm chart for Kubernetes Right-Sizer operator
+    digest: cb13199101d5d64ac1ad6596e1f3b057cdc1c79e24c2e990ff51a30f70bfcc9c
+    home: https://github.com/aavishay/right-sizer
+    icon: https://raw.githubusercontent.com/aavishay/right-sizer/main/docs/assets/icon.svg
+    keywords:
+    - kubernetes
+    - operator
+    - right-sizing
+    - resources
+    - autoscaling
+    maintainers:
+    - email: maintainers@right-sizer.dev
+      name: Right-Sizer Contributors
+    name: right-sizer
+    sources:
+    - https://github.com/aavishay/right-sizer
+    type: application
+    urls:
+    - right-sizer-0.1.9.tgz
+    version: 0.1.9
+  - apiVersion: v2
+    appVersion: 0.1.8
+    created: "2025-09-06T01:07:26.644472+03:00"
+    description: A Helm chart for Kubernetes Right-Sizer operator
+    digest: 0e870dcdf6db5e4e121baf0b81ab274581f67deeb6d20969572c049e5a3eb2ea
+    home: https://github.com/aavishay/right-sizer
+    icon: https://raw.githubusercontent.com/aavishay/right-sizer/main/docs/assets/icon.svg
+    keywords:
+    - kubernetes
+    - operator
+    - right-sizing
+    - resources
+    - autoscaling
+    maintainers:
+    - email: maintainers@right-sizer.dev
+      name: Right-Sizer Contributors
+    name: right-sizer
+    sources:
+    - https://github.com/aavishay/right-sizer
+    type: application
+    urls:
+    - right-sizer-0.1.8.tgz
+    version: 0.1.8
+  - apiVersion: v2
+    appVersion: 0.1.7
+    created: "2025-09-06T01:07:26.643611+03:00"
+    description: A Helm chart for Kubernetes Right-Sizer operator
+    digest: 5484766487a07dd98ae7b1fee901537f231edec2213f58cdba245c685e8d7e5c
+    home: https://github.com/aavishay/right-sizer
+    icon: https://raw.githubusercontent.com/aavishay/right-sizer/main/docs/assets/icon.svg
+    keywords:
+    - kubernetes
+    - operator
+    - right-sizing
+    - resources
+    - autoscaling
+    maintainers:
+    - email: maintainers@right-sizer.dev
+      name: Right-Sizer Contributors
+    name: right-sizer
+    sources:
+    - https://github.com/aavishay/right-sizer
+    type: application
+    urls:
+    - right-sizer-0.1.7.tgz
+    version: 0.1.7
+  - apiVersion: v2
+    appVersion: 0.1.6
+    created: "2025-09-06T01:07:26.642794+03:00"
+    description: A Helm chart for Kubernetes Right-Sizer operator
+    digest: ee98089704488ce995af3a46b99c68734fb0fa13e82a3cec4c71981c63020085
+    home: https://github.com/aavishay/right-sizer
+    icon: https://raw.githubusercontent.com/aavishay/right-sizer/main/docs/assets/icon.svg
+    keywords:
+    - kubernetes
+    - operator
+    - right-sizing
+    - resources
+    - autoscaling
+    maintainers:
+    - email: maintainers@right-sizer.dev
+      name: Right-Sizer Contributors
+    name: right-sizer
+    sources:
+    - https://github.com/aavishay/right-sizer
+    type: application
+    urls:
+    - right-sizer-0.1.6.tgz
+    version: 0.1.6
+  - apiVersion: v2
+    appVersion: 0.1.5
+    created: "2025-09-06T01:07:26.641903+03:00"
+    description: A Helm chart for Kubernetes Right-Sizer operator
+    digest: 63c2c1d2e3393830d7480b9e3ad579d245767e082a116c7047b6c666b93006b3
+    home: https://github.com/aavishay/right-sizer
+    icon: https://raw.githubusercontent.com/aavishay/right-sizer/main/docs/assets/icon.svg
+    keywords:
+    - kubernetes
+    - operator
+    - right-sizing
+    - resources
+    - autoscaling
+    maintainers:
+    - email: maintainers@right-sizer.dev
+      name: Right-Sizer Contributors
+    name: right-sizer
+    sources:
+    - https://github.com/aavishay/right-sizer
+    type: application
+    urls:
+    - right-sizer-0.1.5.tgz
+    version: 0.1.5
+generated: "2025-09-06T01:07:26.636906+03:00"
