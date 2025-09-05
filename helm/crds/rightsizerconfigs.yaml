@@ -20,7 +20,14 @@ spec:
                   default: true
                 defaultMode:
                   type: string
-                  enum: ["aggressive", "balanced", "conservative", "custom"]
+                  enum:
+                    [
+                      "adaptive",
+                      "aggressive",
+                      "balanced",
+                      "conservative",
+                      "custom",
+                    ]
                   default: "balanced"
                 resizeInterval:
                   type: string

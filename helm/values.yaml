@@ -61,7 +61,7 @@ rightsizerConfig:
 
   # Core configuration
   enabled: true
-  mode: "balanced" # balanced, aggressive, conservative, custom
+  mode: "balanced" # adaptive, aggressive, balanced, conservative, custom
   dryRun: false
 
   # Resource defaults and sizing configuration
