@@ -1,6 +1,6 @@
 name: Update Versions
 
-on:
+"on":
   workflow_dispatch:
     inputs:
       version:

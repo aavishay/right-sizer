@@ -1,6 +1,6 @@
 name: Publish Helm Chart
 
-on:
+"on":
   push:
     branches:
       - main

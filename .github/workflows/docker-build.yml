@@ -1,6 +1,6 @@
 name: Docker Build and Push
 
-on:
+"on":
   push:
     branches:
       - main

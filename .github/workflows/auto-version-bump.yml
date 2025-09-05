@@ -1,14 +1,14 @@
 name: Auto Version Bump
 
-on:
+"on":
   push:
     branches: [main]
     paths-ignore:
-      - 'VERSION'
-      - 'helm/Chart.yaml'
-      - '*.md'
-      - '.github/**'
-      - 'docs/**'
+      - "VERSION"
+      - "helm/Chart.yaml"
+      - "*.md"
+      - ".github/**"
+      - "docs/**"
   workflow_dispatch:
     inputs:
       bump_type:
