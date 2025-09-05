@@ -386,9 +386,3 @@ func (p *MockPrometheusProvider) FetchPodMetrics(ctx context.Context, pod *corev
 func (p *MockPrometheusProvider) IsAvailable() bool {
 	return false // Mock as unavailable for testing
 }
-
-// PodMetrics represents the metrics for a pod
-type PodMetrics struct {
-	CPUUsage    resource.Quantity
-	MemoryUsage resource.Quantity
-}

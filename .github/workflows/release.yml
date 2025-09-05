@@ -90,7 +90,6 @@ jobs:
             zip "right-sizer-${VERSION}-${GOOS}-${GOARCH}.zip" "${BINARY_NAME}" README.md LICENSE
           else
             tar czf "right-sizer-${VERSION}-${GOOS}-${GOARCH}.tar.gz" "${BINARY_NAME}" README.md LICENSE
-          fi
 
       - name: Upload binary artifact
         uses: actions/upload-artifact@v4
@@ -129,16 +128,18 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Get version
+      - name: Get version from VERSION file
         id: version
         run: |
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            VERSION="${{ github.event.inputs.tag }}"
+          # Read version from VERSION file (source of truth)
+          if [ -f VERSION ]; then
+            VERSION=$(cat VERSION)
+            echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
+            echo "Version from VERSION file: ${VERSION}"
           else
-            VERSION="${GITHUB_REF#refs/tags/}"
+            echo "❌ VERSION file not found"
+            exit 1
           fi
-          echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
-          echo "VERSION_SHORT=${VERSION#v}" >> $GITHUB_OUTPUT
 
       - name: Extract metadata
         id: meta
@@ -147,13 +148,14 @@ jobs:
           images: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=semver,pattern={{version}},value=${{ steps.version.outputs.VERSION }}
-            type=semver,pattern={{version}}-v${{ github.run_number }},value=${{ steps.version.outputs.VERSION }}
-            type=semver,pattern={{major}}.{{minor}},value=${{ steps.version.outputs.VERSION }}
-            type=semver,pattern={{major}},value=${{ steps.version.outputs.VERSION }}
-            type=raw,value=v${{ github.run_number }}
+            type=raw,value=${{ steps.version.outputs.VERSION }}
+            type=raw,value=${{ steps.version.outputs.VERSION }}-${{ github.run_number }}
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
             type=raw,value=latest,enable={{is_default_branch}}
-            type=sha,prefix=sha-,format=short
+            type=sha,prefix=sha-
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
@@ -178,20 +180,22 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Get version
+      - name: Get version from VERSION file
         id: version
         run: |
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            VERSION="${{ github.event.inputs.tag }}"
+          # Read version from VERSION file (source of truth)
+          if [ -f VERSION ]; then
+            VERSION=$(cat VERSION)
+            echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
+            echo "Version from VERSION file: ${VERSION}"
           else
-            VERSION="${GITHUB_REF#refs/tags/}"
+            echo "❌ VERSION file not found"
+            exit 1
           fi
-          echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
-          echo "VERSION_SHORT=${VERSION#v}" >> $GITHUB_OUTPUT
 
       - name: Update Helm chart version and documentation
         run: |
-          VERSION="${{ steps.version.outputs.VERSION_SHORT }}"
+          VERSION="${{ steps.version.outputs.VERSION }}"
 
           echo "🏷️ Updating Helm chart and documentation to version $VERSION"
 
@@ -237,7 +241,7 @@ jobs:
 
       - name: Push Helm chart to OCI registry
         run: |
-          VERSION="${{ steps.version.outputs.VERSION_SHORT }}"
+          VERSION="${{ steps.version.outputs.VERSION }}"
 
           echo "🚀 Publishing Helm chart to OCI registry..."
           echo "Chart version: $VERSION"
@@ -293,15 +297,18 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Get version
+      - name: Get version from VERSION file
         id: version
         run: |
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            VERSION="${{ github.event.inputs.tag }}"
+          # Read version from VERSION file (source of truth)
+          if [ -f VERSION ]; then
+            VERSION=$(cat VERSION)
+            echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
+            echo "Version from VERSION file: ${VERSION}"
           else
-            VERSION="${GITHUB_REF#refs/tags/}"
+            echo "❌ VERSION file not found"
+            exit 1
           fi
-          echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
 
       - name: Download all artifacts
         uses: actions/download-artifact@v4
@@ -339,7 +346,7 @@ jobs:
           echo "docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.VERSION }}" >> changelog.md
           echo "" >> changelog.md
           echo "# With build ID" >> changelog.md
-          echo "docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.VERSION }}-v${{ github.run_number }}" >> changelog.md
+          echo "docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.VERSION }}-${{ github.run_number }}" >> changelog.md
           echo "" >> changelog.md
           echo "# By build number" >> changelog.md
           echo "docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:v${{ github.run_number }}" >> changelog.md
@@ -384,7 +391,7 @@ jobs:
           echo "### 🐳 Docker Images" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "- \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.VERSION }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "- \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.VERSION }}-v${{ github.run_number }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.VERSION }}-${{ github.run_number }}\`" >> $GITHUB_STEP_SUMMARY
           echo "- \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:v${{ github.run_number }}\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### 📝 Release Page" >> $GITHUB_STEP_SUMMARY

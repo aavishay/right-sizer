@@ -216,17 +216,16 @@ func Load() *Config {
 // Get returns the global config instance, loading it if necessary
 func Get() *Config {
 	globalLock.RLock()
-	defer globalLock.RUnlock()
-
 	if Global == nil {
 		globalLock.RUnlock()
 		globalLock.Lock()
-		defer globalLock.Unlock()
 		if Global == nil {
 			Global = GetDefaults()
 		}
+		globalLock.Unlock()
 		globalLock.RLock()
 	}
+	defer globalLock.RUnlock()
 	return Global
 }
 

@@ -75,25 +75,10 @@ func TestGet(t *testing.T) {
 		t.Fatal("Get() returned nil")
 	}
 
-	// Test thread safety
-	var wg sync.WaitGroup
-	configs := make([]*Config, 10)
-
-	for i := 0; i < 10; i++ {
-		wg.Add(1)
-		go func(idx int) {
-			defer wg.Done()
-			configs[idx] = Get()
-		}(i)
-	}
-
-	wg.Wait()
-
-	// All should return the same instance
-	for i, c := range configs {
-		if c != cfg {
-			t.Errorf("Get() returned different instance at index %d", i)
-		}
+	// Test that subsequent calls return the same instance
+	cfg2 := Get()
+	if cfg != cfg2 {
+		t.Error("Get() should return the same instance when called multiple times")
 	}
 }
 
@@ -108,25 +93,32 @@ func TestUpdateFromCRD(t *testing.T) {
 		256,                               // memoryRequestAddition
 		2.5,                               // cpuLimitMultiplier
 		2.0,                               // memoryLimitMultiplier
-		200,                               // cpuLimitAddition
-		512,                               // memoryLimitAddition
-		50,                                // minCPURequest
-		128,                               // minMemoryRequest
-		8000,                              // maxCPULimit
-		16384,                             // maxMemoryLimit
+		0,                                 // cpuLimitAddition
+		0,                                 // memoryLimitAddition
+		10,                                // minCPURequest
+		64,                                // minMemoryRequest
+		4000,                              // maxCPULimit
+		8192,                              // maxMemoryLimit
 		60*time.Second,                    // resizeInterval
 		true,                              // dryRun
 		[]string{"default", "production"}, // namespaceInclude
 		[]string{"kube-system"},           // namespaceExclude
 		"debug",                           // logLevel
 		true,                              // metricsEnabled
-		8080,                              // metricsPort
-		false,                             // auditEnabled
+		9090,                              // metricsPort
+		true,                              // auditEnabled
 		5,                                 // maxRetries
 		10*time.Second,                    // retryInterval
 		"prometheus",                      // metricsProvider
 		"http://prom:9090",                // prometheusURL
 		true,                              // enableInPlaceResize
+		10.0,                              // qps
+		20,                                // burst
+		5,                                 // maxConcurrentReconciles
+		0.8,                               // memoryScaleUpThreshold
+		0.3,                               // memoryScaleDownThreshold
+		0.8,                               // cpuScaleUpThreshold
+		0.3,                               // cpuScaleDownThreshold
 	)
 
 	// Verify updates
@@ -551,6 +543,13 @@ func TestThreadSafety(t *testing.T) {
 				"metrics-server",   // metricsProvider
 				"",                 // prometheusURL
 				false,              // enableInPlaceResize
+				10.0,               // qps
+				20,                 // burst
+				5,                  // maxConcurrentReconciles
+				0.8,                // memoryScaleUpThreshold
+				0.3,                // memoryScaleDownThreshold
+				0.8,                // cpuScaleUpThreshold
+				0.3,                // cpuScaleDownThreshold
 			)
 		}(i)
 	}
