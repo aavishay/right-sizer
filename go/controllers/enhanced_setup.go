@@ -87,6 +87,8 @@ func SetupEnhancedInPlaceRightSizer(
 			RestConfig:      restConfig,
 			MetricsProvider: provider,
 			Interval:        cfg.ResizeInterval,
+			resizeCache:     make(map[string]*ResizeDecisionCache),
+			cacheExpiry:     5 * time.Minute, // Cache entries for 5 minutes
 		},
 		ResourceValidator: validator,
 		PolicyEngine:      policyEngine,

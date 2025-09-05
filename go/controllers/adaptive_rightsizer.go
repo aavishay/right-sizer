@@ -37,6 +37,16 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
+// ResizeDecisionCache represents a cached resize decision for a pod container
+type ResizeDecisionCache struct {
+	ContainerKey string // namespace/podname/containername
+	OldCPU       string
+	NewCPU       string
+	OldMemory    string
+	NewMemory    string
+	LastSeen     time.Time
+}
+
 // ScalingDecision represents the scaling action to take
 type ScalingDecision int
 
@@ -65,6 +75,9 @@ type AdaptiveRightSizer struct {
 	updateMutex     sync.Mutex // Prevents concurrent update operations
 	isRunning       bool       // Tracks if a rightsizing operation is in progress
 	runningMutex    sync.Mutex // Protects the isRunning flag
+	resizeCache     map[string]*ResizeDecisionCache
+	cacheMutex      sync.RWMutex
+	cacheExpiry     time.Duration // How long to keep cache entries
 }
 
 // ResourceUpdate represents a pending resource update
@@ -77,6 +90,62 @@ type ResourceUpdate struct {
 	OldResources   corev1.ResourceRequirements
 	NewResources   corev1.ResourceRequirements
 	Reason         string
+}
+
+// shouldLogResizeDecision checks if we should log this resize decision based on cache
+func (r *AdaptiveRightSizer) shouldLogResizeDecision(namespace, podName, containerName, oldCPU, newCPU, oldMemory, newMemory string) bool {
+	containerKey := fmt.Sprintf("%s/%s/%s", namespace, podName, containerName)
+
+	r.cacheMutex.RLock()
+	cached, exists := r.resizeCache[containerKey]
+	r.cacheMutex.RUnlock()
+
+	if !exists {
+		// First time seeing this decision, cache it and allow logging
+		r.cacheResizeDecision(containerKey, oldCPU, newCPU, oldMemory, newMemory)
+		return true
+	}
+
+	// Check if decision has changed or cache has expired
+	now := time.Now()
+	if now.Sub(cached.LastSeen) > r.cacheExpiry ||
+		cached.OldCPU != oldCPU || cached.NewCPU != newCPU ||
+		cached.OldMemory != oldMemory || cached.NewMemory != newMemory {
+		// Decision changed or expired, update cache and allow logging
+		r.cacheResizeDecision(containerKey, oldCPU, newCPU, oldMemory, newMemory)
+		return true
+	}
+
+	// Same decision within cache period, suppress logging
+	return false
+}
+
+// cacheResizeDecision stores or updates a resize decision in the cache
+func (r *AdaptiveRightSizer) cacheResizeDecision(containerKey, oldCPU, newCPU, oldMemory, newMemory string) {
+	r.cacheMutex.Lock()
+	defer r.cacheMutex.Unlock()
+
+	r.resizeCache[containerKey] = &ResizeDecisionCache{
+		ContainerKey: containerKey,
+		OldCPU:       oldCPU,
+		NewCPU:       newCPU,
+		OldMemory:    oldMemory,
+		NewMemory:    newMemory,
+		LastSeen:     time.Now(),
+	}
+}
+
+// cleanExpiredCacheEntries removes expired cache entries
+func (r *AdaptiveRightSizer) cleanExpiredCacheEntries() {
+	r.cacheMutex.Lock()
+	defer r.cacheMutex.Unlock()
+
+	now := time.Now()
+	for key, cached := range r.resizeCache {
+		if now.Sub(cached.LastSeen) > r.cacheExpiry {
+			delete(r.resizeCache, key)
+		}
+	}
 }
 
 // Start begins the adaptive rightsizing loop
@@ -102,6 +171,8 @@ func (r *AdaptiveRightSizer) Start(ctx context.Context) error {
 		select {
 		case <-ticker.C:
 			r.performRightSizing(ctx)
+			// Clean expired cache entries periodically
+			r.cleanExpiredCacheEntries()
 		case <-ctx.Done():
 			log.Println("Stopping adaptive right-sizer")
 			return nil
@@ -290,13 +361,18 @@ func (r *AdaptiveRightSizer) analyzeAllPods(ctx context.Context) ([]ResourceUpda
 					memUsagePercent = (podMetrics.MemMB / memLimit) * 100
 				}
 
-				logger.Info("🔍 Scaling analysis - CPU: %s (usage: %.0fm/%.0fm, %.1f%%), Memory: %s (usage: %.0fMi/%.0fMi, %.1f%%)",
-					scalingDecisionString(scalingDecision.CPU), podMetrics.CPUMilli, cpuLimit, cpuUsagePercent,
-					scalingDecisionString(scalingDecision.Memory), podMetrics.MemMB, memLimit, memUsagePercent)
-				logger.Info("📈 Container %s/%s/%s will be resized - CPU: %s→%s, Memory: %s→%s",
-					pod.Namespace, pod.Name, container.Name,
-					oldCPUReq.String(), newCPUReq.String(),
-					oldMemReq.String(), newMemReq.String())
+				// Check cache before logging to prevent repetitive messages
+				if r.shouldLogResizeDecision(pod.Namespace, pod.Name, container.Name,
+					oldCPUReq.String(), newCPUReq.String(), oldMemReq.String(), newMemReq.String()) {
+
+					logger.Info("🔍 Scaling analysis - CPU: %s (usage: %.0fm/%.0fm, %.1f%%), Memory: %s (usage: %.0fMi/%.0fMi, %.1f%%)",
+						scalingDecisionString(scalingDecision.CPU), podMetrics.CPUMilli, cpuLimit, cpuUsagePercent,
+						scalingDecisionString(scalingDecision.Memory), podMetrics.MemMB, memLimit, memUsagePercent)
+					logger.Info("📈 Container %s/%s/%s will be resized - CPU: %s→%s, Memory: %s→%s",
+						pod.Namespace, pod.Name, container.Name,
+						oldCPUReq.String(), newCPUReq.String(),
+						oldMemReq.String(), newMemReq.String())
+				}
 				updates = append(updates, ResourceUpdate{
 					Namespace:      pod.Namespace,
 					Name:           pod.Name,
@@ -1187,6 +1263,8 @@ func SetupAdaptiveRightSizer(mgr manager.Manager, provider metrics.Provider, dry
 		MetricsProvider: provider,
 		Interval:        cfg.ResizeInterval,
 		DryRun:          dryRun,
+		resizeCache:     make(map[string]*ResizeDecisionCache),
+		cacheExpiry:     5 * time.Minute, // Cache entries for 5 minutes
 	}
 
 	// Start the rightsizer

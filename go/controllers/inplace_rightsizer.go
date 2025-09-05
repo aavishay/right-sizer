@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"sync"
 	"time"
 
 	"right-sizer/config"
@@ -46,6 +47,9 @@ type InPlaceRightSizer struct {
 	MetricsProvider metrics.Provider
 	Interval        time.Duration
 	Validator       *validation.ResourceValidator
+	resizeCache     map[string]*ResizeDecisionCache
+	cacheMutex      sync.RWMutex
+	cacheExpiry     time.Duration // How long to keep cache entries
 }
 
 // PodResizePatch represents the patch structure for the resize subresource
@@ -66,6 +70,62 @@ type ContainerResourcesPatch struct {
 
 // ScalingDecision and ResourceScalingDecision types are defined in adaptive_rightsizer.go
 
+// shouldLogResizeDecision checks if we should log this resize decision based on cache
+func (r *InPlaceRightSizer) shouldLogResizeDecision(namespace, podName, containerName, oldCPU, newCPU, oldMemory, newMemory string) bool {
+	containerKey := fmt.Sprintf("%s/%s/%s", namespace, podName, containerName)
+
+	r.cacheMutex.RLock()
+	cached, exists := r.resizeCache[containerKey]
+	r.cacheMutex.RUnlock()
+
+	if !exists {
+		// First time seeing this decision, cache it and allow logging
+		r.cacheResizeDecision(containerKey, oldCPU, newCPU, oldMemory, newMemory)
+		return true
+	}
+
+	// Check if decision has changed or cache has expired
+	now := time.Now()
+	if now.Sub(cached.LastSeen) > r.cacheExpiry ||
+		cached.OldCPU != oldCPU || cached.NewCPU != newCPU ||
+		cached.OldMemory != oldMemory || cached.NewMemory != newMemory {
+		// Decision changed or expired, update cache and allow logging
+		r.cacheResizeDecision(containerKey, oldCPU, newCPU, oldMemory, newMemory)
+		return true
+	}
+
+	// Same decision within cache period, suppress logging
+	return false
+}
+
+// cacheResizeDecision stores or updates a resize decision in the cache
+func (r *InPlaceRightSizer) cacheResizeDecision(containerKey, oldCPU, newCPU, oldMemory, newMemory string) {
+	r.cacheMutex.Lock()
+	defer r.cacheMutex.Unlock()
+
+	r.resizeCache[containerKey] = &ResizeDecisionCache{
+		ContainerKey: containerKey,
+		OldCPU:       oldCPU,
+		NewCPU:       newCPU,
+		OldMemory:    oldMemory,
+		NewMemory:    newMemory,
+		LastSeen:     time.Now(),
+	}
+}
+
+// cleanExpiredCacheEntries removes expired cache entries
+func (r *InPlaceRightSizer) cleanExpiredCacheEntries() {
+	r.cacheMutex.Lock()
+	defer r.cacheMutex.Unlock()
+
+	now := time.Now()
+	for key, cached := range r.resizeCache {
+		if now.Sub(cached.LastSeen) > r.cacheExpiry {
+			delete(r.resizeCache, key)
+		}
+	}
+}
+
 // Start begins the continuous monitoring and adjustment loop
 func (r *InPlaceRightSizer) Start(ctx context.Context) error {
 	ticker := time.NewTicker(r.Interval)
@@ -82,6 +142,8 @@ func (r *InPlaceRightSizer) Start(ctx context.Context) error {
 		select {
 		case <-ticker.C:
 			r.rightSizeAllPods(ctx)
+			// Clean expired cache entries periodically
+			r.cleanExpiredCacheEntries()
 		case <-ctx.Done():
 			log.Println("Stopping in-place right-sizer")
 			return nil
@@ -260,13 +322,18 @@ func (r *InPlaceRightSizer) rightSizePod(ctx context.Context, pod *corev1.Pod) (
 					memUsagePercent = (usage.MemMB / memLimit) * 100
 				}
 
-				log.Printf("🔍 Scaling analysis - CPU: %s (usage: %.0fm/%.0fm, %.1f%%), Memory: %s (usage: %.0fMi/%.0fMi, %.1f%%)",
-					scalingDecisionString(scalingDecision.CPU), usage.CPUMilli, cpuLimit, cpuUsagePercent,
-					scalingDecisionString(scalingDecision.Memory), usage.MemMB, memLimit, memUsagePercent)
-				log.Printf("📈 Container %s/%s/%s will be resized - CPU: %s→%s, Memory: %s→%s",
-					pod.Namespace, pod.Name, container.Name,
-					oldCPUReq.String(), newCPUReq.String(),
-					oldMemReq.String(), newMemReq.String())
+				// Check cache before logging to prevent repetitive messages
+				if r.shouldLogResizeDecision(pod.Namespace, pod.Name, container.Name,
+					oldCPUReq.String(), newCPUReq.String(), oldMemReq.String(), newMemReq.String()) {
+
+					log.Printf("🔍 Scaling analysis - CPU: %s (usage: %.0fm/%.0fm, %.1f%%), Memory: %s (usage: %.0fMi/%.0fMi, %.1f%%)",
+						scalingDecisionString(scalingDecision.CPU), usage.CPUMilli, cpuLimit, cpuUsagePercent,
+						scalingDecisionString(scalingDecision.Memory), usage.MemMB, memLimit, memUsagePercent)
+					log.Printf("📈 Container %s/%s/%s will be resized - CPU: %s→%s, Memory: %s→%s",
+						pod.Namespace, pod.Name, container.Name,
+						oldCPUReq.String(), newCPUReq.String(),
+						oldMemReq.String(), newMemReq.String())
+				}
 			}
 		}
 	}
@@ -890,6 +957,8 @@ func SetupInPlaceRightSizer(mgr manager.Manager, provider metrics.Provider) erro
 		MetricsProvider: provider,
 		Interval:        cfg.ResizeInterval,
 		Validator:       validator,
+		resizeCache:     make(map[string]*ResizeDecisionCache),
+		cacheExpiry:     5 * time.Minute, // Cache entries for 5 minutes
 	}
 
 	// Start the rightsizer in a goroutine
