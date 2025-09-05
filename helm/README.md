@@ -1,7 +1,7 @@
 # Right-Sizer Operator
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
-[![Version](https://img.shields.io/badge/Version-1.0.0-green.svg)](https://github.com/aavishay/right-sizer/releases)
+[![Version](https://img.shields.io/badge/Version-0.1.9-green.svg)](https://github.com/aavishay/right-sizer/releases)
 [![Kubernetes](https://img.shields.io/badge/Kubernetes-1.33%2B-326ce5)](https://kubernetes.io)
 [![Helm](https://img.shields.io/badge/Helm-3.0%2B-0F1689)](https://helm.sh)
 
@@ -23,13 +23,13 @@
 ```bash
 # Install directly from Docker Hub OCI registry
 helm install right-sizer oci://registry-1.docker.io/aavishay/right-sizer \
-  --version 1.0.0 \
+  --version 0.1.9 \
   --namespace right-sizer \
   --create-namespace
 
 # Install with custom values
 helm install right-sizer oci://registry-1.docker.io/aavishay/right-sizer \
-  --version 1.0.0 \
+  --version 0.1.9 \
   --namespace right-sizer \
   --create-namespace \
   -f custom-values.yaml
