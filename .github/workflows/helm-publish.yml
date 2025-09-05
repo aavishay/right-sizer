@@ -61,6 +61,8 @@ jobs:
               VERSION=$(grep '^version:' helm/Chart.yaml | awk '{print $2}')
             fi
           fi
+          # Add -helm suffix to avoid conflicts with Docker image versions
+          VERSION="${VERSION}-helm"
           echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
           echo "Chart version: ${VERSION}"
 
@@ -124,15 +126,11 @@ jobs:
           CHART_FILE=$(ls right-sizer-${VERSION}.tgz)
 
           if [[ -f "$CHART_FILE" ]]; then
-            # Check if version already exists in registry
-            echo "Checking if version $VERSION already exists in registry..."
-            if helm show chart oci://registry-1.docker.io/aavishay/right-sizer --version $VERSION >/dev/null 2>&1; then
-              echo "⚠️  Version $VERSION already exists in registry. Skipping publish to avoid immutability error."
-              echo "💡 To publish a new version, update the VERSION file with a new version number."
-              exit 0
-            fi
+            # Use separate repository for Helm charts to avoid Docker image conflicts
+            HELM_REPO="oci://registry-1.docker.io/***/right-sizer-helm"
 
             echo "Publishing $CHART_FILE to OCI registry..."
+            echo "Using Helm repository: $HELM_REPO"
 
             # Push to Docker Hub OCI registry
             helm push "$CHART_FILE" oci://registry-1.docker.io/aavishay
@@ -381,18 +379,20 @@ jobs:
           fi
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### 🌐 Repository URL" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
           echo "helm repo add right-sizer https://${{ github.repository_owner }}.github.io/$(basename ${{ github.repository }})/charts" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### 📝 Installation" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
           echo "helm repo update" >> $GITHUB_STEP_SUMMARY
           echo "helm install right-sizer right-sizer/right-sizer" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### 🔗 Links" >> $GITHUB_STEP_SUMMARY
-          echo "- [Helm Repository](https://${{ github.repository_owner }}.github.io/$(basename ${{ github.repository }}))" >> $GITHUB_STEP_SUMMARY
+          echo "- [Helm Repository](https://${{ github.repository_owner }}.github.io/$(basename ${{ github.repository }})/charts)" >> $GITHUB_STEP_SUMMARY
           echo "- [Repository Index](https://${{ github.repository_owner }}.github.io/$(basename ${{ github.repository }})/charts/index.yaml)" >> $GITHUB_STEP_SUMMARY
           echo "- [OCI Registry](https://hub.docker.com/r/aavishay/right-sizer)" >> $GITHUB_STEP_SUMMARY
           echo "- [GitHub Pages Settings](https://github.com/${{ github.repository }}/settings/pages)" >> $GITHUB_STEP_SUMMARY
