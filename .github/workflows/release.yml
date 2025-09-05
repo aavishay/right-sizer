@@ -217,8 +217,12 @@ jobs:
         uses: docker/login-action@v3
         with:
           registry: registry-1.docker.io
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Log in to Helm registry
+        run: |
+          echo "${{ secrets.DOCKERHUB_TOKEN }}" | helm registry login registry-1.docker.io -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
 
       - name: Package Helm chart
         run: |
@@ -232,8 +236,11 @@ jobs:
           echo "🚀 Publishing Helm chart to OCI registry..."
           echo "Chart version: $VERSION"
 
-          # Find the packaged chart file
-          CHART_FILE=$(ls right-sizer-${VERSION}.tgz 2>/dev/null || ls right-sizer-*.tgz | head -1)
+          # The chart file was renamed in the previous step
+          CHART_FILE="right-sizer-helm-${{ steps.version.outputs.VERSION }}.tgz"
+
+          echo "Looking for chart file: $CHART_FILE"
+          ls -la *.tgz
 
           if [[ -f "$CHART_FILE" ]]; then
             echo "Publishing $CHART_FILE to OCI registry..."
