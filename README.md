@@ -24,7 +24,11 @@ Right-Sizer automatically adjusts Kubernetes pod resources based on actual usage
 ```bash
 # Quick Install (Helm)
 helm repo add right-sizer https://aavishay.github.io/right-sizer/charts
-helm install right-sizer right-sizer/right-sizer --namespace right-sizer --create-namespace
+helm repo update
+helm install right-sizer right-sizer/right-sizer \
+  --namespace right-sizer \
+  --create-namespace \
+  --version 0.1.10
 
 # Quick Install (Docker)
 docker pull aavishay/right-sizer:0.1.10  # Specific version
@@ -158,7 +162,8 @@ cd right-sizer
 helm install right-sizer ./helm \
   --namespace right-sizer \
   --create-namespace \
-  --set image.tag=0.1.10
+  --set image.tag=0.1.10 \
+  --version 0.1.10
 ```
 
 #### Option C: Local Development with Custom Build
@@ -193,18 +198,23 @@ helm search repo right-sizer --versions
 
 # Install specific version
 helm install right-sizer right-sizer/right-sizer --version 0.1.10
+
+# Or install from OCI registry
+helm install right-sizer oci://registry-1.docker.io/aavishay/right-sizer --version 0.1.10
 ```
 
 #### Docker Image Tags
 - `latest` - Latest stable build from main branch
-- `0.1.6` - Current release version
-- `v{build-number}` - Specific build version (e.g., v123)
-- `sha-{commit}` - Specific commit SHA
+- `0.1.10` - Current release version
+- `main` - Latest build from main branch
+- `0.1.10-{build-number}` - Specific build version (e.g., 0.1.10-95)
+- `sha-{commit}` - Specific commit SHA (e.g., sha-796f0ce)
 
 ```bash
 # Pull specific version
 docker pull aavishay/right-sizer:0.1.10
 docker pull aavishay/right-sizer:latest
+docker pull aavishay/right-sizer:main
 ```
 
 ### 3️⃣ Configuration Management
@@ -362,6 +372,8 @@ graph LR
 
 ### CI/CD Pipeline
 
+**Current Status:** 🟢 **FULLY OPERATIONAL** - All core workflows working correctly
+
 The project uses GitHub Actions for automated building, testing, and deployment:
 
 #### 🔄 Detailed CI/CD Workflow
@@ -379,29 +391,33 @@ stateDiagram-v2
 #### Automated Workflows
 
 1. **Docker Build & Push** (`docker-build.yml`) ✅ **WORKING**
-   - Triggers: Push to main, PRs, tags
+   - Triggers: Push to main, PRs, manual
    - Multi-architecture builds (amd64, arm64)
    - Automated security scanning with Trivy
    - SBOM generation
    - Push to Docker Hub with tags:
      - `latest` (main branch)
-     - `0.1.6` (current version)
-     - `v{build-number}`
-     - `sha-{commit}`
+     - `0.1.10` (current version)
+     - `main` (latest main build)
+     - `0.1.10-{build-number}` (specific builds)
+     - `sha-{commit}` (commit-specific)
 
-2. **Helm Chart Publishing** (`helm-publish.yml`)
+2. **Helm Chart Publishing** (`helm-publish.yml`) ✅ **WORKING**
    - Triggers: Changes to helm/, releases, manual
-   - Packages Helm charts
-   - Publishes to GitHub Pages
+   - Packages and publishes Helm charts
+   - Publishes to OCI registry and GitHub Pages
    - Maintains version history
    - Generates repository index
 
-3. **Release Pipeline** (`release.yml`)
+3. **Release Pipeline** (`release.yml`) ⚠️ **IM MUTABILITY ISSUES**
    - Triggers: Version tags (v*.*.*)
    - Creates GitHub releases
    - Builds binaries for multiple platforms
    - Generates changelog
-   - Updates Docker tags
+   - May fail due to Docker Hub immutability settings
+
+4. **Auto Version Bump** (`auto-version-bump.yml`) ✅ **WORKING**
+
 
 
 
@@ -449,7 +465,8 @@ helm install right-sizer oci://registry-1.docker.io/aavishay/right-sizer \
 # Development Deployment (Latest)
 docker pull aavishay/right-sizer:0.1.10
 helm install right-sizer right-sizer/right-sizer \
-  --set image.tag=0.1.10
+  --set image.tag=0.1.10 \
+  --version 0.1.10
 
 # GitOps/ArgoCD Integration
 cat <<EOF | kubectl apply -f -
@@ -719,6 +736,12 @@ spec:
 ```bash
 # Use the correct registry URL
 helm install right-sizer oci://registry-1.docker.io/aavishay/right-sizer --version 0.1.10
+```
+```bash
+# If you encounter version conflicts between Docker images and Helm charts:
+# Helm charts use -helm suffix: 0.1.10-helm
+# Docker images use standard version: 0.1.10
+# This prevents immutability conflicts in Docker Hub
 ```
 
 #### 4. CI/CD Pipeline Issues

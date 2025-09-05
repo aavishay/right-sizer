@@ -61,8 +61,6 @@ jobs:
               VERSION=$(grep '^version:' helm/Chart.yaml | awk '{print $2}')
             fi
           fi
-          # Add -helm suffix to avoid conflicts with Docker image versions
-          VERSION="${VERSION}-helm"
           echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
           echo "Chart version: ${VERSION}"
 
@@ -126,11 +124,7 @@ jobs:
           CHART_FILE=$(ls right-sizer-${VERSION}.tgz)
 
           if [[ -f "$CHART_FILE" ]]; then
-            # Use separate repository for Helm charts to avoid Docker image conflicts
-            HELM_REPO="oci://registry-1.docker.io/***/right-sizer-helm"
-
             echo "Publishing $CHART_FILE to OCI registry..."
-            echo "Using Helm repository: $HELM_REPO"
 
             # Push to Docker Hub OCI registry
             helm push "$CHART_FILE" oci://registry-1.docker.io/aavishay
