@@ -28,7 +28,7 @@ helm repo update
 helm install right-sizer right-sizer/right-sizer \
   --namespace right-sizer \
   --create-namespace \
-  --version 0.1.10
+  --version 0.1.10-helm
 
 # Quick Install (Docker)
 docker pull aavishay/right-sizer:0.1.10  # Specific version
@@ -139,13 +139,13 @@ helm repo update
 
 # Install with default configuration
 helm install right-sizer right-sizer/right-sizer \
-  --version 0.1.10 \
+  --version 0.1.10-helm \
   --namespace right-sizer \
   --create-namespace
 
 # Or install with custom values
 helm install right-sizer right-sizer/right-sizer \
-  --version 0.1.10 \
+  --version 0.1.10-helm \
   --namespace right-sizer \
   --create-namespace \
   -f custom-values.yaml
@@ -163,7 +163,7 @@ helm install right-sizer ./helm \
   --namespace right-sizer \
   --create-namespace \
   --set image.tag=0.1.10 \
-  --version 0.1.10
+  --version 0.1.10-helm
 ```
 
 #### Option C: Local Development with Custom Build
@@ -197,10 +197,10 @@ helm install right-sizer ./helm \
 helm search repo right-sizer --versions
 
 # Install specific version
-helm install right-sizer right-sizer/right-sizer --version 0.1.10
+helm install right-sizer right-sizer/right-sizer --version 0.1.10-helm
 
 # Or install from OCI registry
-helm install right-sizer oci://registry-1.docker.io/aavishay/right-sizer --version 0.1.10
+helm install right-sizer oci://registry-1.docker.io/aavishay/right-sizer --version 0.1.10-helm
 ```
 
 #### Docker Image Tags
@@ -246,7 +246,7 @@ helm install right-sizer right-sizer/right-sizer \
 
 # Cost Optimization Focus
 helm install right-sizer right-sizer/right-sizer \
-  --version 0.1.10 \
+  --version 0.1.10-helm \
   --set rightsizerConfig.mode=balanced \
   --set rightsizerConfig.globalConstraints.maxChangePercentage=30
 ```
@@ -284,7 +284,7 @@ kubectl apply -f examples/rightsizerconfig-full.yaml
 ```bash
 # Upgrade to latest version
 helm repo update
-helm upgrade right-sizer right-sizer/right-sizer --version 0.1.10
+helm upgrade right-sizer right-sizer/right-sizer --version 0.1.10-helm
 
 # Uninstall
 helm uninstall right-sizer -n right-sizer
@@ -458,7 +458,7 @@ helm install right-sizer right-sizer/right-sizer \
 
 # OCI Registry Deployment
 helm install right-sizer oci://registry-1.docker.io/aavishay/right-sizer \
-  --version 0.1.10 \
+  --version 0.1.10-helm \
   --namespace right-sizer \
   --create-namespace
 
@@ -466,7 +466,7 @@ helm install right-sizer oci://registry-1.docker.io/aavishay/right-sizer \
 docker pull aavishay/right-sizer:0.1.10
 helm install right-sizer right-sizer/right-sizer \
   --set image.tag=0.1.10 \
-  --version 0.1.10
+  --version 0.1.10-helm
 
 # GitOps/ArgoCD Integration
 cat <<EOF | kubectl apply -f -
@@ -735,7 +735,7 @@ spec:
 #### 4. OCI registry installation fails
 ```bash
 # Use the correct registry URL
-helm install right-sizer oci://registry-1.docker.io/aavishay/right-sizer --version 0.1.10
+helm install right-sizer oci://registry-1.docker.io/aavishay/right-sizer --version 0.1.10-helm
 ```
 ```bash
 # If you encounter version conflicts between Docker images and Helm charts:
