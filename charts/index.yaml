@@ -3,7 +3,7 @@ entries:
   right-sizer:
   - apiVersion: v2
     appVersion: 0.1.10
-    created: "2025-09-05T20:50:09.919451+03:00"
+    created: "2025-09-05T20:50:19.1145+03:00"
     description: A Helm chart for Kubernetes Right-Sizer operator
     digest: 45477f1cc8ad37bf6e68c06afb447b7047f5a5f09e63f9bd98bf5731218a97b5
     home: https://github.com/aavishay/right-sizer
@@ -25,8 +25,31 @@ entries:
     - https://aavishay.github.io/right-sizer/charts/right-sizer-0.1.10.tgz
     version: 0.1.10
   - apiVersion: v2
+    appVersion: 0.1.9
+    created: "2025-09-05T20:50:19.118464+03:00"
+    description: A Helm chart for Kubernetes Right-Sizer operator
+    digest: 8b7e63be4ab71f1482c4dcffb9e9b2de8728c4af818443c4a2b0c8a0a8abc315
+    home: https://github.com/aavishay/right-sizer
+    icon: https://raw.githubusercontent.com/aavishay/right-sizer/main/docs/assets/icon.svg
+    keywords:
+    - kubernetes
+    - operator
+    - right-sizing
+    - resources
+    - autoscaling
+    maintainers:
+    - email: maintainers@right-sizer.dev
+      name: Right-Sizer Contributors
+    name: right-sizer
+    sources:
+    - https://github.com/aavishay/right-sizer
+    type: application
+    urls:
+    - https://aavishay.github.io/right-sizer/charts/right-sizer-0.1.9.tgz
+    version: 0.1.9
+  - apiVersion: v2
     appVersion: 0.1.7
-    created: "2025-09-05T20:50:09.923216+03:00"
+    created: "2025-09-05T20:50:19.117879+03:00"
     description: A Helm chart for Kubernetes Right-Sizer operator
     digest: 1eb1f56b838b74ffd343d958e4999d5decea02f10ec5872c543d7891513f4fb0
     home: https://github.com/aavishay/right-sizer
@@ -49,7 +72,7 @@ entries:
     version: 0.1.7
   - apiVersion: v2
     appVersion: 0.1.6
-    created: "2025-09-05T20:50:09.922325+03:00"
+    created: "2025-09-05T20:50:19.117358+03:00"
     description: A Helm chart for Kubernetes Right-Sizer operator
     digest: 61fee792005a09401901ca3f6884a934a2e4a5e1c7f932eb280b4ad525a68c1b
     home: https://github.com/aavishay/right-sizer
@@ -72,7 +95,7 @@ entries:
     version: 0.1.6
   - apiVersion: v2
     appVersion: 0.1.5
-    created: "2025-09-05T20:50:09.921435+03:00"
+    created: "2025-09-05T20:50:19.116745+03:00"
     description: A Helm chart for Kubernetes Right-Sizer operator
     digest: f97f018f5b5bf38f24e627a2de8fd8f75ccabae068677a39171772166bf95633
     home: https://github.com/aavishay/right-sizer
@@ -95,7 +118,7 @@ entries:
     version: 0.1.5
   - apiVersion: v2
     appVersion: 0.1.4
-    created: "2025-09-05T20:50:09.920991+03:00"
+    created: "2025-09-05T20:50:19.116284+03:00"
     description: A Helm chart for Kubernetes Right-Sizer operator
     digest: 42e217931193b2492d23599a81a0735938886673b368ee0d2537cc53ce856562
     home: https://github.com/aavishay/right-sizer
@@ -118,7 +141,7 @@ entries:
     version: 0.1.4
   - apiVersion: v2
     appVersion: 0.1.3
-    created: "2025-09-05T20:50:09.920537+03:00"
+    created: "2025-09-05T20:50:19.115756+03:00"
     description: A Helm chart for Kubernetes Right-Sizer operator
     digest: 45d8e71bce6395ed3a377abe4e8150117127ea7ef5c4443ce247febfacff2321
     home: https://github.com/aavishay/right-sizer
@@ -158,7 +181,7 @@ entries:
       artifacthub.io/repository: https://github.com/aavishay/right-sizer
     apiVersion: v2
     appVersion: 0.1.2
-    created: "2025-09-05T20:50:09.920311+03:00"
+    created: "2025-09-05T20:50:19.115398+03:00"
     description: A Kubernetes operator for automatic pod resource right-sizing
     digest: b39c5e5ef0ff2617e4f069eed8bed8da25b148d8048cd6956fa98d545b760f58
     home: https://github.com/aavishay/right-sizer
@@ -197,7 +220,7 @@ entries:
       artifacthub.io/repository: https://github.com/aavishay/right-sizer
     apiVersion: v2
     appVersion: 0.1.1
-    created: "2025-09-05T20:50:09.918917+03:00"
+    created: "2025-09-05T20:50:19.113398+03:00"
     description: A Kubernetes operator for automatic pod resource right-sizing
     digest: fd7ece9669415e72eab0b4bbd4e3999a42ac67bcfed611a00a0b0e86474cf4d7
     home: https://github.com/aavishay/right-sizer
@@ -230,7 +253,7 @@ entries:
       artifacthub.io/repository: https://github.com/aavishay/right-sizer
     apiVersion: v2
     appVersion: 0.1.0
-    created: "2025-09-05T20:50:09.918063+03:00"
+    created: "2025-09-05T20:50:19.112521+03:00"
     description: A Kubernetes operator for automatic pod resource right-sizing
     digest: 70a77d98ef1d522841bd9554306435850c0c385ccaf090807624d535a520827d
     home: https://github.com/aavishay/right-sizer
@@ -250,4 +273,4 @@ entries:
     urls:
     - https://aavishay.github.io/right-sizer/charts/right-sizer-0.1.0.tgz
     version: 0.1.0
-generated: "2025-09-05T20:50:09.917196+03:00"
+generated: "2025-09-05T20:50:19.111559+03:00"
