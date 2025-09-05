@@ -743,7 +743,7 @@ func (r *AdaptiveRightSizer) updatePodInPlace(ctx context.Context, update Resour
 	if cpuOnly {
 		newCpuReq := update.NewResources.Requests[corev1.ResourceCPU]
 		currentCpuReq := currentResources.Requests[corev1.ResourceCPU]
-		successMsg = fmt.Sprintf("Successfully resized pod %s/%s (CPU only: %s→%s, memory decrease skipped)",
+		successMsg = fmt.Sprintf("Successfully resized pod %s/%s (CPU only: %s→%s)",
 			update.Namespace, update.Name, currentCpuReq.String(), newCpuReq.String())
 	} else {
 		newCpuReq := update.NewResources.Requests[corev1.ResourceCPU]
