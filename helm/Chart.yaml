@@ -3,8 +3,8 @@ name: right-sizer
 description: A Helm chart for Kubernetes Right-Sizer operator
 type: application
 icon: https://raw.githubusercontent.com/aavishay/right-sizer/main/docs/assets/icon.svg
-version: 0.2.0
-appVersion: "0.2.0"
+version: 0.3.0
+appVersion: "0.3.0"
 keywords:
   - kubernetes
   - operator
