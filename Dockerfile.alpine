@@ -45,7 +45,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 # Alternative base images if gcr.io is unavailable:
 # - alpine:3.18 (requires adding ca-certificates)
 # - scratch (most minimal, requires copying ca-certificates from builder)
-FROM gcr.io/distroless/static-debian11:debug
+FROM gcr.io/distroless/static-debian12:nonroot
 
 # Labels for OCI compliance
 LABEL org.opencontainers.image.title="Right-Sizer" \

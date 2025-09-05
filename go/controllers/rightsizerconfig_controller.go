@@ -185,23 +185,31 @@ func (r *RightSizerConfigReconciler) applyConfiguration(ctx context.Context, rsc
 	memoryLimitAddition := rsc.Spec.DefaultResourceStrategy.Memory.LimitAddition
 
 	minCPURequest := int64(10)
-	if rsc.Spec.DefaultResourceStrategy.CPU.MinRequest != 0 {
-		minCPURequest = rsc.Spec.DefaultResourceStrategy.CPU.MinRequest
+	if rsc.Spec.DefaultResourceStrategy.CPU.MinRequest != "" {
+		if parsed, err := parseResourceQuantity(rsc.Spec.DefaultResourceStrategy.CPU.MinRequest, "cpu"); err == nil {
+			minCPURequest = parsed
+		}
 	}
 
 	minMemoryRequest := int64(64)
-	if rsc.Spec.DefaultResourceStrategy.Memory.MinRequest != 0 {
-		minMemoryRequest = rsc.Spec.DefaultResourceStrategy.Memory.MinRequest
+	if rsc.Spec.DefaultResourceStrategy.Memory.MinRequest != "" {
+		if parsed, err := parseResourceQuantity(rsc.Spec.DefaultResourceStrategy.Memory.MinRequest, "memory"); err == nil {
+			minMemoryRequest = parsed
+		}
 	}
 
 	maxCPULimit := int64(4000)
-	if rsc.Spec.DefaultResourceStrategy.CPU.MaxLimit != 0 {
-		maxCPULimit = rsc.Spec.DefaultResourceStrategy.CPU.MaxLimit
+	if rsc.Spec.DefaultResourceStrategy.CPU.MaxLimit != "" {
+		if parsed, err := parseResourceQuantity(rsc.Spec.DefaultResourceStrategy.CPU.MaxLimit, "cpu"); err == nil {
+			maxCPULimit = parsed
+		}
 	}
 
 	maxMemoryLimit := int64(8192)
-	if rsc.Spec.DefaultResourceStrategy.Memory.MaxLimit != 0 {
-		maxMemoryLimit = rsc.Spec.DefaultResourceStrategy.Memory.MaxLimit
+	if rsc.Spec.DefaultResourceStrategy.Memory.MaxLimit != "" {
+		if parsed, err := parseResourceQuantity(rsc.Spec.DefaultResourceStrategy.Memory.MaxLimit, "memory"); err == nil {
+			maxMemoryLimit = parsed
+		}
 	}
 
 	// Extract scaling thresholds
@@ -507,4 +515,58 @@ func (r *RightSizerConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			MaxConcurrentReconciles: 1, // Only one config should be processed at a time
 		}).
 		Complete(r)
+}
+
+// parseResourceQuantity parses Kubernetes resource quantity strings to int64 values
+func parseResourceQuantity(quantity string, resourceType string) (int64, error) {
+	if quantity == "" {
+		return 0, fmt.Errorf("empty quantity string")
+	}
+
+	// Simple parsing for common cases
+	// For CPU: "10m" -> 10 (millicores), "1" -> 1000 (millicores)
+	// For Memory: "64Mi" -> 64 (MiB), "1Gi" -> 1024 (MiB)
+
+	if resourceType == "cpu" {
+		if quantity[len(quantity)-1:] == "m" {
+			// Parse millicores (e.g., "10m" -> 10)
+			return parseIntFromString(quantity[:len(quantity)-1])
+		}
+		// Assume whole cores, convert to millicores (e.g., "2" -> 2000)
+		if val, err := parseIntFromString(quantity); err == nil {
+			return val * 1000, nil
+		}
+	}
+
+	if resourceType == "memory" {
+		if len(quantity) >= 2 {
+			suffix := quantity[len(quantity)-2:]
+			if suffix == "Mi" {
+				// Parse MiB (e.g., "64Mi" -> 64)
+				return parseIntFromString(quantity[:len(quantity)-2])
+			}
+			if suffix == "Gi" {
+				// Parse GiB, convert to MiB (e.g., "1Gi" -> 1024)
+				if val, err := parseIntFromString(quantity[:len(quantity)-2]); err == nil {
+					return val * 1024, nil
+				}
+			}
+		}
+		// Assume MiB if no suffix
+		return parseIntFromString(quantity)
+	}
+
+	return 0, fmt.Errorf("unknown resource type or format: %s", quantity)
+}
+
+// parseIntFromString is a simple integer parser
+func parseIntFromString(s string) (int64, error) {
+	var result int64
+	for _, ch := range s {
+		if ch < '0' || ch > '9' {
+			return 0, fmt.Errorf("invalid integer: %s", s)
+		}
+		result = result*10 + int64(ch-'0')
+	}
+	return result, nil
 }

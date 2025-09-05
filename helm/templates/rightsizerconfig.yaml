@@ -19,8 +19,8 @@ spec:
       requestAddition: 0
       limitMultiplier: 2.0
       limitAddition: 0
-      minRequest: 10
-      maxLimit: 4000
+      minRequest: "10m"
+      maxLimit: "4000m"
       scaleUpThreshold: 0.8
       scaleDownThreshold: 0.3
     memory:
@@ -28,8 +28,8 @@ spec:
       requestAddition: 0
       limitMultiplier: 2.0
       limitAddition: 0
-      minRequest: 64
-      maxLimit: 8192
+      minRequest: "64Mi"
+      maxLimit: "8192Mi"
       scaleUpThreshold: 0.8
       scaleDownThreshold: 0.3
     historyWindow: "7d"
