@@ -1,8 +1,3 @@
-## [0.1.7] - 2025-09-05
-
-### Added
-- Version update to 0.1.7
-
 # Changelog
 
 All notable changes to the Right Sizer project will be documented in this file.

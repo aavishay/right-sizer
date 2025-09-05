@@ -7,7 +7,7 @@ replicaCount: 1
 image:
   repository: aavishay/right-sizer
   pullPolicy: IfNotPresent
-  # Overrides the image tag whose default is the chart appVersion (0.1.7)
+  # Overrides the image tag whose default is the chart appVersion.
   tag: ""
 
 imagePullSecrets: []
