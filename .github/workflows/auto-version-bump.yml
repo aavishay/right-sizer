@@ -1,0 +1,248 @@
+name: Auto Version Bump
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'VERSION'
+      - 'helm/Chart.yaml'
+      - '*.md'
+      - '.github/**'
+      - 'docs/**'
+  workflow_dispatch:
+    inputs:
+      bump_type:
+        description: "Type of version bump"
+        required: true
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+        default: patch
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  auto-version-bump:
+    runs-on: ubuntu-latest
+    if: "!contains(github.event.head_commit.message, 'skip-version-bump')"
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Set up Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Get current version
+        id: current
+        run: |
+          if [[ -f "VERSION" ]]; then
+            CURRENT_VERSION=$(cat VERSION)
+          elif [[ -f "helm/Chart.yaml" ]]; then
+            CURRENT_VERSION=$(grep '^version:' helm/Chart.yaml | sed 's/version: *//' | tr -d '"')
+          else
+            CURRENT_VERSION="0.1.0"
+            echo "$CURRENT_VERSION" > VERSION
+          fi
+
+          echo "CURRENT_VERSION=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+          echo "Current version: $CURRENT_VERSION"
+
+      - name: Determine bump type
+        id: bump
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            BUMP_TYPE="${{ github.event.inputs.bump_type }}"
+          else
+            # Auto-detect bump type from commit message
+            COMMIT_MSG="${{ github.event.head_commit.message }}"
+            if echo "$COMMIT_MSG" | grep -iE "(breaking|major|BREAKING CHANGE)"; then
+              BUMP_TYPE="major"
+            elif echo "$COMMIT_MSG" | grep -iE "(feat|feature|minor)"; then
+              BUMP_TYPE="minor"
+            else
+              BUMP_TYPE="patch"
+            fi
+          fi
+
+          echo "BUMP_TYPE=$BUMP_TYPE" >> $GITHUB_OUTPUT
+          echo "Bump type: $BUMP_TYPE"
+
+      - name: Calculate new version
+        id: version
+        run: |
+          CURRENT="${{ steps.current.outputs.CURRENT_VERSION }}"
+          BUMP_TYPE="${{ steps.bump.outputs.BUMP_TYPE }}"
+
+          # Parse semantic version
+          if [[ $CURRENT =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)(-.*)?$ ]]; then
+            MAJOR=${BASH_REMATCH[1]}
+            MINOR=${BASH_REMATCH[2]}
+            PATCH=${BASH_REMATCH[3]}
+            PRERELEASE=${BASH_REMATCH[4]}
+          else
+            echo "Invalid version format: $CURRENT"
+            exit 1
+          fi
+
+          # Bump version based on type
+          case $BUMP_TYPE in
+            major)
+              MAJOR=$((MAJOR + 1))
+              MINOR=0
+              PATCH=0
+              ;;
+            minor)
+              MINOR=$((MINOR + 1))
+              PATCH=0
+              ;;
+            patch)
+              PATCH=$((PATCH + 1))
+              ;;
+          esac
+
+          NEW_VERSION="$MAJOR.$MINOR.$PATCH"
+
+          echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "New version: $NEW_VERSION"
+
+      - name: Check if version already exists
+        id: check
+        run: |
+          NEW_VERSION="${{ steps.version.outputs.NEW_VERSION }}"
+
+          if git tag | grep -q "^v$NEW_VERSION$"; then
+            echo "VERSION_EXISTS=true" >> $GITHUB_OUTPUT
+            echo "⚠️ Version v$NEW_VERSION already exists as a tag"
+          else
+            echo "VERSION_EXISTS=false" >> $GITHUB_OUTPUT
+            echo "✅ Version v$NEW_VERSION is available"
+          fi
+
+      - name: Update version files
+        if: steps.check.outputs.VERSION_EXISTS == 'false'
+        run: |
+          NEW_VERSION="${{ steps.version.outputs.NEW_VERSION }}"
+
+          # Update VERSION file
+          echo "$NEW_VERSION" > VERSION
+          echo "✅ Updated VERSION file"
+
+          # Update Helm Chart.yaml
+          if [[ -f "helm/Chart.yaml" ]]; then
+            sed -i "s/^version:.*/version: $NEW_VERSION/" helm/Chart.yaml
+            sed -i "s/^appVersion:.*/appVersion: \"$NEW_VERSION\"/" helm/Chart.yaml
+            echo "✅ Updated Helm Chart.yaml"
+          fi
+
+          # Update any version references in README files
+          if [[ -f "scripts/update-versions.sh" ]]; then
+            chmod +x scripts/update-versions.sh
+            ./scripts/update-versions.sh "$NEW_VERSION" || true
+            echo "✅ Updated documentation versions"
+          fi
+
+      - name: Commit and tag version bump
+        if: steps.check.outputs.VERSION_EXISTS == 'false'
+        run: |
+          NEW_VERSION="${{ steps.version.outputs.NEW_VERSION }}"
+          BUMP_TYPE="${{ steps.bump.outputs.BUMP_TYPE }}"
+
+          # Add changed files
+          git add VERSION helm/Chart.yaml || true
+          git add README.md helm/README.md docs/ || true  # Add any docs that were updated
+
+          # Check if there are changes to commit
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+
+          # Create commit message
+          COMMIT_MSG="chore: bump version to $NEW_VERSION ($BUMP_TYPE) [skip-version-bump]
+
+          - Updated VERSION file: ${{ steps.current.outputs.CURRENT_VERSION }} → $NEW_VERSION
+          - Updated Helm Chart.yaml version and appVersion
+          - Updated documentation references
+
+          Auto-generated by: ${{ github.workflow }}
+          Trigger: ${{ github.event_name }}
+          Bump type: $BUMP_TYPE"
+
+          # Commit changes
+          git commit -m "$COMMIT_MSG"
+
+          # Create and push tag
+          git tag "v$NEW_VERSION" -m "Release v$NEW_VERSION"
+
+          # Push changes and tag
+          git push origin main
+          git push origin "v$NEW_VERSION"
+
+          echo "✅ Version bumped to $NEW_VERSION and tagged"
+
+      - name: Update summary
+        if: steps.check.outputs.VERSION_EXISTS == 'false'
+        run: |
+          NEW_VERSION="${{ steps.version.outputs.NEW_VERSION }}"
+          CURRENT_VERSION="${{ steps.current.outputs.CURRENT_VERSION }}"
+          BUMP_TYPE="${{ steps.bump.outputs.BUMP_TYPE }}"
+
+          echo "## 🏷️ Automatic Version Bump Complete!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📊 Version Update" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Previous Version:** $CURRENT_VERSION" >> $GITHUB_STEP_SUMMARY
+          echo "- **New Version:** $NEW_VERSION" >> $GITHUB_STEP_SUMMARY
+          echo "- **Bump Type:** $BUMP_TYPE" >> $GITHUB_STEP_SUMMARY
+          echo "- **Tag Created:** v$NEW_VERSION" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🚀 Automatic Actions Triggered" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "The tag \`v$NEW_VERSION\` has been created, which will trigger:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- 🐳 **Docker Image Builds** - Multi-architecture images will be built and pushed" >> $GITHUB_STEP_SUMMARY
+          echo "- 📦 **Helm Chart Publishing** - Chart will be packaged and published to OCI registries" >> $GITHUB_STEP_SUMMARY
+          echo "- 📋 **GitHub Release** - Automatic release with artifacts and changelog" >> $GITHUB_STEP_SUMMARY
+          echo "- 🌍 **Multi-Registry Distribution** - Images available on Docker Hub and GHCR" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📦 Available Images" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Once the release workflow completes, the following images will be available:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+          echo "# Version-specific" >> $GITHUB_STEP_SUMMARY
+          echo "docker pull aavishay/right-sizer:$NEW_VERSION" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "# With build number" >> $GITHUB_STEP_SUMMARY
+          echo "docker pull aavishay/right-sizer:$NEW_VERSION-v${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "# Latest (if this is a stable release)" >> $GITHUB_STEP_SUMMARY
+          echo "docker pull aavishay/right-sizer:latest" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📈 Monitoring" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Monitor the release progress:" >> $GITHUB_STEP_SUMMARY
+          echo "- [GitHub Actions](https://github.com/${{ github.repository }}/actions)" >> $GITHUB_STEP_SUMMARY
+          echo "- [Releases](https://github.com/${{ github.repository }}/releases)" >> $GITHUB_STEP_SUMMARY
+          echo "- [Docker Hub](https://hub.docker.com/r/aavishay/right-sizer/tags)" >> $GITHUB_STEP_SUMMARY
+
+      - name: Skip summary (version exists)
+        if: steps.check.outputs.VERSION_EXISTS == 'true'
+        run: |
+          NEW_VERSION="${{ steps.version.outputs.NEW_VERSION }}"
+
+          echo "## ⚠️ Version Bump Skipped" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Version \`v$NEW_VERSION\` already exists as a git tag." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "No version bump was performed." >> $GITHUB_STEP_SUMMARY
