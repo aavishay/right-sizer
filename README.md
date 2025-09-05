@@ -416,11 +416,6 @@ stateDiagram-v2
    - Generates changelog
    - May fail due to Docker Hub immutability settings
 
-4. **Auto Version Bump** (`auto-version-bump.yml`) ✅ **WORKING**
-
-
-
-
 ### Installation Methods Comparison
 
 | Method | Pros | Cons | Best For |
