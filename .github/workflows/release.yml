@@ -213,10 +213,40 @@ jobs:
           echo "✅ Chart version updated to: $(grep '^version:' helm/Chart.yaml | sed 's/version: *//')"
           echo "✅ App version updated to: $(grep '^appVersion:' helm/Chart.yaml | sed 's/appVersion: *//' | tr -d '"')"
 
+      - name: Log in to Docker Hub for OCI
+        uses: docker/login-action@v3
+        with:
+          registry: registry-1.docker.io
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
       - name: Package Helm chart
         run: |
           helm package helm/
           mv right-sizer-*.tgz right-sizer-helm-${{ steps.version.outputs.VERSION }}.tgz
+
+      - name: Push Helm chart to OCI registry
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION_SHORT }}"
+
+          echo "🚀 Publishing Helm chart to OCI registry..."
+          echo "Chart version: $VERSION"
+
+          # Find the packaged chart file
+          CHART_FILE=$(ls right-sizer-${VERSION}.tgz 2>/dev/null || ls right-sizer-*.tgz | head -1)
+
+          if [[ -f "$CHART_FILE" ]]; then
+            echo "Publishing $CHART_FILE to OCI registry..."
+
+            # Push to Docker Hub OCI registry
+            helm push "$CHART_FILE" oci://registry-1.docker.io/aavishay
+          else
+            echo "❌ Chart file not found. Available files:"
+            ls -la *.tgz || echo "No .tgz files found"
+            exit 1
+          fi
+
+          echo "✅ Helm chart published to oci://registry-1.docker.io/aavishay/right-sizer:${VERSION}"
 
       - name: Upload Helm chart artifact
         uses: actions/upload-artifact@v4
