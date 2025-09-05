@@ -1,0 +1,260 @@
+# Test deployment with comprehensive resource constraints for Right-Sizer testing
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: test-workloads
+  labels:
+    right-sizer.io/enabled: "true"
+    environment: test
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-frontend
+  namespace: test-workloads
+  labels:
+    app: web-frontend
+    tier: frontend
+    right-sizer.io/policy: "balanced"
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: web-frontend
+  template:
+    metadata:
+      labels:
+        app: web-frontend
+        tier: frontend
+      annotations:
+        right-sizer.io/mode: "adaptive"
+    spec:
+      containers:
+        - name: frontend
+          image: nginx:1.21-alpine
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              cpu: "50m" # Under-provisioned for testing
+              memory: "32Mi" # Under-provisioned for testing
+              ephemeral-storage: "100Mi"
+            limits:
+              cpu: "200m"
+              memory: "128Mi"
+              ephemeral-storage: "500Mi"
+          env:
+            - name: NGINX_PORT
+              value: "80"
+          volumeMounts:
+            - name: config
+              mountPath: /etc/nginx/conf.d
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 5
+      volumes:
+        - name: config
+          configMap:
+            name: nginx-config
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-backend
+  namespace: test-workloads
+  labels:
+    app: api-backend
+    tier: backend
+    right-sizer.io/policy: "conservative"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: api-backend
+  template:
+    metadata:
+      labels:
+        app: api-backend
+        tier: backend
+      annotations:
+        right-sizer.io/mode: "conservative"
+    spec:
+      containers:
+        - name: api
+          image: httpd:2.4-alpine
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              cpu: "100m" # Over-provisioned for testing
+              memory: "256Mi" # Over-provisioned for testing
+              ephemeral-storage: "200Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+              ephemeral-storage: "1Gi"
+          env:
+            - name: SERVER_PORT
+              value: "80"
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 15
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 10
+            periodSeconds: 10
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: database-proxy
+  namespace: test-workloads
+  labels:
+    app: database-proxy
+    tier: database
+    right-sizer.io/policy: "aggressive"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: database-proxy
+  template:
+    metadata:
+      labels:
+        app: database-proxy
+        tier: database
+      annotations:
+        right-sizer.io/mode: "aggressive"
+        right-sizer.io/memory-target: "70"
+        right-sizer.io/cpu-target: "75"
+    spec:
+      containers:
+        - name: proxy
+          image: busybox:1.35
+          command:
+            - sleep
+            - "3600"
+          resources:
+            requests:
+              cpu: "25m" # Minimal for testing scaling up
+              memory: "16Mi" # Minimal for testing scaling up
+              ephemeral-storage: "50Mi"
+            limits:
+              cpu: "100m"
+              memory: "64Mi"
+              ephemeral-storage: "200Mi"
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: batch-processor
+  namespace: test-workloads
+  labels:
+    app: batch-processor
+    type: job
+spec:
+  template:
+    metadata:
+      labels:
+        app: batch-processor
+        type: job
+      annotations:
+        right-sizer.io/mode: "balanced"
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: processor
+          image: alpine:3.18
+          command:
+            - sh
+            - -c
+            - |
+              echo "Starting batch processing job..."
+              # Simulate CPU and memory usage
+              for i in $(seq 1 300); do
+                echo "Processing batch $i/300"
+                dd if=/dev/zero of=/tmp/test bs=1M count=10 2>/dev/null
+                rm -f /tmp/test
+                sleep 2
+              done
+              echo "Batch processing complete"
+          resources:
+            requests:
+              cpu: "75m"
+              memory: "64Mi"
+              ephemeral-storage: "100Mi"
+            limits:
+              cpu: "300m"
+              memory: "256Mi"
+              ephemeral-storage: "1Gi"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-config
+  namespace: test-workloads
+data:
+  default.conf: |
+    server {
+        listen       80;
+        listen  [::]:80;
+        server_name  localhost;
+
+        location / {
+            root   /usr/share/nginx/html;
+            index  index.html index.htm;
+        }
+
+        location /health {
+            access_log off;
+            return 200 "healthy\n";
+            add_header Content-Type text/plain;
+        }
+
+        error_page   500 502 503 504  /50x.html;
+        location = /50x.html {
+            root   /usr/share/nginx/html;
+        }
+    }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-frontend-service
+  namespace: test-workloads
+spec:
+  selector:
+    app: web-frontend
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: api-backend-service
+  namespace: test-workloads
+spec:
+  selector:
+    app: api-backend
+  ports:
+    - protocol: TCP
+      port: 8080
+      targetPort: 80
+  type: ClusterIP
