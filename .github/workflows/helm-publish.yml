@@ -124,6 +124,14 @@ jobs:
           CHART_FILE=$(ls right-sizer-${VERSION}.tgz)
 
           if [[ -f "$CHART_FILE" ]]; then
+            # Check if version already exists in registry
+            echo "Checking if version $VERSION already exists in registry..."
+            if helm show chart oci://registry-1.docker.io/aavishay/right-sizer --version $VERSION >/dev/null 2>&1; then
+              echo "⚠️  Version $VERSION already exists in registry. Skipping publish to avoid immutability error."
+              echo "💡 To publish a new version, update the VERSION file with a new version number."
+              exit 0
+            fi
+
             echo "Publishing $CHART_FILE to OCI registry..."
 
             # Push to Docker Hub OCI registry
