@@ -189,11 +189,29 @@ jobs:
           echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
           echo "VERSION_SHORT=${VERSION#v}" >> $GITHUB_OUTPUT
 
-      - name: Update Helm chart version
+      - name: Update Helm chart version and documentation
         run: |
           VERSION="${{ steps.version.outputs.VERSION_SHORT }}"
+
+          echo "🏷️ Updating Helm chart and documentation to version $VERSION"
+
+          # Update Helm chart version
           sed -i "s/^version:.*/version: ${VERSION}/" helm/Chart.yaml
           sed -i "s/^appVersion:.*/appVersion: \"${VERSION}\"/" helm/Chart.yaml
+
+          # Update all README files with new version
+          chmod +x scripts/update-versions.sh
+          ./scripts/update-versions.sh "$VERSION" || {
+            echo "⚠️ Version update script failed, but continuing with release"
+            echo "Manual version updates may be needed in documentation"
+          }
+
+          # Show what was updated
+          echo "📊 Updated files:"
+          git status --porcelain | sed 's/^/  /' || echo "  No additional changes from version script"
+
+          echo "✅ Chart version updated to: $(grep '^version:' helm/Chart.yaml | sed 's/version: *//')"
+          echo "✅ App version updated to: $(grep '^appVersion:' helm/Chart.yaml | sed 's/appVersion: *//' | tr -d '"')"
 
       - name: Package Helm chart
         run: |
