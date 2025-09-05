@@ -3,7 +3,7 @@
 # 🎯 Right-Sizer Operator
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
-[![Version](https://img.shields.io/badge/Version-0.1.1-green.svg)](https://github.com/aavishay/right-sizer/releases)
+[![Version](https://img.shields.io/badge/Version-0.1.6-green.svg)](https://github.com/aavishay/right-sizer/releases)
 [![Kubernetes](https://img.shields.io/badge/Kubernetes-1.33%2B-326ce5)](https://kubernetes.io)
 [![Go Version](https://img.shields.io/badge/Go-1.25-00ADD8)](https://golang.org)
 [![Helm](https://img.shields.io/badge/Helm-3.0%2B-0F1689)](https://helm.sh)
@@ -135,11 +135,13 @@ helm repo update
 
 # Install with default configuration
 helm install right-sizer right-sizer/right-sizer \
+  --version 0.1.6 \
   --namespace right-sizer \
   --create-namespace
 
 # Or install with custom values
 helm install right-sizer right-sizer/right-sizer \
+  --version 0.1.6 \
   --namespace right-sizer \
   --create-namespace \
   -f custom-values.yaml
@@ -155,7 +157,8 @@ cd right-sizer
 # Install using Helm with Docker Hub images
 helm install right-sizer ./helm \
   --namespace right-sizer \
-  --create-namespace
+  --create-namespace \
+  --set image.tag=0.1.6
 ```
 
 #### Option C: Local Development with Custom Build
@@ -189,19 +192,19 @@ helm install right-sizer ./helm \
 helm search repo right-sizer --versions
 
 # Install specific version
-helm install right-sizer right-sizer/right-sizer --version 0.1.0
+helm install right-sizer right-sizer/right-sizer --version 0.1.6
 ```
 
 #### Docker Image Tags
 - `latest` - Latest stable build from main branch
+- `0.1.6` - Current release version
 - `v{build-number}` - Specific build version (e.g., v123)
 - `sha-{commit}` - Specific commit SHA
-- `{version}` - Release versions (e.g., v1.0.0)
 
 ```bash
 # Pull specific version
+docker pull aavishay/right-sizer:0.1.6
 docker pull aavishay/right-sizer:latest
-docker pull aavishay/right-sizer:v123
 ```
 
 ### 3️⃣ Configuration Management
@@ -220,19 +223,22 @@ helm install right-sizer right-sizer/right-sizer -f values.yaml
 ```bash
 # Development - Aggressive optimization
 helm install right-sizer right-sizer/right-sizer \
-  --set defaultConfig.mode=aggressive \
-  --set defaultConfig.resizeInterval=30s
+  --version 0.1.6 \
+  --set rightsizerConfig.mode=aggressive \
+  --set rightsizerConfig.operationalConfig.resizeInterval=30s
 
 # Production - Conservative with dry-run
 helm install right-sizer right-sizer/right-sizer \
-  --set defaultConfig.mode=conservative \
-  --set defaultConfig.dryRun=true \
-  --set defaultConfig.constraints.cooldownPeriod=10m
+  --version 0.1.6 \
+  --set rightsizerConfig.mode=conservative \
+  --set rightsizerConfig.dryRun=true \
+  --set rightsizerConfig.operationalConfig.resizeInterval=10m
 
 # Cost Optimization Focus
 helm install right-sizer right-sizer/right-sizer \
-  --set defaultConfig.mode=cost-optimized \
-  --set defaultConfig.constraints.maxChangePercentage=30
+  --version 0.1.6 \
+  --set rightsizerConfig.mode=balanced \
+  --set rightsizerConfig.globalConstraints.maxChangePercentage=30
 ```
 
 ### 4️⃣ Post-Installation
@@ -244,28 +250,31 @@ kubectl get pods -n right-sizer
 kubectl logs -n right-sizer -l app.kubernetes.io/name=right-sizer
 
 # View created resources
-kubectl get rightsizerpolicies -A
 kubectl get rightsizerconfigs -A
+kubectl get rightsizerpolicies -A
+
+# Check RightSizerConfig
+kubectl get rightsizerconfig -n right-sizer
 ```
 
 #### Apply Custom Policies
 ```bash
 # Development environment
-kubectl apply -f examples/config-global-settings.yaml
-kubectl apply -f examples/policies-workload-types.yaml
+kubectl apply -f examples/rightsizerconfig-full.yaml
+kubectl apply -f examples/helm-values-custom.yaml
 
 # Production environment
-kubectl apply -f examples/config-conservative.yaml
+kubectl apply -f examples/rightsizerconfig-conservative.yaml
 
 # Cost optimization
-kubectl apply -f examples/config-scaling-thresholds.yaml
+kubectl apply -f examples/rightsizerconfig-full.yaml
 ```
 
 #### Upgrade or Uninstall
 ```bash
 # Upgrade to latest version
 helm repo update
-helm upgrade right-sizer right-sizer/right-sizer
+helm upgrade right-sizer right-sizer/right-sizer --version 0.1.6
 
 # Uninstall
 helm uninstall right-sizer -n right-sizer
@@ -279,7 +288,7 @@ kubectl delete namespace right-sizer
 kubectl get pods -n right-sizer
 
 # View operator logs
-kubectl logs -n right-sizer -l app=right-sizer -f
+kubectl logs -n right-sizer -l app.kubernetes.io/name=right-sizer -f
 
 # Check CRDs
 kubectl get rightsizerconfigs
@@ -303,13 +312,15 @@ graph TB
     PR[📈 Prometheus] --> OP
     OP --> P1[🔧 Pod Resources]
     OP --> P2[🔧 Pod Resources]
+    OP --> CRD1[📋 RightSizerConfig]
+    OP --> CRD2[📋 RightSizerPolicy]
 ```
 
 ### Component Overview
 
 | Component | Module | Purpose | Key Features |
 |-----------|--------|---------|--------------|
-| **Main Entry** | `main.go` | Application bootstrap | Configuration loading, component initialization |
+| **Main Entry** | `go/main.go` | Application bootstrap | Configuration loading, component initialization |
 | **Config Manager** | `go/config` | Configuration handling | CRD-based config, environment variables |
 | **Controllers** | `go/controllers` | Reconciliation logic | RightSizer, Policy, Config controllers |
 | **Admission** | `go/admission` | Webhook validation | Request validation, mutation webhooks |
@@ -334,6 +345,9 @@ graph LR
     GH[📝 GitHub<br/>Code] --> GA[🔄 Build<br/>Test] --> DH[📦 Package<br/>Docker + Helm] --> INST[🚀 Install<br/>Your Cluster]
 
     INST --> K8s[☸️ Kubernetes<br/>Running]
+
+    DH --> OCI[📦 OCI Registry<br/>docker.io/aavishay]
+    DH --> GHP[📦 GitHub Pages<br/>aavishay.github.io]
 ```
 
 ### Distribution Channels
@@ -341,6 +355,7 @@ graph LR
 | Channel | URL | Purpose | Update Frequency |
 |---------|-----|---------|------------------|
 | **Helm Repository** | https://aavishay.github.io/right-sizer/charts | Official Helm charts | On every helm/ change |
+| **OCI Registry** | registry-1.docker.io/aavishay/right-sizer | Container images (OCI) | On every main push |
 | **Docker Hub** | docker.io/aavishay/right-sizer | Container images | On every main push |
 | **GitHub Releases** | github.com/aavishay/right-sizer/releases | Binary releases & archives | On version tags |
 | **Source Code** | github.com/aavishay/right-sizer | Development & customization | Continuous |
@@ -354,9 +369,10 @@ The project uses GitHub Actions for automated building, testing, and deployment:
 ```mermaid
 stateDiagram-v2
     [*] --> Code: Push Code
-    Code --> Build: Build
-    Build --> Test: Test
-    Test --> Deploy: Deploy
+    Code --> Build: Build & Test
+    Build --> Security: Security Scan
+    Security --> Package: Package
+    Package --> Deploy: Deploy
     Deploy --> [*]: Done
 ```
 
@@ -367,9 +383,9 @@ stateDiagram-v2
    - Multi-architecture builds (amd64, arm64)
    - Automated security scanning with Trivy
    - SBOM generation
-   - **Recent Fix**: Resolved "exec: 'sh': executable file not found" error by updating base images
    - Push to Docker Hub with tags:
      - `latest` (main branch)
+     - `0.1.6` (current version)
      - `v{build-number}`
      - `sha-{commit}`
 
@@ -394,6 +410,7 @@ stateDiagram-v2
 | Method | Pros | Cons | Best For |
 |--------|------|------|----------|
 | **Helm Repository** | Version management, Standard workflow, Easy upgrades | Requires Helm | Production deployments |
+| **OCI Registry** | Modern standard, Pre-built images, Multi-arch support | Newer technology | Cloud-native deployments |
 | **Docker Hub** | Pre-built images, Multi-arch support | Manual manifest management | Quick testing, CI/CD |
 | **Source Build** | Full customization, Latest features | Requires build tools | Development, customization |
 | **GitHub Releases** | Direct binary access, Checksums provided | Manual installation | Air-gapped environments |
@@ -421,12 +438,18 @@ helm repo update
 helm install right-sizer right-sizer/right-sizer \
   --namespace right-sizer \
   --create-namespace \
-  --version 0.1.0
+  --version 0.1.6
+
+# OCI Registry Deployment
+helm install right-sizer oci://registry-1.docker.io/aavishay/right-sizer \
+  --version 0.1.6 \
+  --namespace right-sizer \
+  --create-namespace
 
 # Development Deployment (Latest)
-docker pull aavishay/right-sizer:latest
+docker pull aavishay/right-sizer:0.1.6
 helm install right-sizer right-sizer/right-sizer \
-  --set image.tag=latest
+  --set image.tag=0.1.6
 
 # GitOps/ArgoCD Integration
 cat <<EOF | kubectl apply -f -
@@ -438,7 +461,7 @@ spec:
   source:
     repoURL: https://aavishay.github.io/right-sizer/charts
     chart: right-sizer
-    targetRevision: 0.1.0
+    targetRevision: 0.1.6
   destination:
     server: https://kubernetes.default.svc
     namespace: right-sizer
@@ -462,8 +485,8 @@ metadata:
   name: default
 spec:
   enabled: true
-  defaultMode: balanced  # aggressive | balanced | conservative | custom
-  resizeInterval: "30s"
+  defaultMode: balanced  # adaptive | aggressive | balanced | conservative | custom
+  resizeInterval: "5m"
   dryRun: false
 
   defaultResourceStrategy:
@@ -476,18 +499,19 @@ spec:
       scaleDownThreshold: 0.3
     memory:
       requestMultiplier: 1.2
-      limitMultiplier: 1.5
-      minRequest: 128Mi
-      maxLimit: 8Gi
+      limitMultiplier: 2.0
+      minRequest: 64Mi
+      maxLimit: 8192Mi
       scaleUpThreshold: 0.8
       scaleDownThreshold: 0.3
 
   globalConstraints:
     maxChangePercentage: 50
-    cooldownPeriod: "5m"
-    maxConcurrentResizes: 10
-    respectPDB: true
-    respectHPA: true
+    minChangeThreshold: 10
+    maxMemoryGB: 32
+    maxCPUCores: 16
+    preventOOMKill: true
+    respectPodDisruptionBudget: true
 ```
 
 #### RightSizerPolicy (Workload-Specific Rules)
@@ -528,9 +552,10 @@ spec:
 
 | Mode | CPU Buffer | Memory Buffer | Change Frequency | Use Case |
 |------|------------|---------------|------------------|----------|
+| **Adaptive** | 20% | 20% | Every 5m | Balanced optimization |
 | **Aggressive** | 10% | 10% | Every 30s | Development, testing |
-| **Balanced** | 20% | 20% | Every 1m | General workloads |
-| **Conservative** | 50% | 30% | Every 5m | Production critical |
+| **Balanced** | 20% | 20% | Every 1m | Default, general workloads |
+| **Conservative** | 50% | 30% | Every 10m | Production critical |
 | **Custom** | User-defined | User-defined | User-defined | Special requirements |
 
 ---
@@ -541,11 +566,8 @@ spec:
 
 | File | Description | Use Case |
 |------|-------------|----------|
-| `config-global-settings.yaml` | Global operator configuration | Initial setup |
-| `config-namespace-filtering.yaml` | Namespace inclusion/exclusion | Multi-tenant clusters |
-| `config-rate-limiting.yaml` | Rate limiting settings | Large clusters |
-| `config-scaling-thresholds.yaml` | Custom scaling thresholds | Fine-tuning |
-| `policies-workload-types.yaml` | Various workload policies | Different app types |
+| `rightsizerconfig-full.yaml` | Complete configuration example | Reference implementation |
+| `rightsizerconfig-conservative.yaml` | Conservative settings | Production environments |
 | `helm-values-custom.yaml` | Helm customization | Deployment options |
 
 ### Quick Examples
@@ -557,6 +579,8 @@ kind: RightSizerConfig
 metadata:
   name: namespace-specific
 spec:
+  enabled: true
+  defaultMode: balanced
   namespaceConfig:
     includeNamespaces: ["production", "staging"]
     excludeNamespaces: ["kube-system", "kube-public"]
@@ -569,6 +593,7 @@ kind: RightSizerPolicy
 metadata:
   name: dev-aggressive
 spec:
+  enabled: true
   mode: aggressive
   targetRef:
     namespaces: ["development"]
@@ -590,7 +615,7 @@ spec:
 | Metric | Value | Notes |
 |--------|-------|-------|
 | **Pod Processing Rate** | 1000/minute | Configurable batch size |
-| **CPU Overhead** | <50m | Operator resource usage |
+| **CPU Overhead** | <100m | Operator resource usage |
 | **Memory Footprint** | ~128Mi base | Scales with pod count |
 | **Metrics Interval** | 30s default | Configurable |
 | **Decision Latency** | <100ms | Per pod calculation |
@@ -605,6 +630,7 @@ spec:
 | **Ephemeral Containers** | Not supported | Exclude debug pods |
 | **Max Concurrent** | 10 resize operations | Increase in config if needed |
 | **Metrics Delay** | 2-3 minute initial delay | Wait for metrics to populate |
+| **QoS Class Changes** | Cannot change Guaranteed QoS | Use adaptive mode for Guaranteed pods |
 
 ---
 
@@ -634,6 +660,10 @@ rightsizer_resize_duration_seconds{}
 # Error tracking
 rightsizer_errors_total{type}
 rightsizer_resize_failures_total{reason}
+
+# Health metrics
+rightsizer_health_status{component}
+rightsizer_config_validation_errors{}
 ```
 
 ### Grafana Dashboard
@@ -655,12 +685,13 @@ kubectl create configmap grafana-dashboard \
 
 | Problem | Solution | Check Command |
 |---------|----------|---------------|
-| **Pods not resizing** | Check operator logs | `kubectl logs -n right-sizer -l app=right-sizer` |
+| **Pods not resizing** | Check operator logs | `kubectl logs -n right-sizer -l app.kubernetes.io/name=right-sizer` |
 | **Permission errors** | Update RBAC | `kubectl apply -f helm/templates/rbac.yaml` |
 | **Metrics missing** | Verify metrics server | `kubectl top pods` |
 | **High CPU usage** | Increase resize interval | Update `resizeInterval` in config |
 | **Webhook errors** | Check certificates | `kubectl get validatingwebhookconfigurations` |
 | **CRD errors** | Reinstall CRDs | `kubectl apply -f helm/crds/` |
+| **OCI install fails** | Use correct registry URL | `helm install ... oci://registry-1.docker.io/aavishay/right-sizer` |
 
 ### Common Issues and Solutions
 
@@ -682,6 +713,12 @@ spec:
   globalConstraints:
     maxConcurrentResizes: 5  # Reduce concurrent operations
     cooldownPeriod: "15m"   # Increase cooldown between resizes
+```
+
+#### 4. OCI registry installation fails
+```bash
+# Use the correct registry URL
+helm install right-sizer oci://registry-1.docker.io/aavishay/right-sizer --version 0.1.6
 ```
 
 #### 4. CI/CD Pipeline Issues
@@ -716,6 +753,9 @@ kubectl top pods -A
 # Check webhook configuration
 kubectl get validatingwebhookconfigurations
 kubectl get mutatingwebhookconfigurations
+
+# Check RightSizerConfig status
+kubectl describe rightsizerconfig -n right-sizer
 ```
 
 ---
@@ -729,12 +769,13 @@ kubectl get mutatingwebhookconfigurations
 - Kubernetes 1.33+ (Minikube recommended)
 - Make
 - Helm 3.0+
+- Metrics Server or Prometheus
 
 ### Local Development Setup
 
 ```bash
 # Clone repository
-git clone https://github.com/right-sizer/right-sizer.git
+git clone https://github.com/aavishay/right-sizer.git
 cd right-sizer
 
 # Start Minikube
@@ -752,7 +793,7 @@ make deploy
 kubectl logs -f deployment/right-sizer -n right-sizer
 
 # Run integration tests
-./tests/test-suite-all.sh
+make test
 ```
 
 ### Project Structure
@@ -760,20 +801,22 @@ kubectl logs -f deployment/right-sizer -n right-sizer
 ```
 right-sizer/
 ├── go/                      # Go source code
-│   ├── api/v1alpha1/       # CRD API definitions
-│   ├── controllers/        # Kubernetes controllers
-│   ├── admission/          # Admission webhooks
+│   ├── main.go            # Entry point
+│   ├── controllers/       # Kubernetes controllers
+│   ├── admission/         # Admission webhooks
 │   ├── metrics/           # Metrics collection
 │   ├── policy/            # Policy engine
-│   └── main.go           # Entry point
+│   └── api/v1alpha1/      # CRD API definitions
 ├── helm/                   # Helm chart
-│   ├── crds/             # CRD definitions
+│   ├── Chart.yaml        # Chart metadata
+│   ├── values.yaml       # Default values
 │   ├── templates/        # Kubernetes manifests
-│   └── values.yaml      # Default values
+│   └── crds/             # CRD definitions
 ├── examples/              # Example configurations
-├── docs/                 # Documentation
-├── tests/                # Test suites
-└── scripts/              # Utility scripts
+├── docs/                  # Documentation
+├── scripts/               # Utility scripts
+├── tests/                 # Test suites
+└── dist/                  # Build artifacts
 ```
 
 ---
@@ -796,6 +839,25 @@ We welcome contributions! Please see [CONTRIBUTING.md](docs/CONTRIBUTING.md) for
 4. Push to branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request
 
+### Development Workflow
+
+```bash
+# Set up development environment
+make dev-setup
+
+# Run tests
+make test
+
+# Build locally
+make build
+
+# Deploy to minikube
+make mk-deploy
+
+# Run integration tests
+make mk-test
+```
+
 ---
 
 ## 📜 License
@@ -808,7 +870,7 @@ This project is licensed under the **GNU Affero General Public License v3.0 (AGP
 - ✅ Distribution
 - ✅ Modification
 - ✅ Private use
-- ⚠️ Disclose source
+- ⚠️ Disclose source (network use)
 - ⚠️ Same license
 - ⚠️ State changes
 
@@ -822,6 +884,7 @@ This project is licensed under the **GNU Affero General Public License v3.0 (AGP
 - 🐛 [GitHub Issues](https://github.com/aavishay/right-sizer/issues) - Report bugs, request features
 - 📖 [Documentation](./docs) - Comprehensive guides and references
 - 💡 [Examples](./examples) - Sample configurations and use cases
+- 📧 [Email Support](mailto:support@right-sizer.dev) - Enterprise support
 
 <!--### Commercial Support
 

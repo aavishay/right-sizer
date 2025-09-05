@@ -85,7 +85,7 @@ kubectl get rightsizerpolicies
 | `webhook.enabled` | Enable admission webhooks | `false` |
 | `rightsizerConfig.create` | Create default RightSizerConfig | `true` |
 | `rightsizerConfig.enabled` | Enable right-sizing | `true` |
-| `rightsizerConfig.mode` | Operating mode (adaptive/aggressive/conservative) | `adaptive` |
+| `rightsizerConfig.mode` | Operating mode (adaptive/aggressive/balanced/conservative/custom) | `balanced` |
 | `rightsizerConfig.dryRun` | Dry-run mode (preview only) | `false` |
 
 ### RightSizerConfig Parameters
@@ -163,13 +163,25 @@ config:
 helm install right-sizer right-sizer/right-sizer \
   --set rightsizerConfig.mode=conservative \
   --set rightsizerConfig.sizingStrategy.algorithm=peak \
-  --set rightsizerConfig.operationalConfig.resizeInterval=30m
+  --set rightsizerConfig.operationalConfig.resizeInterval=10m
+
+# Balanced mode (default)
+helm install right-sizer right-sizer/right-sizer \
+  --set rightsizerConfig.mode=balanced \
+  --set rightsizerConfig.sizingStrategy.algorithm=percentile \
+  --set rightsizerConfig.operationalConfig.resizeInterval=1m
 
 # Aggressive mode for development
 helm install right-sizer right-sizer/right-sizer \
   --set rightsizerConfig.mode=aggressive \
   --set rightsizerConfig.sizingStrategy.algorithm=average \
-  --set rightsizerConfig.operationalConfig.resizeInterval=1m
+  --set rightsizerConfig.operationalConfig.resizeInterval=30s
+
+# Adaptive mode
+helm install right-sizer right-sizer/right-sizer \
+  --set rightsizerConfig.mode=adaptive \
+  --set rightsizerConfig.sizingStrategy.algorithm=percentile \
+  --set rightsizerConfig.operationalConfig.resizeInterval=5m
 
 # Dry-run mode for testing
 helm install right-sizer right-sizer/right-sizer \

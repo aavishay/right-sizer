@@ -5,50 +5,50 @@ metadata:
 spec:
   group: rightsizer.io
   versions:
-  - name: v1alpha1
-    served: true
-    storage: true
-    schema:
-      openAPIV3Schema:
-        type: object
-        properties:
-          spec:
-            type: object
-            properties:
-              enabled:
-                type: boolean
-                default: true
-              defaultMode:
-                type: string
-                enum: ["aggressive", "balanced", "conservative", "custom"]
-                default: "balanced"
-              resizeInterval:
-                type: string
-                default: "30s"
-              dryRun:
-                type: boolean
-                default: false
-          status:
-            type: object
-            properties:
-              phase:
-                type: string
-              lastAppliedTime:
-                type: string
-              activePolicies:
-                type: integer
-              operatorVersion:
-                type: string
-              observedGeneration:
-                type: integer
-              message:
-                type: string
-    subresources:
-      status: {}
+    - name: v1alpha1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                enabled:
+                  type: boolean
+                  default: true
+                defaultMode:
+                  type: string
+                  enum: ["aggressive", "balanced", "conservative", "custom"]
+                  default: "balanced"
+                resizeInterval:
+                  type: string
+                  default: "30s"
+                dryRun:
+                  type: boolean
+                  default: false
+            status:
+              type: object
+              properties:
+                phase:
+                  type: string
+                lastAppliedTime:
+                  type: string
+                activePolicies:
+                  type: integer
+                operatorVersion:
+                  type: string
+                observedGeneration:
+                  type: integer
+                message:
+                  type: string
+      subresources:
+        status: {}
   scope: Cluster
   names:
     plural: rightsizerconfigs
     singular: rightsizerconfig
     kind: RightSizerConfig
     shortNames:
-    - rsc
+      - rsc
