@@ -17,7 +17,9 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"os/signal"
 	"right-sizer/admission"
@@ -37,6 +39,7 @@ import (
 
 	"github.com/go-logr/zapr"
 	"go.uber.org/zap"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/version"
 	"k8s.io/client-go/kubernetes"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -381,6 +384,38 @@ func main() {
 			if err := metrics.StartMetricsServer(cfg.MetricsPort); err != nil {
 				logger.Error("Metrics server error: %v", err)
 			}
+		}
+	}()
+
+	// Start API server for metrics endpoints
+	go func() {
+		// Wait for configuration to be loaded from CRD
+		time.Sleep(5 * time.Second)
+
+		logger.Info("🌐 Starting API server on port 8082")
+		http.HandleFunc("/api/pods/count", func(w http.ResponseWriter, r *http.Request) {
+			// Get pod count from all namespaces
+			podList, err := clientset.CoreV1().Pods("").List(context.TODO(), metav1.ListOptions{})
+			if err != nil {
+				logger.Error("Failed to get pod count: %v", err)
+				http.Error(w, "Failed to get pod count", http.StatusInternalServerError)
+				return
+			}
+
+			podCount := len(podList.Items)
+			response := map[string]int{"count": podCount}
+
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(response)
+		})
+
+		http.HandleFunc("/api/health", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+		})
+
+		if err := http.ListenAndServe(":8082", nil); err != nil {
+			logger.Error("API server error: %v", err)
 		}
 	}()
 

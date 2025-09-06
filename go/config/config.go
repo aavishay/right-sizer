@@ -86,6 +86,7 @@ type Config struct {
 	// Namespace filters
 	NamespaceInclude []string // Namespaces to include
 	NamespaceExclude []string // Namespaces to exclude
+	SystemNamespaces []string // System namespaces to exclude
 
 	// Advanced features
 	HistoryDays         int      // Days of history to keep for trend analysis
@@ -240,7 +241,7 @@ func (c *Config) UpdateFromCRD(
 	maxCPULimit, maxMemoryLimit int64,
 	resizeInterval time.Duration,
 	dryRun bool,
-	namespaceInclude, namespaceExclude []string,
+	namespaceInclude, namespaceExclude, systemNamespaces []string,
 	logLevel string,
 	metricsEnabled bool,
 	metricsPort int,
@@ -300,6 +301,9 @@ func (c *Config) UpdateFromCRD(
 	}
 	if len(namespaceExclude) > 0 {
 		c.NamespaceExclude = namespaceExclude
+	}
+	if len(systemNamespaces) > 0 {
+		c.SystemNamespaces = systemNamespaces
 	}
 
 	// Update observability settings
@@ -393,6 +397,7 @@ func (c *Config) ResetToDefaults() {
 	c.SafetyThreshold = defaults.SafetyThreshold
 	c.NamespaceInclude = defaults.NamespaceInclude
 	c.NamespaceExclude = defaults.NamespaceExclude
+	c.SystemNamespaces = defaults.SystemNamespaces
 	c.HistoryDays = defaults.HistoryDays
 	c.CustomMetrics = defaults.CustomMetrics
 	c.AdmissionController = defaults.AdmissionController
@@ -513,6 +518,15 @@ func (c *Config) IsNamespaceIncluded(namespace string) bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
+	// Check system namespaces first - always exclude them
+	if len(c.SystemNamespaces) > 0 {
+		for _, ns := range c.SystemNamespaces {
+			if ns == namespace {
+				return false
+			}
+		}
+	}
+
 	// If include list is specified, namespace must be in it
 	if len(c.NamespaceInclude) > 0 {
 		found := false
@@ -614,6 +628,10 @@ func (c *Config) Clone() *Config {
 	if len(c.NamespaceExclude) > 0 {
 		clone.NamespaceExclude = make([]string, len(c.NamespaceExclude))
 		copy(clone.NamespaceExclude, c.NamespaceExclude)
+	}
+	if len(c.SystemNamespaces) > 0 {
+		clone.SystemNamespaces = make([]string, len(c.SystemNamespaces))
+		copy(clone.SystemNamespaces, c.SystemNamespaces)
 	}
 	if len(c.CustomMetrics) > 0 {
 		clone.CustomMetrics = make([]string, len(c.CustomMetrics))

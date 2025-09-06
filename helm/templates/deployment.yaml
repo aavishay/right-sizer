@@ -26,6 +26,9 @@ spec:
             - name: health
               containerPort: 8081
               protocol: TCP
+            - name: metrics
+              containerPort: {{ .Values.metricsPort | default 9090 }}
+              protocol: TCP
           livenessProbe:
             httpGet:
               path: /healthz

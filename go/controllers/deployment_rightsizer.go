@@ -318,8 +318,8 @@ func (r *DeploymentRightSizer) needsAdjustment(podSpec *corev1.PodSpec, newResou
 
 // isSystemDeployment checks if a deployment is a system/infrastructure deployment
 func isSystemDeployment(deploy *appsv1.Deployment) bool {
-	systemNamespaces := []string{"kube-system", "kube-public", "kube-node-lease"}
-	for _, ns := range systemNamespaces {
+	cfg := config.Get()
+	for _, ns := range cfg.SystemNamespaces {
 		if deploy.Namespace == ns {
 			return true
 		}
@@ -335,8 +335,8 @@ func isSystemDeployment(deploy *appsv1.Deployment) bool {
 
 // isSystemStatefulSet checks if a statefulset is a system/infrastructure statefulset
 func isSystemStatefulSet(sts *appsv1.StatefulSet) bool {
-	systemNamespaces := []string{"kube-system", "kube-public", "kube-node-lease"}
-	for _, ns := range systemNamespaces {
+	cfg := config.Get()
+	for _, ns := range cfg.SystemNamespaces {
 		if sts.Namespace == ns {
 			return true
 		}

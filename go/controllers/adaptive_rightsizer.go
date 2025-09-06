@@ -298,6 +298,12 @@ func (r *AdaptiveRightSizer) analyzeAllPods(ctx context.Context) ([]ResourceUpda
 			continue
 		}
 
+		// Skip pods that are being deleted (terminating)
+		if !pod.DeletionTimestamp.IsZero() {
+			log.Printf("⏭️  Skipping terminating pod %s/%s", pod.Namespace, pod.Name)
+			continue
+		}
+
 		// Check namespace filters first
 		if !r.shouldProcessNamespace(pod.Namespace) {
 			continue
@@ -674,6 +680,7 @@ func (r *AdaptiveRightSizer) updatePodInPlace(ctx context.Context, update Resour
 
 	// If nothing is actually changing, skip the update
 	if !actuallyChanging {
+		log.Printf("⏭️ DEBUG: Skipping patch for %s/%s - no changes needed", update.Namespace, update.Name)
 		return "", nil // Return empty string to suppress logging
 	}
 
@@ -690,22 +697,55 @@ func (r *AdaptiveRightSizer) updatePodInPlace(ctx context.Context, update Resour
 	// Ensure safe resource patch - never try to remove existing resources
 	safeResources := ensureSafeResourcePatchAdaptive(*currentResources, update.NewResources)
 
-	// Patch requests only if they exist and are different
-	if safeResources.Requests != nil && len(safeResources.Requests) > 0 {
-		patchOps = append(patchOps, JSONPatchOp{
-			Op:    "replace",
-			Path:  fmt.Sprintf("/spec/containers/%d/resources/requests", containerIndex),
-			Value: safeResources.Requests,
-		})
+	// Only patch requests if they actually differ from current
+	if len(safeResources.Requests) > 0 {
+		requestsChanged := false
+		for resName, newVal := range safeResources.Requests {
+			if currentVal, exists := currentResources.Requests[resName]; exists {
+				if !currentVal.Equal(newVal) {
+					requestsChanged = true
+					break
+				}
+			} else {
+				requestsChanged = true
+				break
+			}
+		}
+		if requestsChanged {
+			patchOps = append(patchOps, JSONPatchOp{
+				Op:    "replace",
+				Path:  fmt.Sprintf("/spec/containers/%d/resources/requests", containerIndex),
+				Value: safeResources.Requests,
+			})
+		}
 	}
 
-	// Patch limits only if they exist and are different
-	if safeResources.Limits != nil && len(safeResources.Limits) > 0 {
-		patchOps = append(patchOps, JSONPatchOp{
-			Op:    "replace",
-			Path:  fmt.Sprintf("/spec/containers/%d/resources/limits", containerIndex),
-			Value: safeResources.Limits,
-		})
+	// Only patch limits if they actually differ from current
+	if len(safeResources.Limits) > 0 {
+		limitsChanged := false
+		for resName, newVal := range safeResources.Limits {
+			if currentVal, exists := currentResources.Limits[resName]; exists {
+				if !currentVal.Equal(newVal) {
+					limitsChanged = true
+					break
+				}
+			} else {
+				limitsChanged = true
+				break
+			}
+		}
+		if limitsChanged {
+			patchOps = append(patchOps, JSONPatchOp{
+				Op:    "replace",
+				Path:  fmt.Sprintf("/spec/containers/%d/resources/limits", containerIndex),
+				Value: safeResources.Limits,
+			})
+		}
+	}
+
+	// Check if we have any patch operations
+	if len(patchOps) == 0 {
+		return "", nil // Return empty string to suppress logging
 	}
 
 	// Marshal the patch
@@ -1112,8 +1152,10 @@ func (r *AdaptiveRightSizer) getAdjustmentReason(current, new corev1.ResourceReq
 }
 
 func (r *AdaptiveRightSizer) isSystemWorkload(namespace, name string) bool {
-	systemNamespaces := []string{"kube-system", "kube-public", "kube-node-lease"}
-	for _, ns := range systemNamespaces {
+	cfg := config.Get()
+
+	// Check user-configured system namespaces
+	for _, ns := range cfg.SystemNamespaces {
 		if namespace == ns {
 			return true
 		}
@@ -1148,33 +1190,12 @@ func (r *AdaptiveRightSizer) logUpdate(update ResourceUpdate, dryRun bool) {
 		cpuReq.String(),
 		oldMemReq.String(),
 		memReq.String())
-	return
 }
 
 // shouldProcessNamespace checks if a namespace should be processed based on include/exclude lists
 func (r *AdaptiveRightSizer) shouldProcessNamespace(namespace string) bool {
 	cfg := config.Get()
-
-	// Check exclude list first (takes precedence)
-	for _, excludeNs := range cfg.NamespaceExclude {
-		if namespace == excludeNs {
-			return false
-		}
-	}
-
-	// If include list is empty, process all non-excluded namespaces
-	if len(cfg.NamespaceInclude) == 0 {
-		return true
-	}
-
-	// Check if namespace is in include list
-	for _, includeNs := range cfg.NamespaceInclude {
-		if namespace == includeNs {
-			return true
-		}
-	}
-
-	return false
+	return cfg.IsNamespaceIncluded(namespace)
 }
 
 // getQoSClass determines the QoS class of a pod
@@ -1288,7 +1309,7 @@ func ensureSafeResourcePatchAdaptive(current, desired corev1.ResourceRequirement
 	result := corev1.ResourceRequirements{}
 
 	// Handle requests - preserve ALL existing resource types
-	if current.Requests != nil && len(current.Requests) > 0 {
+	if len(current.Requests) > 0 {
 		result.Requests = make(corev1.ResourceList)
 
 		// First, copy ALL existing requests to preserve non-mutable resource types
@@ -1322,7 +1343,7 @@ func ensureSafeResourcePatchAdaptive(current, desired corev1.ResourceRequirement
 	}
 
 	// Handle limits - preserve ALL existing resource types
-	if current.Limits != nil && len(current.Limits) > 0 {
+	if len(current.Limits) > 0 {
 		result.Limits = make(corev1.ResourceList)
 
 		// First, copy ALL existing limits to preserve non-mutable resource types

@@ -699,7 +699,7 @@ func resourcesEqual(a, b corev1.ResourceRequirements) bool {
 func (r *RightSizerPolicyReconciler) supportsInPlaceResize(pod *corev1.Pod) bool {
 	// Check if pod has resize policy defined
 	for _, container := range pod.Spec.Containers {
-		if container.ResizePolicy != nil && len(container.ResizePolicy) > 0 {
+		if len(container.ResizePolicy) > 0 {
 			return true
 		}
 	}

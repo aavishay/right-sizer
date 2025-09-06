@@ -87,38 +87,39 @@ func TestUpdateFromCRD(t *testing.T) {
 
 	// Update with CRD values
 	cfg.UpdateFromCRD(
-		1.5,                               // cpuRequestMultiplier
-		1.3,                               // memoryRequestMultiplier
-		100,                               // cpuRequestAddition
-		256,                               // memoryRequestAddition
-		2.5,                               // cpuLimitMultiplier
-		2.0,                               // memoryLimitMultiplier
-		0,                                 // cpuLimitAddition
-		0,                                 // memoryLimitAddition
-		10,                                // minCPURequest
-		64,                                // minMemoryRequest
-		4000,                              // maxCPULimit
-		8192,                              // maxMemoryLimit
-		60*time.Second,                    // resizeInterval
-		true,                              // dryRun
-		[]string{"default", "production"}, // namespaceInclude
-		[]string{"kube-system"},           // namespaceExclude
-		"debug",                           // logLevel
-		true,                              // metricsEnabled
-		9090,                              // metricsPort
-		true,                              // auditEnabled
-		5,                                 // maxRetries
-		10*time.Second,                    // retryInterval
-		"prometheus",                      // metricsProvider
-		"http://prom:9090",                // prometheusURL
-		true,                              // enableInPlaceResize
-		10.0,                              // qps
-		20,                                // burst
-		5,                                 // maxConcurrentReconciles
-		0.8,                               // memoryScaleUpThreshold
-		0.3,                               // memoryScaleDownThreshold
-		0.8,                               // cpuScaleUpThreshold
-		0.3,                               // cpuScaleDownThreshold
+		1.5,                                    // cpuRequestMultiplier
+		1.3,                                    // memoryRequestMultiplier
+		100,                                    // cpuRequestAddition
+		256,                                    // memoryRequestAddition
+		2.5,                                    // cpuLimitMultiplier
+		2.0,                                    // memoryLimitMultiplier
+		0,                                      // cpuLimitAddition
+		0,                                      // memoryLimitAddition
+		10,                                     // minCPURequest
+		64,                                     // minMemoryRequest
+		4000,                                   // maxCPULimit
+		8192,                                   // maxMemoryLimit
+		60*time.Second,                         // resizeInterval
+		true,                                   // dryRun
+		[]string{"default", "production"},      // namespaceInclude
+		[]string{"kube-system"},                // namespaceExclude
+		[]string{"kube-system", "kube-public"}, // systemNamespaces
+		"debug",                                // logLevel
+		true,                                   // metricsEnabled
+		9090,                                   // metricsPort
+		true,                                   // auditEnabled
+		5,                                      // maxRetries
+		10*time.Second,                         // retryInterval
+		"prometheus",                           // metricsProvider
+		"http://prom:9090",                     // prometheusURL
+		true,                                   // enableInPlaceResize
+		10.0,                                   // qps
+		20,                                     // burst
+		5,                                      // maxConcurrentReconciles
+		0.8,                                    // memoryScaleUpThreshold
+		0.3,                                    // memoryScaleDownThreshold
+		0.8,                                    // cpuScaleUpThreshold
+		0.3,                                    // cpuScaleDownThreshold
 	)
 
 	// Verify updates
@@ -168,6 +169,14 @@ func TestUpdateFromCRD(t *testing.T) {
 
 	if len(cfg.NamespaceExclude) != 1 {
 		t.Errorf("Expected 1 excluded namespace, got %d", len(cfg.NamespaceExclude))
+	}
+
+	if len(cfg.SystemNamespaces) != 2 {
+		t.Errorf("Expected 2 system namespaces, got %d", len(cfg.SystemNamespaces))
+	}
+
+	if cfg.SystemNamespaces[0] != "kube-system" || cfg.SystemNamespaces[1] != "kube-public" {
+		t.Errorf("Expected system namespaces ['kube-system', 'kube-public'], got %v", cfg.SystemNamespaces)
 	}
 }
 
@@ -306,6 +315,7 @@ func TestIsNamespaceIncluded(t *testing.T) {
 		name             string
 		namespaceInclude []string
 		namespaceExclude []string
+		systemNamespaces []string
 		namespace        string
 		expected         bool
 	}{
@@ -313,6 +323,7 @@ func TestIsNamespaceIncluded(t *testing.T) {
 			name:             "no filters",
 			namespaceInclude: []string{},
 			namespaceExclude: []string{},
+			systemNamespaces: []string{},
 			namespace:        "default",
 			expected:         true,
 		},
@@ -320,6 +331,7 @@ func TestIsNamespaceIncluded(t *testing.T) {
 			name:             "included namespace",
 			namespaceInclude: []string{"default", "production"},
 			namespaceExclude: []string{},
+			systemNamespaces: []string{},
 			namespace:        "default",
 			expected:         true,
 		},
@@ -327,6 +339,7 @@ func TestIsNamespaceIncluded(t *testing.T) {
 			name:             "not included namespace",
 			namespaceInclude: []string{"production"},
 			namespaceExclude: []string{},
+			systemNamespaces: []string{},
 			namespace:        "default",
 			expected:         false,
 		},
@@ -334,6 +347,7 @@ func TestIsNamespaceIncluded(t *testing.T) {
 			name:             "excluded namespace",
 			namespaceInclude: []string{},
 			namespaceExclude: []string{"kube-system"},
+			systemNamespaces: []string{},
 			namespace:        "kube-system",
 			expected:         false,
 		},
@@ -341,8 +355,33 @@ func TestIsNamespaceIncluded(t *testing.T) {
 			name:             "included but excluded",
 			namespaceInclude: []string{"kube-system"},
 			namespaceExclude: []string{"kube-system"},
+			systemNamespaces: []string{},
 			namespace:        "kube-system",
 			expected:         false,
+		},
+		{
+			name:             "system namespace excluded",
+			namespaceInclude: []string{},
+			namespaceExclude: []string{},
+			systemNamespaces: []string{"kube-system"},
+			namespace:        "kube-system",
+			expected:         false,
+		},
+		{
+			name:             "system namespace with include",
+			namespaceInclude: []string{"kube-system"},
+			namespaceExclude: []string{},
+			systemNamespaces: []string{"kube-system"},
+			namespace:        "kube-system",
+			expected:         false, // systemNamespaces takes precedence
+		},
+		{
+			name:             "regular namespace with system filter",
+			namespaceInclude: []string{},
+			namespaceExclude: []string{},
+			systemNamespaces: []string{"kube-system"},
+			namespace:        "default",
+			expected:         true,
 		},
 	}
 
@@ -351,6 +390,7 @@ func TestIsNamespaceIncluded(t *testing.T) {
 			cfg := &Config{
 				NamespaceInclude: tt.namespaceInclude,
 				NamespaceExclude: tt.namespaceExclude,
+				SystemNamespaces: tt.systemNamespaces,
 			}
 			result := cfg.IsNamespaceIncluded(tt.namespace)
 			if result != tt.expected {
@@ -534,6 +574,7 @@ func TestThreadSafety(t *testing.T) {
 				false,              // dryRun
 				nil,                // namespaceInclude
 				nil,                // namespaceExclude
+				nil,                // systemNamespaces
 				"info",             // logLevel
 				true,               // metricsEnabled
 				9090,               // metricsPort

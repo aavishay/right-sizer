@@ -1,6 +1,7 @@
 package main
 
 import (
+	"right-sizer/config"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -211,17 +212,13 @@ func shouldSkipPod(pod *corev1.Pod) (bool, string) {
 }
 
 func isSystemNamespace(namespace string) bool {
-	systemNamespaces := map[string]bool{
-		"kube-system":     true,
-		"kube-public":     true,
-		"kube-node-lease": true,
-		"cert-manager":    true,
-		"ingress-nginx":   true,
-		"istio-system":    true,
-		"linkerd":         true,
-		"monitoring":      true,
+	cfg := config.GetDefaults()
+	for _, ns := range cfg.SystemNamespaces {
+		if namespace == ns {
+			return true
+		}
 	}
-	return systemNamespaces[namespace]
+	return false
 }
 
 func createTestPod(name, namespace string) *corev1.Pod {

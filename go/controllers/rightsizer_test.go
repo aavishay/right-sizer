@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"right-sizer/config"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -188,11 +189,11 @@ func TestResourceMultipliers(t *testing.T) {
 
 func shouldSkipPod(pod *corev1.Pod) (bool, string) {
 	// System namespace check
-	systemNamespaces := map[string]bool{
-		"kube-system": true, "kube-public": true, "kube-node-lease": true,
-	}
-	if systemNamespaces[pod.Namespace] {
-		return true, "system namespace"
+	cfg := config.GetDefaults()
+	for _, ns := range cfg.SystemNamespaces {
+		if pod.Namespace == ns {
+			return true, "system namespace"
+		}
 	}
 
 	// Disabled annotation check

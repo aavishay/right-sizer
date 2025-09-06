@@ -240,32 +240,36 @@ func (h *OperatorHealthChecker) LivenessCheck(_ *http.Request) error {
 
 // ReadinessCheck implements the healthz.Checker interface for readiness probes
 func (h *OperatorHealthChecker) ReadinessCheck(_ *http.Request) error {
-	// For readiness, we check all critical components
-	if !h.IsHealthy() {
-		report := h.GetHealthReport()
-		unhealthyComponents := []string{}
+	// For readiness, we check critical components only
+	// Skip metrics-provider as it's not critical for operator functionality
+	report := h.GetHealthReport()
+	unhealthyComponents := []string{}
 
-		if components, ok := report["components"].(map[string]interface{}); ok {
-			for name, details := range components {
-				if componentDetails, ok := details.(map[string]interface{}); ok {
-					if healthy, ok := componentDetails["healthy"].(bool); ok && !healthy {
-						// Skip optional components
-						if name == "webhook" || name == "metrics-provider" {
-							if msg, ok := componentDetails["message"].(string); ok {
-								if msg == "Not enabled" || msg == "Not initialized" {
-									continue
-								}
+	if components, ok := report["components"].(map[string]interface{}); ok {
+		for name, details := range components {
+			// Skip metrics-provider entirely as it's not critical
+			if name == "metrics-provider" {
+				continue
+			}
+
+			if componentDetails, ok := details.(map[string]interface{}); ok {
+				if healthy, ok := componentDetails["healthy"].(bool); ok && !healthy {
+					// Skip optional components
+					if name == "webhook" {
+						if msg, ok := componentDetails["message"].(string); ok {
+							if msg == "Not enabled" || msg == "Not initialized" {
+								continue
 							}
 						}
-						unhealthyComponents = append(unhealthyComponents, name)
 					}
+					unhealthyComponents = append(unhealthyComponents, name)
 				}
 			}
 		}
+	}
 
-		if len(unhealthyComponents) > 0 {
-			return fmt.Errorf("unhealthy components: %v", unhealthyComponents)
-		}
+	if len(unhealthyComponents) > 0 {
+		return fmt.Errorf("unhealthy components: %v", unhealthyComponents)
 	}
 	return nil
 }

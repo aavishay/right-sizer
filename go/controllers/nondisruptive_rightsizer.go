@@ -401,8 +401,8 @@ func getCurrentResources(podSpec *corev1.PodSpec, resourceType string) string {
 
 // isSystemResource checks if a resource is a system/infrastructure resource
 func isSystemResource(namespace, name string) bool {
-	systemNamespaces := []string{"kube-system", "kube-public", "kube-node-lease"}
-	for _, ns := range systemNamespaces {
+	cfg := config.Get()
+	for _, ns := range cfg.SystemNamespaces {
 		if namespace == ns {
 			return true
 		}

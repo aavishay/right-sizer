@@ -47,24 +47,8 @@ func (r *RightSizer) Reconcile(ctx context.Context, req reconcile.Request) (reco
 
 	ns := pod.Namespace
 	cfg := config.Get()
-	// If NamespaceInclude is set, only monitor those
-	if len(cfg.NamespaceInclude) > 0 {
-		found := false
-		for _, incl := range cfg.NamespaceInclude {
-			if ns == incl {
-				found = true
-				break
-			}
-		}
-		if !found {
-			return reconcile.Result{}, nil
-		}
-	}
-	// If NamespaceExclude is set, skip those
-	for _, excl := range cfg.NamespaceExclude {
-		if ns == excl {
-			return reconcile.Result{}, nil
-		}
+	if !cfg.IsNamespaceIncluded(ns) {
+		return reconcile.Result{}, nil
 	}
 
 	owner := getOwnerRef(&pod)

@@ -133,13 +133,13 @@ type DefaultCPUStrategy struct {
 	// +kubebuilder:validation:Minimum=0
 	LimitAddition int64 `json:"limitAddition,omitempty"`
 
-	// MinRequest default in millicores (e.g., "10m")
-	// +kubebuilder:default="10m"
-	MinRequest string `json:"minRequest,omitempty"`
+	// MinRequest default in millicores
+	// +kubebuilder:default=10
+	MinRequest int64 `json:"minRequest,omitempty"`
 
-	// MaxLimit default in millicores (e.g., "4000m")
-	// +kubebuilder:default="4000m"
-	MaxLimit string `json:"maxLimit,omitempty"`
+	// MaxLimit default in millicores
+	// +kubebuilder:default=4000
+	MaxLimit int64 `json:"maxLimit,omitempty"`
 
 	// ScaleUpThreshold is the CPU usage percentage (0-1) that triggers scale up
 	// +kubebuilder:default=0.8
@@ -178,13 +178,13 @@ type DefaultMemoryStrategy struct {
 	// +kubebuilder:validation:Minimum=0
 	LimitAddition int64 `json:"limitAddition,omitempty"`
 
-	// MinRequest default in memory units (e.g., "64Mi")
-	// +kubebuilder:default="64Mi"
-	MinRequest string `json:"minRequest,omitempty"`
+	// MinRequest default in MB
+	// +kubebuilder:default=64
+	MinRequest int64 `json:"minRequest,omitempty"`
 
-	// MaxLimit default in memory units (e.g., "8192Mi")
-	// +kubebuilder:default="8192Mi"
-	MaxLimit string `json:"maxLimit,omitempty"`
+	// MaxLimit default in MB
+	// +kubebuilder:default=8192
+	MaxLimit int64 `json:"maxLimit,omitempty"`
 
 	// ScaleUpThreshold is the memory usage percentage (0-1) that triggers scale up
 	// +kubebuilder:default=0.8

@@ -814,7 +814,7 @@ func ensureSafeResourcePatch(current, desired corev1.ResourceRequirements) corev
 	result := corev1.ResourceRequirements{}
 
 	// Only include requests that already exist in the current pod
-	if current.Requests != nil && len(current.Requests) > 0 {
+	if len(current.Requests) > 0 {
 		result.Requests = make(corev1.ResourceList)
 
 		// Only update CPU request if it exists in current
@@ -843,7 +843,7 @@ func ensureSafeResourcePatch(current, desired corev1.ResourceRequirements) corev
 	}
 
 	// Only include limits that already exist in the current pod
-	if current.Limits != nil && len(current.Limits) > 0 {
+	if len(current.Limits) > 0 {
 		result.Limits = make(corev1.ResourceList)
 
 		// Only update CPU limit if it exists in current
@@ -900,8 +900,8 @@ func (r *InPlaceRightSizer) fallbackPatch(ctx context.Context, pod *corev1.Pod, 
 // isSystemPod checks if a pod is a system/infrastructure pod
 func isSystemPod(pod *corev1.Pod) bool {
 	// Skip kube-system and other system namespaces
-	systemNamespaces := []string{"kube-system", "kube-public", "kube-node-lease", "ingress-nginx", "cert-manager"}
-	for _, ns := range systemNamespaces {
+	cfg := config.Get()
+	for _, ns := range cfg.SystemNamespaces {
 		if pod.Namespace == ns {
 			return true
 		}

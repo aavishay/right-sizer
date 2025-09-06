@@ -185,31 +185,23 @@ func (r *RightSizerConfigReconciler) applyConfiguration(ctx context.Context, rsc
 	memoryLimitAddition := rsc.Spec.DefaultResourceStrategy.Memory.LimitAddition
 
 	minCPURequest := int64(10)
-	if rsc.Spec.DefaultResourceStrategy.CPU.MinRequest != "" {
-		if parsed, err := parseResourceQuantity(rsc.Spec.DefaultResourceStrategy.CPU.MinRequest, "cpu"); err == nil {
-			minCPURequest = parsed
-		}
+	if rsc.Spec.DefaultResourceStrategy.CPU.MinRequest != 0 {
+		minCPURequest = rsc.Spec.DefaultResourceStrategy.CPU.MinRequest
 	}
 
 	minMemoryRequest := int64(64)
-	if rsc.Spec.DefaultResourceStrategy.Memory.MinRequest != "" {
-		if parsed, err := parseResourceQuantity(rsc.Spec.DefaultResourceStrategy.Memory.MinRequest, "memory"); err == nil {
-			minMemoryRequest = parsed
-		}
+	if rsc.Spec.DefaultResourceStrategy.Memory.MinRequest != 0 {
+		minMemoryRequest = rsc.Spec.DefaultResourceStrategy.Memory.MinRequest
 	}
 
 	maxCPULimit := int64(4000)
-	if rsc.Spec.DefaultResourceStrategy.CPU.MaxLimit != "" {
-		if parsed, err := parseResourceQuantity(rsc.Spec.DefaultResourceStrategy.CPU.MaxLimit, "cpu"); err == nil {
-			maxCPULimit = parsed
-		}
+	if rsc.Spec.DefaultResourceStrategy.CPU.MaxLimit != 0 {
+		maxCPULimit = rsc.Spec.DefaultResourceStrategy.CPU.MaxLimit
 	}
 
 	maxMemoryLimit := int64(8192)
-	if rsc.Spec.DefaultResourceStrategy.Memory.MaxLimit != "" {
-		if parsed, err := parseResourceQuantity(rsc.Spec.DefaultResourceStrategy.Memory.MaxLimit, "memory"); err == nil {
-			maxMemoryLimit = parsed
-		}
+	if rsc.Spec.DefaultResourceStrategy.Memory.MaxLimit != 0 {
+		maxMemoryLimit = rsc.Spec.DefaultResourceStrategy.Memory.MaxLimit
 	}
 
 	// Extract scaling thresholds
@@ -268,6 +260,7 @@ func (r *RightSizerConfigReconciler) applyConfiguration(ctx context.Context, rsc
 		rsc.Spec.DryRun,
 		rsc.Spec.NamespaceConfig.IncludeNamespaces,
 		rsc.Spec.NamespaceConfig.ExcludeNamespaces,
+		rsc.Spec.NamespaceConfig.SystemNamespaces,
 		rsc.Spec.ObservabilityConfig.LogLevel,
 		rsc.Spec.ObservabilityConfig.EnableMetricsExport,
 		int(rsc.Spec.ObservabilityConfig.MetricsPort),

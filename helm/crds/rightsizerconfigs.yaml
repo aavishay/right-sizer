@@ -46,9 +46,9 @@ spec:
                         limitMultiplier:
                           type: number
                         minRequest:
-                          type: string
+                          type: integer
                         maxLimit:
-                          type: string
+                          type: integer
                         scaleUpThreshold:
                           type: number
                         scaleDownThreshold:
@@ -61,9 +61,9 @@ spec:
                         limitMultiplier:
                           type: number
                         minRequest:
-                          type: string
+                          type: integer
                         maxLimit:
-                          type: string
+                          type: integer
                         scaleUpThreshold:
                           type: number
                         scaleDownThreshold:
