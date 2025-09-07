@@ -70,13 +70,13 @@ rightsizerConfig:
   # Resource defaults and sizing configuration
   resourceDefaults:
     cpu:
-      minRequest: 10 # millicores
-      maxLimit: 4000 # millicores
+      minRequest: "10m" # millicores
+      maxLimit: "4000m" # millicores
       requestAddition: 0 # millicores to add to calculated request
       limitAddition: 0 # millicores to add to calculated limit
     memory:
-      minRequest: 64 # MB
-      maxLimit: 8192 # MB
+      minRequest: "64Mi" # MB
+      maxLimit: "8192Mi" # MB
       requestAddition: 0 # MB to add to calculated request
       limitAddition: 0 # MB to add to calculated limit
 
