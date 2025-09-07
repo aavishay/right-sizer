@@ -21,6 +21,9 @@ import (
 	"fmt"
 	"time"
 
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"right-sizer/admission"
 	"right-sizer/api/v1alpha1"
 	"right-sizer/audit"
@@ -28,11 +31,6 @@ import (
 	"right-sizer/health"
 	"right-sizer/logger"
 	"right-sizer/metrics"
-
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
-
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"

@@ -13,6 +13,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+// Package admission provides admission webhook functionality for the right-sizer.
 package admission
 
 import (
@@ -23,6 +24,11 @@ import (
 	"net/http"
 	"strings"
 
+	"right-sizer/config"
+	"right-sizer/logger"
+	"right-sizer/metrics"
+	"right-sizer/validation"
+
 	admissionv1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -30,10 +36,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/client-go/kubernetes"
-	"right-sizer/config"
-	"right-sizer/logger"
-	"right-sizer/metrics"
-	"right-sizer/validation"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -68,9 +70,11 @@ func NewWebhookServer(
 	cfg *config.Config,
 	metrics *metrics.OperatorMetrics,
 	webhookConfig WebhookConfig,
-) *WebhookServer {
+) (*WebhookServer, error) {
 	scheme := runtime.NewScheme()
-	corev1.AddToScheme(scheme)
+	if err := corev1.AddToScheme(scheme); err != nil {
+		return nil, fmt.Errorf("failed to add corev1 to scheme: %w", err)
+	}
 	codecs := serializer.NewCodecFactory(scheme)
 
 	mux := http.NewServeMux()
@@ -102,12 +106,14 @@ func NewWebhookServer(
 	}
 
 	// Health check endpoint
-	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("healthy"))
+		if _, err := w.Write([]byte("healthy")); err != nil {
+			logger.Error("Failed to write health response: %v", err)
+		}
 	})
 
-	return ws
+	return ws, nil
 }
 
 // Start starts the webhook server
@@ -586,7 +592,9 @@ func (ws *WebhookServer) sendResponse(w http.ResponseWriter, response *admission
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	w.Write(respBytes)
+	if _, err := w.Write(respBytes); err != nil {
+		logger.Error("Failed to write admission response: %v", err)
+	}
 }
 
 // sendError sends an error response
@@ -614,8 +622,13 @@ func NewWebhookManager(
 	metrics *metrics.OperatorMetrics,
 	webhookConfig WebhookConfig,
 ) *WebhookManager {
+	server, err := NewWebhookServer(client, clientset, validator, cfg, metrics, webhookConfig)
+	if err != nil {
+		logger.Error("Failed to create webhook server: %v", err)
+		return nil
+	}
 	return &WebhookManager{
-		server: NewWebhookServer(client, clientset, validator, cfg, metrics, webhookConfig),
+		server: server,
 		config: webhookConfig,
 	}
 }
