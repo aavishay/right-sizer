@@ -21,6 +21,8 @@
 
 Right-Sizer automatically adjusts Kubernetes pod resources based on actual usage, reducing costs and improving performance.
 
+<!-- Test comment for pre-commit hooks -->
+
 ```bash
 # Quick Install (Helm)
 helm repo add right-sizer https://aavishay.github.io/right-sizer/charts
