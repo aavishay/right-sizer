@@ -107,6 +107,11 @@ type DefaultResourceStrategySpec struct {
 	// +kubebuilder:validation:Enum=immediate;rolling;scheduled
 	// +kubebuilder:default=rolling
 	UpdateMode string `json:"updateMode,omitempty"`
+
+	// Algorithm default for resource calculation algorithm
+	// +kubebuilder:validation:Enum=percentile;average;max
+	// +kubebuilder:default=percentile
+	Algorithm string `json:"algorithm,omitempty"`
 }
 
 // DefaultCPUStrategy defines default CPU resource calculation
@@ -134,12 +139,12 @@ type DefaultCPUStrategy struct {
 	LimitAddition int64 `json:"limitAddition,omitempty"`
 
 	// MinRequest default in millicores
-	// +kubebuilder:default=10
-	MinRequest int64 `json:"minRequest,omitempty"`
+	// +kubebuilder:default="10m"
+	MinRequest string `json:"minRequest,omitempty"`
 
 	// MaxLimit default in millicores
-	// +kubebuilder:default=4000
-	MaxLimit int64 `json:"maxLimit,omitempty"`
+	// +kubebuilder:default="4000m"
+	MaxLimit string `json:"maxLimit,omitempty"`
 
 	// ScaleUpThreshold is the CPU usage percentage (0-1) that triggers scale up
 	// +kubebuilder:default=0.8
@@ -179,12 +184,12 @@ type DefaultMemoryStrategy struct {
 	LimitAddition int64 `json:"limitAddition,omitempty"`
 
 	// MinRequest default in MB
-	// +kubebuilder:default=64
-	MinRequest int64 `json:"minRequest,omitempty"`
+	// +kubebuilder:default="64Mi"
+	MinRequest string `json:"minRequest,omitempty"`
 
 	// MaxLimit default in MB
-	// +kubebuilder:default=8192
-	MaxLimit int64 `json:"maxLimit,omitempty"`
+	// +kubebuilder:default="8192Mi"
+	MaxLimit string `json:"maxLimit,omitempty"`
 
 	// ScaleUpThreshold is the memory usage percentage (0-1) that triggers scale up
 	// +kubebuilder:default=0.8
@@ -233,6 +238,16 @@ type GlobalConstraintsSpec struct {
 	// RespectVPA globally ensures VerticalPodAutoscalers are not conflicted
 	// +kubebuilder:default=true
 	RespectVPA bool `json:"respectVPA,omitempty"`
+
+	// MaxCPUCores global maximum CPU cores limit
+	// +kubebuilder:default=16
+	// +kubebuilder:validation:Minimum=1
+	MaxCPUCores int32 `json:"maxCPUCores,omitempty"`
+
+	// MaxMemoryGB global maximum memory GB limit
+	// +kubebuilder:default=32
+	// +kubebuilder:validation:Minimum=1
+	MaxMemoryGB int32 `json:"maxMemoryGB,omitempty"`
 }
 
 // MetricsConfigSpec configures metrics collection
@@ -262,6 +277,19 @@ type MetricsConfigSpec struct {
 	// EnableProfiling enables CPU and memory profiling
 	// +kubebuilder:default=false
 	EnableProfiling bool `json:"enableProfiling,omitempty"`
+
+	// AggregationMethod for metrics aggregation
+	// +kubebuilder:validation:Enum=avg;max;min
+	// +kubebuilder:default=avg
+	AggregationMethod string `json:"aggregationMethod,omitempty"`
+
+	// HistoryRetention for metrics history retention
+	// +kubebuilder:default="30d"
+	HistoryRetention string `json:"historyRetention,omitempty"`
+
+	// IncludeCustomMetrics enables custom metrics
+	// +kubebuilder:default=false
+	IncludeCustomMetrics bool `json:"includeCustomMetrics,omitempty"`
 }
 
 // ObservabilityConfigSpec configures observability features
@@ -302,6 +330,14 @@ type ObservabilityConfigSpec struct {
 	// EnableEvents enables Kubernetes event generation
 	// +kubebuilder:default=true
 	EnableEvents bool `json:"enableEvents,omitempty"`
+
+	// EnableProfiling enables CPU and memory profiling
+	// +kubebuilder:default=false
+	EnableProfiling bool `json:"enableProfiling,omitempty"`
+
+	// ProfilingPort for profiling
+	// +kubebuilder:default=6060
+	ProfilingPort int32 `json:"profilingPort,omitempty"`
 }
 
 // SecurityConfigSpec configures security features
@@ -332,6 +368,14 @@ type SecurityConfigSpec struct {
 
 	// TLSConfig for webhook TLS configuration
 	TLSConfig *WebhookTLSConfig `json:"tlsConfig,omitempty"`
+
+	// TLSCertDir for TLS certificates
+	// +kubebuilder:default="/tmp/certs"
+	TLSCertDir string `json:"tlsCertDir,omitempty"`
+
+	// WebhookTimeoutSeconds for webhook timeout
+	// +kubebuilder:default=10
+	WebhookTimeoutSeconds int32 `json:"webhookTimeoutSeconds,omitempty"`
 }
 
 // WebhookTLSConfig defines TLS configuration for webhooks
@@ -414,6 +458,38 @@ type OperatorConfigSpec struct {
 	// +kubebuilder:validation:Minimum=1
 	// +kubebuilder:validation:Maximum=20
 	MaxConcurrentReconciles int32 `json:"maxConcurrentReconciles,omitempty"`
+
+	// HealthProbePort for health probe
+	// +kubebuilder:default=8081
+	HealthProbePort int32 `json:"healthProbePort,omitempty"`
+
+	// LeaderElectionLeaseDuration for leader election
+	// +kubebuilder:default="15s"
+	LeaderElectionLeaseDuration string `json:"leaderElectionLeaseDuration,omitempty"`
+
+	// LeaderElectionRenewDeadline for leader election
+	// +kubebuilder:default="10s"
+	LeaderElectionRenewDeadline string `json:"leaderElectionRenewDeadline,omitempty"`
+
+	// LeaderElectionRetryPeriod for leader election
+	// +kubebuilder:default="2s"
+	LeaderElectionRetryPeriod string `json:"leaderElectionRetryPeriod,omitempty"`
+
+	// LivenessEndpoint for liveness probe
+	// +kubebuilder:default="/healthz"
+	LivenessEndpoint string `json:"livenessEndpoint,omitempty"`
+
+	// ReadinessEndpoint for readiness probe
+	// +kubebuilder:default="/readyz"
+	ReadinessEndpoint string `json:"readinessEndpoint,omitempty"`
+
+	// RetryAttempts for retry attempts
+	// +kubebuilder:default=3
+	RetryAttempts int32 `json:"retryAttempts,omitempty"`
+
+	// SyncPeriod for sync period
+	// +kubebuilder:default="30s"
+	SyncPeriod string `json:"syncPeriod,omitempty"`
 }
 
 // NamespaceConfigSpec defines namespace inclusion/exclusion

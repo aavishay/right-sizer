@@ -9,6 +9,10 @@ repos:
         exclude: helm/templates/.*\.yaml$
       - id: check-merge-conflict
       - id: check-added-large-files
+      - id: check-executables-have-shebangs
+      - id: check-shebang-scripts-are-executable
+      - id: mixed-line-ending
+        args: [--fix=lf]
 
   - repo: local
     hooks:
@@ -30,9 +34,36 @@ repos:
         language: system
         files: go/go\.mod$
         pass_filenames: false
-      # - id: golangci-lint
-      #   name: Run golangci-lint
-      #   entry: bash -c "cd go && /Users/avishay/go/bin/golangci-lint run ./..."
-      #   language: system
-      #   files: go/.*\.go$
-      #   pass_filenames: false
+      - id: golangci-lint
+        name: Run golangci-lint
+        entry: bash -c "cd go && ~/go/bin/golangci-lint run ./..."
+        language: system
+        files: go/.*\.go$
+        pass_filenames: false
+
+  - repo: local
+    hooks:
+      - id: go-test
+        name: Run Go tests
+        entry: bash -c "cd go && go test ./..."
+        language: system
+        files: go/.*\.go$
+        pass_filenames: false
+      - id: go-build
+        name: Build Go binary
+        entry: bash -c "cd go && go build ./..."
+        language: system
+        files: go/.*\.go$
+        pass_filenames: false
+      - id: helm-lint
+        name: Lint Helm charts
+        entry: bash -c "helm lint helm"
+        language: system
+        files: helm/.*$
+        pass_filenames: false
+      - id: check-go-mod
+        name: Check Go module
+        entry: bash -c "cd go && go mod verify"
+        language: system
+        files: go/go\.(mod|sum)$
+        pass_filenames: false

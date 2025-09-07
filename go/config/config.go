@@ -63,6 +63,9 @@ type Config struct {
 	MinCPURequest    int64 // in millicores
 	MinMemoryRequest int64 // in MB
 
+	// Algorithm for resource calculation
+	Algorithm string // percentile, peak, average
+
 	// Operational configuration
 	ResizeInterval time.Duration // How often to check and resize resources
 	LogLevel       string        // Log level: debug, info, warn, error
@@ -84,6 +87,12 @@ type Config struct {
 	DelayBetweenBatches time.Duration // Delay between processing batches
 	DelayBetweenPods    time.Duration // Delay between individual pod updates
 
+	// Global constraints
+	MaxCPUCores                int  // Global limit for CPU cores
+	MaxMemoryGB                int  // Global limit for memory in GB
+	PreventOOMKill             bool // Prevent OOM kills globally
+	RespectPodDisruptionBudget bool // Respect Pod Disruption Budgets globally
+
 	// Namespace filters
 	NamespaceInclude []string // Namespaces to include
 	NamespaceExclude []string // Namespaces to exclude
@@ -99,6 +108,11 @@ type Config struct {
 	PrometheusURL         string // URL for Prometheus if used
 	MetricsServerEndpoint string // Endpoint for metrics server
 
+	// Metrics configuration
+	AggregationMethod    string // avg, max, min, sum
+	HistoryRetention     string // Duration for metrics history
+	IncludeCustomMetrics bool   // Enable custom metrics
+
 	// Feature flags
 	EnableInPlaceResize bool // Enable in-place pod resizing (Kubernetes 1.33+)
 
@@ -106,6 +120,25 @@ type Config struct {
 	PreserveGuaranteedQoS      bool // Preserve Guaranteed QoS class during resizing
 	ForceGuaranteedForCritical bool // Force Guaranteed QoS for critical workloads
 	QoSTransitionWarning       bool // Warn when QoS class would change
+
+	// Observability configuration
+	EnableAuditLogging bool // Enable audit logging
+	EnableProfiling    bool // Enable profiling
+	ProfilingPort      int  // Port for profiling endpoint
+
+	// Operator configuration
+	HealthProbePort             int    // Port for health checks
+	LeaderElectionLeaseDuration string // Duration for leader election lease
+	LeaderElectionRenewDeadline string // Deadline for leader election renewal
+	LeaderElectionRetryPeriod   string // Period for leader election retries
+	LivenessEndpoint            string // Endpoint for liveness probe
+	ReadinessEndpoint           string // Endpoint for readiness probe
+	RetryAttempts               int    // Number of retry attempts
+	SyncPeriod                  string // Period for reconciliation sync
+
+	// Security configuration
+	TLSCertDir            string // Directory for TLS certificates
+	WebhookTimeoutSeconds int    // Timeout for webhook requests
 
 	// Scaling thresholds
 	MemoryScaleUpThreshold   float64 // Memory usage percentage to trigger scale up (0-1)
@@ -143,6 +176,9 @@ func GetDefaults() *Config {
 		MinCPURequest:           10,
 		MinMemoryRequest:        64,
 
+		// Default algorithm
+		Algorithm: "percentile",
+
 		// Default QoS preservation settings
 		PreserveGuaranteedQoS:      true,
 		ForceGuaranteedForCritical: false,
@@ -169,6 +205,12 @@ func GetDefaults() *Config {
 		DelayBetweenBatches: 5 * time.Second,
 		DelayBetweenPods:    500 * time.Millisecond,
 
+		// Default global constraints
+		MaxCPUCores:                16,
+		MaxMemoryGB:                32,
+		PreventOOMKill:             true,
+		RespectPodDisruptionBudget: true,
+
 		// Default namespace filters
 		NamespaceInclude: []string{},
 		NamespaceExclude: []string{},
@@ -189,9 +231,31 @@ func GetDefaults() *Config {
 		MetricsProvider:       "metrics-server",
 		MetricsServerEndpoint: "",
 		PrometheusURL:         "http://prometheus:9090",
+		AggregationMethod:     "avg",
+		HistoryRetention:      "30d",
+		IncludeCustomMetrics:  false,
 
 		// Default feature flags
 		EnableInPlaceResize: false,
+
+		// Default observability configuration
+		EnableAuditLogging: true,
+		EnableProfiling:    false,
+		ProfilingPort:      6060,
+
+		// Default operator configuration
+		HealthProbePort:             8081,
+		LeaderElectionLeaseDuration: "15s",
+		LeaderElectionRenewDeadline: "10s",
+		LeaderElectionRetryPeriod:   "2s",
+		LivenessEndpoint:            "/healthz",
+		ReadinessEndpoint:           "/readyz",
+		RetryAttempts:               3,
+		SyncPeriod:                  "30s",
+
+		// Default security configuration
+		TLSCertDir:            "/tmp/certs",
+		WebhookTimeoutSeconds: 10,
 
 		// Default scaling thresholds
 		MemoryScaleUpThreshold:   0.8, // Scale up when memory usage exceeds 80%
@@ -250,8 +314,8 @@ func (c *Config) UpdateFromCRD(
 	cpuRequestAddition, memoryRequestAddition int64,
 	cpuLimitMultiplier, memoryLimitMultiplier float64,
 	cpuLimitAddition, memoryLimitAddition int64,
-	minCPURequest, minMemoryRequest int64,
-	maxCPULimit, maxMemoryLimit int64,
+	minCPURequest, minMemoryRequest string,
+	maxCPULimit, maxMemoryLimit string,
 	resizeInterval time.Duration,
 	dryRun bool,
 	namespaceInclude, namespaceExclude, systemNamespaces []string,
@@ -266,6 +330,20 @@ func (c *Config) UpdateFromCRD(
 	qps float32, burst, maxConcurrentReconciles int,
 	memoryScaleUpThreshold, memoryScaleDownThreshold float64,
 	cpuScaleUpThreshold, cpuScaleDownThreshold float64,
+	algorithm string,
+	maxCPUCores, maxMemoryGB int,
+	preventOOMKill, respectPodDisruptionBudget bool,
+	aggregationMethod, historyRetention string,
+	includeCustomMetrics bool,
+	enableAuditLogging, enableProfiling bool,
+	profilingPort int,
+	healthProbePort int,
+	leaderElectionLeaseDuration, leaderElectionRenewDeadline, leaderElectionRetryPeriod string,
+	livenessEndpoint, readinessEndpoint string,
+	retryAttempts int,
+	syncPeriod string,
+	tlsCertDir string,
+	webhookTimeoutSeconds int,
 ) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -289,17 +367,25 @@ func (c *Config) UpdateFromCRD(
 	c.CPULimitAddition = cpuLimitAddition
 	c.MemoryLimitAddition = memoryLimitAddition
 
-	if minCPURequest > 0 {
-		c.MinCPURequest = minCPURequest
+	if minCPURequest != "" {
+		if parsed, err := parseResourceQuantity(minCPURequest, "cpu"); err == nil {
+			c.MinCPURequest = parsed
+		}
 	}
-	if minMemoryRequest > 0 {
-		c.MinMemoryRequest = minMemoryRequest
+	if minMemoryRequest != "" {
+		if parsed, err := parseResourceQuantity(minMemoryRequest, "memory"); err == nil {
+			c.MinMemoryRequest = parsed
+		}
 	}
-	if maxCPULimit > 0 {
-		c.MaxCPULimit = maxCPULimit
+	if maxCPULimit != "" {
+		if parsed, err := parseResourceQuantity(maxCPULimit, "cpu"); err == nil {
+			c.MaxCPULimit = parsed
+		}
 	}
-	if maxMemoryLimit > 0 {
-		c.MaxMemoryLimit = maxMemoryLimit
+	if maxMemoryLimit != "" {
+		if parsed, err := parseResourceQuantity(maxMemoryLimit, "memory"); err == nil {
+			c.MaxMemoryLimit = parsed
+		}
 	}
 
 	// Update operational configuration
@@ -373,6 +459,61 @@ func (c *Config) UpdateFromCRD(
 		c.CPUScaleDownThreshold = cpuScaleDownThreshold
 	}
 
+	// Update new fields
+	if algorithm != "" {
+		c.Algorithm = algorithm
+	}
+	if maxCPUCores > 0 {
+		c.MaxCPUCores = maxCPUCores
+	}
+	if maxMemoryGB > 0 {
+		c.MaxMemoryGB = maxMemoryGB
+	}
+	c.PreventOOMKill = preventOOMKill
+	c.RespectPodDisruptionBudget = respectPodDisruptionBudget
+	if aggregationMethod != "" {
+		c.AggregationMethod = aggregationMethod
+	}
+	if historyRetention != "" {
+		c.HistoryRetention = historyRetention
+	}
+	c.IncludeCustomMetrics = includeCustomMetrics
+	c.EnableAuditLogging = enableAuditLogging
+	c.EnableProfiling = enableProfiling
+	if profilingPort > 0 {
+		c.ProfilingPort = profilingPort
+	}
+	if healthProbePort > 0 {
+		c.HealthProbePort = healthProbePort
+	}
+	if leaderElectionLeaseDuration != "" {
+		c.LeaderElectionLeaseDuration = leaderElectionLeaseDuration
+	}
+	if leaderElectionRenewDeadline != "" {
+		c.LeaderElectionRenewDeadline = leaderElectionRenewDeadline
+	}
+	if leaderElectionRetryPeriod != "" {
+		c.LeaderElectionRetryPeriod = leaderElectionRetryPeriod
+	}
+	if livenessEndpoint != "" {
+		c.LivenessEndpoint = livenessEndpoint
+	}
+	if readinessEndpoint != "" {
+		c.ReadinessEndpoint = readinessEndpoint
+	}
+	if retryAttempts > 0 {
+		c.RetryAttempts = retryAttempts
+	}
+	if syncPeriod != "" {
+		c.SyncPeriod = syncPeriod
+	}
+	if tlsCertDir != "" {
+		c.TLSCertDir = tlsCertDir
+	}
+	if webhookTimeoutSeconds > 0 {
+		c.WebhookTimeoutSeconds = webhookTimeoutSeconds
+	}
+
 	// Mark configuration as coming from CRD
 	c.ConfigSource = "crd"
 }
@@ -396,6 +537,7 @@ func (c *Config) ResetToDefaults() {
 	c.MinMemoryRequest = defaults.MinMemoryRequest
 	c.MaxCPULimit = defaults.MaxCPULimit
 	c.MaxMemoryLimit = defaults.MaxMemoryLimit
+	c.Algorithm = defaults.Algorithm
 	c.ResizeInterval = defaults.ResizeInterval
 	c.LogLevel = defaults.LogLevel
 	c.MaxRetries = defaults.MaxRetries
@@ -408,6 +550,10 @@ func (c *Config) ResetToDefaults() {
 	c.AuditEnabled = defaults.AuditEnabled
 	c.DryRun = defaults.DryRun
 	c.SafetyThreshold = defaults.SafetyThreshold
+	c.MaxCPUCores = defaults.MaxCPUCores
+	c.MaxMemoryGB = defaults.MaxMemoryGB
+	c.PreventOOMKill = defaults.PreventOOMKill
+	c.RespectPodDisruptionBudget = defaults.RespectPodDisruptionBudget
 	c.NamespaceInclude = defaults.NamespaceInclude
 	c.NamespaceExclude = defaults.NamespaceExclude
 	c.SystemNamespaces = defaults.SystemNamespaces
@@ -417,7 +563,26 @@ func (c *Config) ResetToDefaults() {
 	c.MetricsProvider = defaults.MetricsProvider
 	c.PrometheusURL = defaults.PrometheusURL
 	c.MetricsServerEndpoint = defaults.MetricsServerEndpoint
+	c.AggregationMethod = defaults.AggregationMethod
+	c.HistoryRetention = defaults.HistoryRetention
+	c.IncludeCustomMetrics = defaults.IncludeCustomMetrics
 	c.EnableInPlaceResize = defaults.EnableInPlaceResize
+	c.PreserveGuaranteedQoS = defaults.PreserveGuaranteedQoS
+	c.ForceGuaranteedForCritical = defaults.ForceGuaranteedForCritical
+	c.QoSTransitionWarning = defaults.QoSTransitionWarning
+	c.EnableAuditLogging = defaults.EnableAuditLogging
+	c.EnableProfiling = defaults.EnableProfiling
+	c.ProfilingPort = defaults.ProfilingPort
+	c.HealthProbePort = defaults.HealthProbePort
+	c.LeaderElectionLeaseDuration = defaults.LeaderElectionLeaseDuration
+	c.LeaderElectionRenewDeadline = defaults.LeaderElectionRenewDeadline
+	c.LeaderElectionRetryPeriod = defaults.LeaderElectionRetryPeriod
+	c.LivenessEndpoint = defaults.LivenessEndpoint
+	c.ReadinessEndpoint = defaults.ReadinessEndpoint
+	c.RetryAttempts = defaults.RetryAttempts
+	c.SyncPeriod = defaults.SyncPeriod
+	c.TLSCertDir = defaults.TLSCertDir
+	c.WebhookTimeoutSeconds = defaults.WebhookTimeoutSeconds
 	c.MemoryScaleUpThreshold = defaults.MemoryScaleUpThreshold
 	c.MemoryScaleDownThreshold = defaults.MemoryScaleDownThreshold
 	c.CPUScaleUpThreshold = defaults.CPUScaleUpThreshold
@@ -596,41 +761,65 @@ func (c *Config) Clone() *Config {
 	defer c.mu.RUnlock()
 
 	clone := &Config{
-		CPURequestMultiplier:     c.CPURequestMultiplier,
-		MemoryRequestMultiplier:  c.MemoryRequestMultiplier,
-		CPURequestAddition:       c.CPURequestAddition,
-		MemoryRequestAddition:    c.MemoryRequestAddition,
-		CPULimitMultiplier:       c.CPULimitMultiplier,
-		MemoryLimitMultiplier:    c.MemoryLimitMultiplier,
-		CPULimitAddition:         c.CPULimitAddition,
-		MemoryLimitAddition:      c.MemoryLimitAddition,
-		MaxCPULimit:              c.MaxCPULimit,
-		MaxMemoryLimit:           c.MaxMemoryLimit,
-		MinCPURequest:            c.MinCPURequest,
-		MinMemoryRequest:         c.MinMemoryRequest,
-		ResizeInterval:           c.ResizeInterval,
-		LogLevel:                 c.LogLevel,
-		MaxRetries:               c.MaxRetries,
-		RetryInterval:            c.RetryInterval,
-		MetricsEnabled:           c.MetricsEnabled,
-		MetricsPort:              c.MetricsPort,
-		AuditEnabled:             c.AuditEnabled,
-		QPS:                      c.QPS,
-		Burst:                    c.Burst,
-		MaxConcurrentReconciles:  c.MaxConcurrentReconciles,
-		DryRun:                   c.DryRun,
-		SafetyThreshold:          c.SafetyThreshold,
-		HistoryDays:              c.HistoryDays,
-		AdmissionController:      c.AdmissionController,
-		MetricsProvider:          c.MetricsProvider,
-		PrometheusURL:            c.PrometheusURL,
-		MetricsServerEndpoint:    c.MetricsServerEndpoint,
-		EnableInPlaceResize:      c.EnableInPlaceResize,
-		MemoryScaleUpThreshold:   c.MemoryScaleUpThreshold,
-		MemoryScaleDownThreshold: c.MemoryScaleDownThreshold,
-		CPUScaleUpThreshold:      c.CPUScaleUpThreshold,
-		CPUScaleDownThreshold:    c.CPUScaleDownThreshold,
-		ConfigSource:             c.ConfigSource,
+		CPURequestMultiplier:        c.CPURequestMultiplier,
+		MemoryRequestMultiplier:     c.MemoryRequestMultiplier,
+		CPURequestAddition:          c.CPURequestAddition,
+		MemoryRequestAddition:       c.MemoryRequestAddition,
+		CPULimitMultiplier:          c.CPULimitMultiplier,
+		MemoryLimitMultiplier:       c.MemoryLimitMultiplier,
+		CPULimitAddition:            c.CPULimitAddition,
+		MemoryLimitAddition:         c.MemoryLimitAddition,
+		MaxCPULimit:                 c.MaxCPULimit,
+		MaxMemoryLimit:              c.MaxMemoryLimit,
+		MinCPURequest:               c.MinCPURequest,
+		MinMemoryRequest:            c.MinMemoryRequest,
+		Algorithm:                   c.Algorithm,
+		ResizeInterval:              c.ResizeInterval,
+		LogLevel:                    c.LogLevel,
+		MaxRetries:                  c.MaxRetries,
+		RetryInterval:               c.RetryInterval,
+		MetricsEnabled:              c.MetricsEnabled,
+		MetricsPort:                 c.MetricsPort,
+		AuditEnabled:                c.AuditEnabled,
+		QPS:                         c.QPS,
+		Burst:                       c.Burst,
+		MaxConcurrentReconciles:     c.MaxConcurrentReconciles,
+		DryRun:                      c.DryRun,
+		SafetyThreshold:             c.SafetyThreshold,
+		MaxCPUCores:                 c.MaxCPUCores,
+		MaxMemoryGB:                 c.MaxMemoryGB,
+		PreventOOMKill:              c.PreventOOMKill,
+		RespectPodDisruptionBudget:  c.RespectPodDisruptionBudget,
+		HistoryDays:                 c.HistoryDays,
+		AdmissionController:         c.AdmissionController,
+		MetricsProvider:             c.MetricsProvider,
+		PrometheusURL:               c.PrometheusURL,
+		MetricsServerEndpoint:       c.MetricsServerEndpoint,
+		AggregationMethod:           c.AggregationMethod,
+		HistoryRetention:            c.HistoryRetention,
+		IncludeCustomMetrics:        c.IncludeCustomMetrics,
+		EnableInPlaceResize:         c.EnableInPlaceResize,
+		PreserveGuaranteedQoS:       c.PreserveGuaranteedQoS,
+		ForceGuaranteedForCritical:  c.ForceGuaranteedForCritical,
+		QoSTransitionWarning:        c.QoSTransitionWarning,
+		EnableAuditLogging:          c.EnableAuditLogging,
+		EnableProfiling:             c.EnableProfiling,
+		ProfilingPort:               c.ProfilingPort,
+		HealthProbePort:             c.HealthProbePort,
+		LeaderElectionLeaseDuration: c.LeaderElectionLeaseDuration,
+		LeaderElectionRenewDeadline: c.LeaderElectionRenewDeadline,
+		LeaderElectionRetryPeriod:   c.LeaderElectionRetryPeriod,
+		LivenessEndpoint:            c.LivenessEndpoint,
+		ReadinessEndpoint:           c.ReadinessEndpoint,
+		RetryAttempts:               c.RetryAttempts,
+		SyncPeriod:                  c.SyncPeriod,
+		TLSCertDir:                  c.TLSCertDir,
+		WebhookTimeoutSeconds:       c.WebhookTimeoutSeconds,
+		MemoryScaleUpThreshold:      c.MemoryScaleUpThreshold,
+		MemoryScaleDownThreshold:    c.MemoryScaleDownThreshold,
+		CPUScaleUpThreshold:         c.CPUScaleUpThreshold,
+		CPUScaleDownThreshold:       c.CPUScaleDownThreshold,
+		ConfigSource:                c.ConfigSource,
 	}
 
 	// Deep copy slices
@@ -675,4 +864,61 @@ func (c *Config) GetSafeValue(getter func(*Config) interface{}) interface{} {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return getter(c)
+}
+
+// parseResourceQuantity parses Kubernetes resource quantity strings to int64 values
+func parseResourceQuantity(quantity string, resourceType string) (int64, error) {
+	if quantity == "" {
+		return 0, fmt.Errorf("empty quantity string")
+	}
+
+	// Simple parsing for common cases
+	// For CPU: "10m" -> 10 (millicores), "1" -> 1000 (millicores)
+	// For Memory: "64Mi" -> 64 (MiB), "1Gi" -> 1024 (MiB)
+
+	if resourceType == "cpu" {
+		if len(quantity) > 0 && quantity[len(quantity)-1:] == "m" {
+			// Parse millicores (e.g., "10m" -> 10)
+			return parseIntFromString(quantity[:len(quantity)-1])
+		}
+		// Assume whole cores, convert to millicores (e.g., "2" -> 2000)
+		if val, err := parseIntFromString(quantity); err == nil {
+			return val * 1000, nil
+		}
+	}
+
+	if resourceType == "memory" {
+		if len(quantity) >= 2 {
+			suffix := quantity[len(quantity)-2:]
+			if suffix == "Mi" {
+				// Parse MiB (e.g., "64Mi" -> 64)
+				return parseIntFromString(quantity[:len(quantity)-2])
+			}
+			if suffix == "Gi" {
+				// Parse GiB, convert to MiB (e.g., "1Gi" -> 1024)
+				if val, err := parseIntFromString(quantity[:len(quantity)-2]); err == nil {
+					return val * 1024, nil
+				}
+			}
+		}
+		// Assume MiB if no suffix
+		return parseIntFromString(quantity)
+	}
+
+	return 0, fmt.Errorf("unknown resource type or format: %s", quantity)
+}
+
+// parseIntFromString is a simple integer parser
+func parseIntFromString(s string) (int64, error) {
+	if s == "" {
+		return 0, fmt.Errorf("empty string")
+	}
+	var result int64
+	for _, ch := range s {
+		if ch < '0' || ch > '9' {
+			return 0, fmt.Errorf("invalid integer: %s", s)
+		}
+		result = result*10 + int64(ch-'0')
+	}
+	return result, nil
 }

@@ -21,9 +21,6 @@ import (
 	"fmt"
 	"time"
 
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"right-sizer/admission"
 	"right-sizer/api/v1alpha1"
 	"right-sizer/audit"
@@ -31,6 +28,10 @@ import (
 	"right-sizer/health"
 	"right-sizer/logger"
 	"right-sizer/metrics"
+
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -184,23 +185,24 @@ func (r *RightSizerConfigReconciler) applyConfiguration(ctx context.Context, rsc
 
 	memoryLimitAddition := rsc.Spec.DefaultResourceStrategy.Memory.LimitAddition
 
-	minCPURequest := int64(10)
-	if rsc.Spec.DefaultResourceStrategy.CPU.MinRequest != 0 {
+	// Parse resource quantity strings
+	minCPURequest := "10m"
+	if rsc.Spec.DefaultResourceStrategy.CPU.MinRequest != "" {
 		minCPURequest = rsc.Spec.DefaultResourceStrategy.CPU.MinRequest
 	}
 
-	minMemoryRequest := int64(64)
-	if rsc.Spec.DefaultResourceStrategy.Memory.MinRequest != 0 {
+	minMemoryRequest := "64Mi"
+	if rsc.Spec.DefaultResourceStrategy.Memory.MinRequest != "" {
 		minMemoryRequest = rsc.Spec.DefaultResourceStrategy.Memory.MinRequest
 	}
 
-	maxCPULimit := int64(4000)
-	if rsc.Spec.DefaultResourceStrategy.CPU.MaxLimit != 0 {
+	maxCPULimit := "4000m"
+	if rsc.Spec.DefaultResourceStrategy.CPU.MaxLimit != "" {
 		maxCPULimit = rsc.Spec.DefaultResourceStrategy.CPU.MaxLimit
 	}
 
-	maxMemoryLimit := int64(8192)
-	if rsc.Spec.DefaultResourceStrategy.Memory.MaxLimit != 0 {
+	maxMemoryLimit := "8192Mi"
+	if rsc.Spec.DefaultResourceStrategy.Memory.MaxLimit != "" {
 		maxMemoryLimit = rsc.Spec.DefaultResourceStrategy.Memory.MaxLimit
 	}
 
@@ -242,6 +244,112 @@ func (r *RightSizerConfigReconciler) applyConfiguration(ctx context.Context, rsc
 		enableInPlaceResize = rsc.Spec.FeatureGates["EnableInPlaceResize"]
 	}
 
+	// Extract new fields
+	algorithm := "percentile"
+	if rsc.Spec.DefaultResourceStrategy.Algorithm != "" {
+		algorithm = rsc.Spec.DefaultResourceStrategy.Algorithm
+	}
+
+	maxCPUCores := 16
+	if rsc.Spec.GlobalConstraints.MaxCPUCores != 0 {
+		maxCPUCores = int(rsc.Spec.GlobalConstraints.MaxCPUCores)
+	}
+
+	maxMemoryGB := 32
+	if rsc.Spec.GlobalConstraints.MaxMemoryGB != 0 {
+		maxMemoryGB = int(rsc.Spec.GlobalConstraints.MaxMemoryGB)
+	}
+
+	preventOOMKill := true
+	if rsc.Spec.GlobalConstraints.RespectPDB {
+		preventOOMKill = rsc.Spec.GlobalConstraints.RespectPDB
+	}
+
+	respectPodDisruptionBudget := true
+	if rsc.Spec.GlobalConstraints.RespectPDB {
+		respectPodDisruptionBudget = rsc.Spec.GlobalConstraints.RespectPDB
+	}
+
+	aggregationMethod := "avg"
+	if rsc.Spec.MetricsConfig.AggregationMethod != "" {
+		aggregationMethod = rsc.Spec.MetricsConfig.AggregationMethod
+	}
+
+	historyRetention := "30d"
+	if rsc.Spec.MetricsConfig.HistoryRetention != "" {
+		historyRetention = rsc.Spec.MetricsConfig.HistoryRetention
+	}
+
+	includeCustomMetrics := false
+	if rsc.Spec.MetricsConfig.IncludeCustomMetrics {
+		includeCustomMetrics = rsc.Spec.MetricsConfig.IncludeCustomMetrics
+	}
+
+	enableAuditLogging := true
+	if rsc.Spec.ObservabilityConfig.EnableAuditLog {
+		enableAuditLogging = rsc.Spec.ObservabilityConfig.EnableAuditLog
+	}
+
+	enableProfiling := false
+	if rsc.Spec.ObservabilityConfig.EnableProfiling {
+		enableProfiling = rsc.Spec.ObservabilityConfig.EnableProfiling
+	}
+
+	profilingPort := 6060
+	if rsc.Spec.ObservabilityConfig.ProfilingPort != 0 {
+		profilingPort = int(rsc.Spec.ObservabilityConfig.ProfilingPort)
+	}
+
+	healthProbePort := 8081
+	if rsc.Spec.OperatorConfig.HealthProbePort != 0 {
+		healthProbePort = int(rsc.Spec.OperatorConfig.HealthProbePort)
+	}
+
+	leaderElectionLeaseDuration := "15s"
+	if rsc.Spec.OperatorConfig.LeaderElectionLeaseDuration != "" {
+		leaderElectionLeaseDuration = rsc.Spec.OperatorConfig.LeaderElectionLeaseDuration
+	}
+
+	leaderElectionRenewDeadline := "10s"
+	if rsc.Spec.OperatorConfig.LeaderElectionRenewDeadline != "" {
+		leaderElectionRenewDeadline = rsc.Spec.OperatorConfig.LeaderElectionRenewDeadline
+	}
+
+	leaderElectionRetryPeriod := "2s"
+	if rsc.Spec.OperatorConfig.LeaderElectionRetryPeriod != "" {
+		leaderElectionRetryPeriod = rsc.Spec.OperatorConfig.LeaderElectionRetryPeriod
+	}
+
+	livenessEndpoint := "/healthz"
+	if rsc.Spec.OperatorConfig.LivenessEndpoint != "" {
+		livenessEndpoint = rsc.Spec.OperatorConfig.LivenessEndpoint
+	}
+
+	readinessEndpoint := "/readyz"
+	if rsc.Spec.OperatorConfig.ReadinessEndpoint != "" {
+		readinessEndpoint = rsc.Spec.OperatorConfig.ReadinessEndpoint
+	}
+
+	retryAttempts := 3
+	if rsc.Spec.OperatorConfig.RetryAttempts != 0 {
+		retryAttempts = int(rsc.Spec.OperatorConfig.RetryAttempts)
+	}
+
+	syncPeriod := "30s"
+	if rsc.Spec.OperatorConfig.SyncPeriod != "" {
+		syncPeriod = rsc.Spec.OperatorConfig.SyncPeriod
+	}
+
+	tlsCertDir := "/tmp/certs"
+	if rsc.Spec.SecurityConfig.TLSCertDir != "" {
+		tlsCertDir = rsc.Spec.SecurityConfig.TLSCertDir
+	}
+
+	webhookTimeoutSeconds := 10
+	if rsc.Spec.SecurityConfig.WebhookTimeoutSeconds != 0 {
+		webhookTimeoutSeconds = int(rsc.Spec.SecurityConfig.WebhookTimeoutSeconds)
+	}
+
 	// Update the global configuration
 	r.Config.UpdateFromCRD(
 		cpuRequestMultiplier,
@@ -277,6 +385,27 @@ func (r *RightSizerConfigReconciler) applyConfiguration(ctx context.Context, rsc
 		memoryScaleDownThreshold,
 		cpuScaleUpThreshold,
 		cpuScaleDownThreshold,
+		algorithm,
+		maxCPUCores,
+		maxMemoryGB,
+		preventOOMKill,
+		respectPodDisruptionBudget,
+		aggregationMethod,
+		historyRetention,
+		includeCustomMetrics,
+		enableAuditLogging,
+		enableProfiling,
+		profilingPort,
+		healthProbePort,
+		leaderElectionLeaseDuration,
+		leaderElectionRenewDeadline,
+		leaderElectionRetryPeriod,
+		livenessEndpoint,
+		readinessEndpoint,
+		retryAttempts,
+		syncPeriod,
+		tlsCertDir,
+		webhookTimeoutSeconds,
 	)
 
 	// Update logger level if changed

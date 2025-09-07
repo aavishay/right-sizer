@@ -95,10 +95,10 @@ func TestUpdateFromCRD(t *testing.T) {
 		2.0,                                    // memoryLimitMultiplier
 		0,                                      // cpuLimitAddition
 		0,                                      // memoryLimitAddition
-		10,                                     // minCPURequest
-		64,                                     // minMemoryRequest
-		4000,                                   // maxCPULimit
-		8192,                                   // maxMemoryLimit
+		"10",                                   // minCPURequest
+		"64",                                   // minMemoryRequest
+		"4000",                                 // maxCPULimit
+		"8192",                                 // maxMemoryLimit
 		60*time.Second,                         // resizeInterval
 		true,                                   // dryRun
 		[]string{"default", "production"},      // namespaceInclude
@@ -120,6 +120,27 @@ func TestUpdateFromCRD(t *testing.T) {
 		0.3,                                    // memoryScaleDownThreshold
 		0.8,                                    // cpuScaleUpThreshold
 		0.3,                                    // cpuScaleDownThreshold
+		"percentile",                           // algorithm
+		16,                                     // maxCPUCores
+		32,                                     // maxMemoryGB
+		true,                                   // preventOOMKill
+		true,                                   // respectPodDisruptionBudget
+		"avg",                                  // aggregationMethod
+		"30d",                                  // historyRetention
+		false,                                  // includeCustomMetrics
+		true,                                   // enableAuditLogging
+		false,                                  // enableProfiling
+		6060,                                   // profilingPort
+		8081,                                   // healthProbePort
+		"15s",                                  // leaderElectionLeaseDuration
+		"10s",                                  // leaderElectionRenewDeadline
+		"2s",                                   // leaderElectionRetryPeriod
+		"/healthz",                             // livenessEndpoint
+		"/readyz",                              // readinessEndpoint
+		3,                                      // retryAttempts
+		"30s",                                  // syncPeriod
+		"/tmp/certs",                           // tlsCertDir
+		10,                                     // webhookTimeoutSeconds
 	)
 
 	// Verify updates
@@ -566,10 +587,10 @@ func TestThreadSafety(t *testing.T) {
 				2.0,                // memoryLimitMultiplier
 				0,                  // cpuLimitAddition
 				0,                  // memoryLimitAddition
-				10,                 // minCPURequest
-				64,                 // minMemoryRequest
-				4000,               // maxCPULimit
-				8192,               // maxMemoryLimit
+				"10",               // minCPURequest
+				"64",               // minMemoryRequest
+				"4000",             // maxCPULimit
+				"8192",             // maxMemoryLimit
 				30*time.Second,     // resizeInterval
 				false,              // dryRun
 				nil,                // namespaceInclude
@@ -591,6 +612,27 @@ func TestThreadSafety(t *testing.T) {
 				0.3,                // memoryScaleDownThreshold
 				0.8,                // cpuScaleUpThreshold
 				0.3,                // cpuScaleDownThreshold
+				"percentile",       // algorithm
+				16,                 // maxCPUCores
+				32,                 // maxMemoryGB
+				true,               // preventOOMKill
+				true,               // respectPodDisruptionBudget
+				"avg",              // aggregationMethod
+				"30d",              // historyRetention
+				false,              // includeCustomMetrics
+				true,               // enableAuditLogging
+				false,              // enableProfiling
+				6060,               // profilingPort
+				8081,               // healthProbePort
+				"15s",              // leaderElectionLeaseDuration
+				"10s",              // leaderElectionRenewDeadline
+				"2s",               // leaderElectionRetryPeriod
+				"/healthz",         // livenessEndpoint
+				"/readyz",          // readinessEndpoint
+				3,                  // retryAttempts
+				"30s",              // syncPeriod
+				"/tmp/certs",       // tlsCertDir
+				10,                 // webhookTimeoutSeconds
 			)
 		}(i)
 	}
