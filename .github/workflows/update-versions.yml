@@ -11,7 +11,7 @@ name: Update Versions
         description: "Create Pull Request instead of direct commit"
         required: false
         type: boolean
-        default: true
+        default: false
       branch_name:
         description: "Branch name for PR (auto-generated if empty)"
         required: false
