@@ -169,6 +169,18 @@ func GetDefaults() *Config {
 		DelayBetweenBatches: 5 * time.Second,
 		DelayBetweenPods:    500 * time.Millisecond,
 
+		// Default namespace filters
+		NamespaceInclude: []string{},
+		NamespaceExclude: []string{},
+		SystemNamespaces: []string{
+			"kube-system",
+			"kube-public",
+			"kube-node-lease",
+			"cert-manager",
+			"ingress-nginx",
+			"istio-system",
+		},
+
 		// Default advanced features
 		HistoryDays:         7,
 		AdmissionController: false,
