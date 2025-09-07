@@ -535,7 +535,7 @@ func TestMetricsProviderFetchErrors(t *testing.T) {
 			}
 
 			// Attempt to fetch metrics
-			ctx := context.TODO()
+			ctx := t.Context()
 			_, err := provider.FetchPodMetrics(ctx, tt.pod)
 
 			// Verify error occurred

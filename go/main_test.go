@@ -1,13 +1,13 @@
 package main
 
 import (
-	"right-sizer/config"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"right-sizer/config"
 )
 
 func TestIsSystemNamespace(t *testing.T) {
@@ -178,9 +178,9 @@ func TestResourceCalculations(t *testing.T) {
 			minExpectedCPU := resource.MustParse(tt.minExpectedCPU)
 			minExpectedMem := resource.MustParse(tt.minExpectedMem)
 
-			assert.True(t, recommendedCPU.Cmp(minExpectedCPU) >= 0,
+			assert.GreaterOrEqual(t, recommendedCPU.Cmp(minExpectedCPU), 0,
 				"Recommended CPU %s should be >= expected %s", recommendedCPU.String(), minExpectedCPU.String())
-			assert.True(t, recommendedMem.Cmp(minExpectedMem) >= 0,
+			assert.GreaterOrEqual(t, recommendedMem.Cmp(minExpectedMem), 0,
 				"Recommended Memory %s should be >= expected %s", recommendedMem.String(), minExpectedMem.String())
 		})
 	}

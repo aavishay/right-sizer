@@ -309,7 +309,7 @@ func TestMemoryLimitWithBurstPatterns(t *testing.T) {
 			burstHeadroomPct := float64(burstHeadroom) / tt.peakMemUsageMB * 100
 
 			// Verify we have enough headroom for bursts
-			assert.Greater(t, burstHeadroom, int64(0),
+			assert.Positive(t, burstHeadroom,
 				"Should have positive burst headroom")
 
 			// Log the analysis

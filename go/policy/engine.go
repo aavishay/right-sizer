@@ -17,18 +17,18 @@ package policy
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"regexp"
 	"strings"
 	"time"
 
-	"right-sizer/config"
-	"right-sizer/logger"
-	"right-sizer/metrics"
-
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/labels"
+	"right-sizer/config"
+	"right-sizer/logger"
+	"right-sizer/metrics"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -42,52 +42,52 @@ type PolicyEngine struct {
 
 // Rule represents a resource sizing rule
 type Rule struct {
-	Name        string        `json:"name" yaml:"name"`
-	Description string        `json:"description" yaml:"description"`
-	Priority    int           `json:"priority" yaml:"priority"`
-	Selectors   RuleSelectors `json:"selectors" yaml:"selectors"`
-	Actions     RuleActions   `json:"actions" yaml:"actions"`
+	Name        string        `json:"name"               yaml:"name"`
+	Description string        `json:"description"        yaml:"description"`
+	Priority    int           `json:"priority"           yaml:"priority"`
+	Selectors   RuleSelectors `json:"selectors"          yaml:"selectors"`
+	Actions     RuleActions   `json:"actions"            yaml:"actions"`
 	Schedule    *RuleSchedule `json:"schedule,omitempty" yaml:"schedule,omitempty"`
-	Enabled     bool          `json:"enabled" yaml:"enabled"`
+	Enabled     bool          `json:"enabled"            yaml:"enabled"`
 }
 
 // RuleSelectors defines criteria for rule matching
 type RuleSelectors struct {
-	Namespaces    []string          `json:"namespaces,omitempty" yaml:"namespaces,omitempty"`
-	Labels        map[string]string `json:"labels,omitempty" yaml:"labels,omitempty"`
-	Annotations   map[string]string `json:"annotations,omitempty" yaml:"annotations,omitempty"`
-	PodNameRegex  string            `json:"podNameRegex,omitempty" yaml:"podNameRegex,omitempty"`
+	Namespaces    []string          `json:"namespaces,omitempty"    yaml:"namespaces,omitempty"`
+	Labels        map[string]string `json:"labels,omitempty"        yaml:"labels,omitempty"`
+	Annotations   map[string]string `json:"annotations,omitempty"   yaml:"annotations,omitempty"`
+	PodNameRegex  string            `json:"podNameRegex,omitempty"  yaml:"podNameRegex,omitempty"`
 	ContainerName string            `json:"containerName,omitempty" yaml:"containerName,omitempty"`
-	QoSClass      string            `json:"qosClass,omitempty" yaml:"qosClass,omitempty"`
-	WorkloadType  string            `json:"workloadType,omitempty" yaml:"workloadType,omitempty"`
+	QoSClass      string            `json:"qosClass,omitempty"      yaml:"qosClass,omitempty"`
+	WorkloadType  string            `json:"workloadType,omitempty"  yaml:"workloadType,omitempty"`
 }
 
 // RuleActions defines what actions to take when rule matches
 type RuleActions struct {
-	CPUMultiplier    *float64 `json:"cpuMultiplier,omitempty" yaml:"cpuMultiplier,omitempty"`
+	CPUMultiplier    *float64 `json:"cpuMultiplier,omitempty"    yaml:"cpuMultiplier,omitempty"`
 	MemoryMultiplier *float64 `json:"memoryMultiplier,omitempty" yaml:"memoryMultiplier,omitempty"`
-	MinCPU           *string  `json:"minCPU,omitempty" yaml:"minCPU,omitempty"`
-	MaxCPU           *string  `json:"maxCPU,omitempty" yaml:"maxCPU,omitempty"`
-	MinMemory        *string  `json:"minMemory,omitempty" yaml:"minMemory,omitempty"`
-	MaxMemory        *string  `json:"maxMemory,omitempty" yaml:"maxMemory,omitempty"`
-	SetCPURequest    *string  `json:"setCPURequest,omitempty" yaml:"setCPURequest,omitempty"`
+	MinCPU           *string  `json:"minCPU,omitempty"           yaml:"minCPU,omitempty"`
+	MaxCPU           *string  `json:"maxCPU,omitempty"           yaml:"maxCPU,omitempty"`
+	MinMemory        *string  `json:"minMemory,omitempty"        yaml:"minMemory,omitempty"`
+	MaxMemory        *string  `json:"maxMemory,omitempty"        yaml:"maxMemory,omitempty"`
+	SetCPURequest    *string  `json:"setCPURequest,omitempty"    yaml:"setCPURequest,omitempty"`
 	SetMemoryRequest *string  `json:"setMemoryRequest,omitempty" yaml:"setMemoryRequest,omitempty"`
-	SetCPULimit      *string  `json:"setCPULimit,omitempty" yaml:"setCPULimit,omitempty"`
-	SetMemoryLimit   *string  `json:"setMemoryLimit,omitempty" yaml:"setMemoryLimit,omitempty"`
-	Skip             bool     `json:"skip,omitempty" yaml:"skip,omitempty"`
+	SetCPULimit      *string  `json:"setCPULimit,omitempty"      yaml:"setCPULimit,omitempty"`
+	SetMemoryLimit   *string  `json:"setMemoryLimit,omitempty"   yaml:"setMemoryLimit,omitempty"`
+	Skip             bool     `json:"skip,omitempty"             yaml:"skip,omitempty"`
 }
 
 // RuleSchedule defines when a rule should be active
 type RuleSchedule struct {
 	TimeRanges []TimeRange `json:"timeRanges,omitempty" yaml:"timeRanges,omitempty"`
 	DaysOfWeek []string    `json:"daysOfWeek,omitempty" yaml:"daysOfWeek,omitempty"`
-	Timezone   string      `json:"timezone,omitempty" yaml:"timezone,omitempty"`
+	Timezone   string      `json:"timezone,omitempty"   yaml:"timezone,omitempty"`
 }
 
 // TimeRange represents a time range during which a rule is active
 type TimeRange struct {
 	Start string `json:"start" yaml:"start"` // HH:MM format
-	End   string `json:"end" yaml:"end"`     // HH:MM format
+	End   string `json:"end"   yaml:"end"`   // HH:MM format
 }
 
 // PolicyEvaluationResult contains the result of policy evaluation
@@ -118,15 +118,14 @@ func (pe *PolicyEngine) LoadRules(ctx context.Context, configMapName, namespace 
 		Name:      configMapName,
 		Namespace: namespace,
 	}, configMap)
-
 	if err != nil {
-		return fmt.Errorf("failed to load policy ConfigMap %s/%s: %v", namespace, configMapName, err)
+		return fmt.Errorf("failed to load policy ConfigMap %s/%s: %w", namespace, configMapName, err)
 	}
 
 	// Parse rules from ConfigMap data
 	rules, err := pe.parseRulesFromConfigMap(configMap)
 	if err != nil {
-		return fmt.Errorf("failed to parse rules: %v", err)
+		return fmt.Errorf("failed to parse rules: %w", err)
 	}
 
 	pe.rules = rules
@@ -172,7 +171,7 @@ func (pe *PolicyEngine) EvaluatePolicy(ctx context.Context, pod *corev1.Pod, con
 
 			// If rule says to skip, break early
 			if result.Skip {
-				result.Reason = fmt.Sprintf("Skipped by policy rule: %s", rule.Name)
+				result.Reason = "Skipped by policy rule: " + rule.Name
 				break
 			}
 		} else if reason != "" {
@@ -433,8 +432,8 @@ func (pe *PolicyEngine) sortRulesByPriority() []Rule {
 	copy(rules, pe.rules)
 
 	// Simple bubble sort by priority (higher priority first)
-	for i := 0; i < len(rules)-1; i++ {
-		for j := 0; j < len(rules)-i-1; j++ {
+	for i := range len(rules) - 1 {
+		for j := range len(rules) - i - 1 {
 			if rules[j].Priority < rules[j+1].Priority {
 				rules[j], rules[j+1] = rules[j+1], rules[j]
 			}
@@ -662,7 +661,7 @@ func (pe *PolicyEngine) GetActiveRules() []Rule {
 func (pe *PolicyEngine) ValidateRules() error {
 	for _, rule := range pe.rules {
 		if err := pe.validateRule(rule); err != nil {
-			return fmt.Errorf("rule %s is invalid: %v", rule.Name, err)
+			return fmt.Errorf("rule %s is invalid: %w", rule.Name, err)
 		}
 	}
 	return nil
@@ -671,13 +670,13 @@ func (pe *PolicyEngine) ValidateRules() error {
 // validateRule validates a single rule
 func (pe *PolicyEngine) validateRule(rule Rule) error {
 	if rule.Name == "" {
-		return fmt.Errorf("rule name cannot be empty")
+		return errors.New("rule name cannot be empty")
 	}
 
 	// Validate regex if present
 	if rule.Selectors.PodNameRegex != "" {
 		if _, err := regexp.Compile(rule.Selectors.PodNameRegex); err != nil {
-			return fmt.Errorf("invalid pod name regex: %v", err)
+			return fmt.Errorf("invalid pod name regex: %w", err)
 		}
 	}
 
@@ -685,22 +684,22 @@ func (pe *PolicyEngine) validateRule(rule Rule) error {
 	actions := rule.Actions
 	if actions.MinCPU != nil {
 		if _, err := resource.ParseQuantity(*actions.MinCPU); err != nil {
-			return fmt.Errorf("invalid minCPU: %v", err)
+			return fmt.Errorf("invalid minCPU: %w", err)
 		}
 	}
 	if actions.MaxCPU != nil {
 		if _, err := resource.ParseQuantity(*actions.MaxCPU); err != nil {
-			return fmt.Errorf("invalid maxCPU: %v", err)
+			return fmt.Errorf("invalid maxCPU: %w", err)
 		}
 	}
 	if actions.MinMemory != nil {
 		if _, err := resource.ParseQuantity(*actions.MinMemory); err != nil {
-			return fmt.Errorf("invalid minMemory: %v", err)
+			return fmt.Errorf("invalid minMemory: %w", err)
 		}
 	}
 	if actions.MaxMemory != nil {
 		if _, err := resource.ParseQuantity(*actions.MaxMemory); err != nil {
-			return fmt.Errorf("invalid maxMemory: %v", err)
+			return fmt.Errorf("invalid maxMemory: %w", err)
 		}
 	}
 

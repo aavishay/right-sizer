@@ -17,16 +17,16 @@ package validation
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
-
-	"right-sizer/config"
-	"right-sizer/logger"
-	"right-sizer/metrics"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/client-go/kubernetes"
+	"right-sizer/config"
+	"right-sizer/logger"
+	"right-sizer/metrics"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -69,13 +69,13 @@ func (vr *ValidationResult) String() string {
 	var parts []string
 
 	if len(vr.Errors) > 0 {
-		parts = append(parts, fmt.Sprintf("Errors: %s", strings.Join(vr.Errors, "; ")))
+		parts = append(parts, "Errors: "+strings.Join(vr.Errors, "; "))
 	}
 	if len(vr.Warnings) > 0 {
-		parts = append(parts, fmt.Sprintf("Warnings: %s", strings.Join(vr.Warnings, "; ")))
+		parts = append(parts, "Warnings: "+strings.Join(vr.Warnings, "; "))
 	}
 	if len(vr.Info) > 0 {
-		parts = append(parts, fmt.Sprintf("Info: %s", strings.Join(vr.Info, "; ")))
+		parts = append(parts, "Info: "+strings.Join(vr.Info, "; "))
 	}
 
 	return strings.Join(parts, " | ")
@@ -265,7 +265,7 @@ func (rv *ResourceValidator) calculateNodeAvailableResources(ctx context.Context
 	// List all pods on the node
 	podList := &corev1.PodList{}
 	if err := rv.client.List(ctx, podList, client.MatchingFields{"spec.nodeName": node.Name}); err != nil {
-		return nil, fmt.Errorf("failed to list pods on node %s: %v", node.Name, err)
+		return nil, fmt.Errorf("failed to list pods on node %s: %w", node.Name, err)
 	}
 
 	// Subtract resources used by all running pods (except the pod being resized)
@@ -463,7 +463,7 @@ func (rv *ResourceValidator) getResourceQuota(ctx context.Context, namespace str
 	}
 
 	if len(quotaList.Items) == 0 {
-		return nil, fmt.Errorf("no resource quota found")
+		return nil, errors.New("no resource quota found")
 	}
 
 	// Use the first quota found
@@ -671,7 +671,7 @@ func (rv *ResourceValidator) RefreshCaches(ctx context.Context) error {
 	// Pre-populate node cache
 	nodeList := &corev1.NodeList{}
 	if err := rv.client.List(ctx, nodeList); err != nil {
-		return fmt.Errorf("failed to list nodes: %v", err)
+		return fmt.Errorf("failed to list nodes: %w", err)
 	}
 
 	for i := range nodeList.Items {

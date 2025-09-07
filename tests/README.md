@@ -370,10 +370,10 @@ func TestMyFunction(t *testing.T) {
     // Arrange
     input := "test"
     expected := "TEST"
-    
+
     // Act
     result := MyFunction(input)
-    
+
     // Assert
     assert.Equal(t, expected, result)
 }
@@ -396,11 +396,11 @@ import (
 func TestFeatureIntegration(t *testing.T) {
     // Setup client
     client := setupKubernetesClient(t)
-    
+
     // Deploy test resources
     deployTestResources(t, client)
     defer cleanupTestResources(t, client)
-    
+
     // Test feature
     testFeature(t, client)
 }
@@ -422,10 +422,10 @@ source "$(dirname "$0")/test-helpers.sh"
 # Test function
 test_my_feature() {
     log_info "Testing my feature..."
-    
+
     # Test logic here
     kubectl apply -f fixtures/my-test.yaml
-    
+
     # Assertions
     assert_pod_running "my-pod" "default"
 }
@@ -449,17 +449,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      
+
       - name: Setup Go
         uses: actions/setup-go@v2
         with:
           go-version: 1.25
-      
+
       - name: Run Unit Tests
         run: |
           cd tests
           ./run-all-tests.sh --unit --coverage
-      
+
       - name: Upload Coverage
         uses: codecov/codecov-action@v2
         with:

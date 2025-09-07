@@ -1,0 +1,38 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+        args: [--allow-multiple-documents]
+        exclude: helm/templates/.*\.yaml$
+      - id: check-merge-conflict
+      - id: check-added-large-files
+
+  - repo: local
+    hooks:
+      - id: go-fmt
+        name: Format Go code
+        entry: bash -c "cd go && go fmt ./..."
+        language: system
+        files: go/.*\.go$
+        pass_filenames: false
+      - id: go-vet
+        name: Run go vet
+        entry: bash -c "cd go && go vet ./..."
+        language: system
+        files: go/.*\.go$
+        pass_filenames: false
+      - id: go-mod-tidy
+        name: Tidy Go modules
+        entry: bash -c "cd go && go mod tidy"
+        language: system
+        files: go/go\.mod$
+        pass_filenames: false
+      # - id: golangci-lint
+      #   name: Run golangci-lint
+      #   entry: bash -c "cd go && /Users/avishay/go/bin/golangci-lint run ./..."
+      #   language: system
+      #   files: go/.*\.go$
+      #   pass_filenames: false

@@ -107,7 +107,7 @@ func TestKubernetesMetricsProvider_FetchPodMetrics(t *testing.T) {
 				provider.podMetrics[key] = tt.metrics
 			}
 
-			ctx := context.TODO()
+			ctx := t.Context()
 			result, err := provider.FetchPodMetrics(ctx, tt.pod)
 
 			if tt.expectError {
@@ -158,7 +158,7 @@ func TestPrometheusMetricsProvider_FetchPodMetrics(t *testing.T) {
 				url: "http://localhost:9090",
 			}
 
-			ctx := context.TODO()
+			ctx := t.Context()
 			_, err := provider.FetchPodMetrics(ctx, tt.pod)
 
 			if tt.expectError {
@@ -335,7 +335,7 @@ func TestMetricsTimestamp(t *testing.T) {
 	}
 
 	// Verify timestamp is recent (within last minute)
-	assert.True(t, time.Since(metrics.Timestamp.Time) < time.Minute,
+	assert.Less(t, time.Since(metrics.Timestamp.Time), time.Minute,
 		"Metrics timestamp should be recent")
 }
 

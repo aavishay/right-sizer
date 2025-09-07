@@ -17,13 +17,13 @@ package health
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"sync"
 	"time"
 
 	"right-sizer/logger"
-
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 )
 
@@ -235,7 +235,7 @@ func (h *OperatorHealthChecker) LivenessCheck(_ *http.Request) error {
 	if status, exists := h.GetComponentStatus("controller"); exists && status.Healthy {
 		return nil
 	}
-	return fmt.Errorf("controller is not healthy")
+	return errors.New("controller is not healthy")
 }
 
 // ReadinessCheck implements the healthz.Checker interface for readiness probes

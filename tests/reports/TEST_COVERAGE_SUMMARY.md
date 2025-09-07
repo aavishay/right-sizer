@@ -169,7 +169,7 @@ Tests for metrics aggregation and conversion.
 ## Test Coverage Metrics
 
 - **CPU Calculations**: 15 test scenarios
-- **Memory Calculations**: 17 test scenarios  
+- **Memory Calculations**: 17 test scenarios
 - **Edge Cases**: 7 problematic scenarios identified
 - **Workload Types**: 8 different patterns tested
 - **Burst Patterns**: 6 different patterns analyzed

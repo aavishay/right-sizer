@@ -18,14 +18,10 @@ package admission
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
-
-	"right-sizer/config"
-	"right-sizer/logger"
-	"right-sizer/metrics"
-	"right-sizer/validation"
 
 	admissionv1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -34,6 +30,10 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/client-go/kubernetes"
+	"right-sizer/config"
+	"right-sizer/logger"
+	"right-sizer/metrics"
+	"right-sizer/validation"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -139,13 +139,13 @@ func (ws *WebhookServer) handleValidate(w http.ResponseWriter, r *http.Request) 
 
 	body, err := ws.readRequestBody(r)
 	if err != nil {
-		ws.sendError(w, fmt.Errorf("failed to read request body: %v", err))
+		ws.sendError(w, fmt.Errorf("failed to read request body: %w", err))
 		return
 	}
 
 	var review admissionv1.AdmissionReview
 	if err := json.Unmarshal(body, &review); err != nil {
-		ws.sendError(w, fmt.Errorf("failed to decode admission review: %v", err))
+		ws.sendError(w, fmt.Errorf("failed to decode admission review: %w", err))
 		return
 	}
 
@@ -164,13 +164,13 @@ func (ws *WebhookServer) handleMutate(w http.ResponseWriter, r *http.Request) {
 
 	body, err := ws.readRequestBody(r)
 	if err != nil {
-		ws.sendError(w, fmt.Errorf("failed to read request body: %v", err))
+		ws.sendError(w, fmt.Errorf("failed to read request body: %w", err))
 		return
 	}
 
 	var review admissionv1.AdmissionReview
 	if err := json.Unmarshal(body, &review); err != nil {
-		ws.sendError(w, fmt.Errorf("failed to decode admission review: %v", err))
+		ws.sendError(w, fmt.Errorf("failed to decode admission review: %w", err))
 		return
 	}
 
@@ -266,7 +266,7 @@ func (ws *WebhookServer) validatePodResourceChange(review *admissionv1.Admission
 		response.Allowed = false
 		response.Result = &metav1.Status{
 			Code:    http.StatusForbidden,
-			Message: fmt.Sprintf("Resource validation failed: %s", strings.Join(validationErrors, "; ")),
+			Message: "Resource validation failed: " + strings.Join(validationErrors, "; "),
 		}
 	} else if len(validationWarnings) > 0 {
 		// Allow but include warnings
@@ -551,12 +551,12 @@ func (ws *WebhookServer) getQoSClass(pod *corev1.Pod) corev1.PodQOSClass {
 // readRequestBody reads and validates the request body
 func (ws *WebhookServer) readRequestBody(r *http.Request) ([]byte, error) {
 	if r.Body == nil {
-		return nil, fmt.Errorf("request body is empty")
+		return nil, errors.New("request body is empty")
 	}
 	defer r.Body.Close()
 
 	if r.Header.Get("Content-Type") != "application/json" {
-		return nil, fmt.Errorf("expected Content-Type application/json")
+		return nil, errors.New("expected Content-Type application/json")
 	}
 
 	body := make([]byte, r.ContentLength)

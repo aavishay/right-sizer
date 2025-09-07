@@ -24,13 +24,12 @@ import (
 	"sync"
 	"time"
 
-	"right-sizer/config"
-	"right-sizer/logger"
-	"right-sizer/metrics"
-
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"right-sizer/config"
+	"right-sizer/logger"
+	"right-sizer/metrics"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -110,15 +109,15 @@ func NewAuditLogger(client client.Client, cfg *config.Config, metrics *metrics.O
 	// Create log directory if it doesn't exist
 	if auditConfig.EnableFileLog {
 		logDir := filepath.Dir(auditConfig.LogPath)
-		if err := os.MkdirAll(logDir, 0755); err != nil {
-			return nil, fmt.Errorf("failed to create audit log directory: %v", err)
+		if err := os.MkdirAll(logDir, 0o755); err != nil {
+			return nil, fmt.Errorf("failed to create audit log directory: %w", err)
 		}
 
 		// Open log file if file logging is enabled
 		var logFile *os.File
 		if auditConfig.EnableFileLog {
 			var err error
-			logFile, err = os.OpenFile(auditConfig.LogPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+			logFile, err = os.OpenFile(auditConfig.LogPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 			if err != nil {
 				// If we can't open the file, continue without file logging
 				logger.Warn("Cannot open audit log file, continuing without file logging: %v", err)
@@ -429,18 +428,18 @@ func (al *AuditLogger) formatResources(resources *corev1.ResourceRequirements) s
 	var parts []string
 	if resources.Requests != nil {
 		if cpu, ok := resources.Requests[corev1.ResourceCPU]; ok {
-			parts = append(parts, fmt.Sprintf("CPU req: %s", cpu.String()))
+			parts = append(parts, "CPU req: "+cpu.String())
 		}
 		if mem, ok := resources.Requests[corev1.ResourceMemory]; ok {
-			parts = append(parts, fmt.Sprintf("Mem req: %s", mem.String()))
+			parts = append(parts, "Mem req: "+mem.String())
 		}
 	}
 	if resources.Limits != nil {
 		if cpu, ok := resources.Limits[corev1.ResourceCPU]; ok {
-			parts = append(parts, fmt.Sprintf("CPU lim: %s", cpu.String()))
+			parts = append(parts, "CPU lim: "+cpu.String())
 		}
 		if mem, ok := resources.Limits[corev1.ResourceMemory]; ok {
-			parts = append(parts, fmt.Sprintf("Mem lim: %s", mem.String()))
+			parts = append(parts, "Mem lim: "+mem.String())
 		}
 	}
 
@@ -516,7 +515,7 @@ func (al *AuditLogger) rotateLogFile(config AuditConfig) {
 	}
 
 	// Create new log file
-	logFile, err := os.OpenFile(oldPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	logFile, err := os.OpenFile(oldPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 	if err != nil {
 		logger.Error("Failed to create new audit log file: %v", err)
 		return

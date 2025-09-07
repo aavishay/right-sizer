@@ -132,7 +132,7 @@ Tests can be integrated into CI/CD pipelines:
 - name: Run Tests
   run: |
     ./tests/run-all-tests.sh
-    
+
 - name: Upload Test Reports
   uses: actions/upload-artifact@v2
   with:

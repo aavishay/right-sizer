@@ -97,9 +97,9 @@ Both workflows authenticate to Docker Hub using secrets:
   run: |
     VERSION="${{ steps.chart_version.outputs.VERSION }}"
     CHART_FILE=$(ls right-sizer-${VERSION}.tgz)
-    
+
     helm push "$CHART_FILE" oci://registry-1.docker.io/aavishay
-    
+
     echo "✅ Published oci://registry-1.docker.io/aavishay/right-sizer:${VERSION}"
 ```
 

@@ -16,6 +16,7 @@ package metrics
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -80,13 +81,13 @@ func (p *PrometheusProvider) queryPrometheus(query string) (float64, error) {
 	}
 
 	if result.Status != "success" || len(result.Data.Result) == 0 {
-		return 0, fmt.Errorf("no data returned from Prometheus")
+		return 0, errors.New("no data returned from Prometheus")
 	}
 
 	// Value[1] is the string representation of the metric value
 	valStr, ok := result.Data.Result[0].Value[1].(string)
 	if !ok {
-		return 0, fmt.Errorf("unexpected value format")
+		return 0, errors.New("unexpected value format")
 	}
 
 	var val float64

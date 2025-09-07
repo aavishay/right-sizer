@@ -19,19 +19,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"net/http"
 	"net/smtp"
 	"time"
-
-	"right-sizer/audit"
-	"right-sizer/config"
-	"right-sizer/health"
-	"right-sizer/logger"
-	"right-sizer/metrics"
-	"right-sizer/retry"
-	"right-sizer/validation"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -41,6 +34,13 @@ import (
 	"k8s.io/klog/v2"
 	metricsv1beta1 "k8s.io/metrics/pkg/apis/metrics/v1beta1"
 	metricsclient "k8s.io/metrics/pkg/client/clientset/versioned"
+	"right-sizer/audit"
+	"right-sizer/config"
+	"right-sizer/health"
+	"right-sizer/logger"
+	"right-sizer/metrics"
+	"right-sizer/retry"
+	"right-sizer/validation"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -79,7 +79,6 @@ func NewPodMemoryController(
 	memoryMetrics *metrics.MemoryMetrics,
 	retryManager *retry.RetryManager,
 ) *PodMemoryController {
-
 	// Create metrics client for memory metrics collection
 	metricsClient, err := metricsclient.NewForConfig(ctrl.GetConfigOrDie())
 	if err != nil {
@@ -169,7 +168,7 @@ func (r *PodMemoryController) Reconcile(ctx context.Context, req reconcile.Reque
 // processMemoryMetrics collects and records memory metrics for a pod
 func (r *PodMemoryController) processMemoryMetrics(ctx context.Context, pod *corev1.Pod) error {
 	if r.MetricsClient == nil {
-		return fmt.Errorf("metrics client not available")
+		return errors.New("metrics client not available")
 	}
 
 	// Get pod metrics from metrics-server
@@ -401,7 +400,6 @@ func (r *PodMemoryController) applyMemoryRecommendations(ctx context.Context, po
 	err := r.RetryManager.RetryWithBackoff(func() error {
 		return r.Update(ctx, updatedPod)
 	})
-
 	if err != nil {
 		logger.Error("[MEMORY_CONTROLLER] Failed to update pod %s/%s: %v", pod.Namespace, pod.Name, err)
 		for _, rec := range recommendations {
@@ -527,7 +525,7 @@ func (r *PodMemoryController) checkMemoryPressureAlert(namespace, pod, container
 // sendNotification sends a notification using configured channels
 func (r *PodMemoryController) sendNotification(message string) error {
 	if r.Config.NotificationConfig == nil {
-		return fmt.Errorf("notification config not available")
+		return errors.New("notification config not available")
 	}
 
 	var lastErr error

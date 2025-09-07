@@ -139,7 +139,7 @@ func (r *Retryer) DoWithContext(ctx context.Context, operation string, fn RetryF
 		// Check context cancellation
 		select {
 		case <-ctx.Done():
-			logger.Warn("Operation %s cancelled during retry attempt %d", operation, attempt+1)
+			logger.Warn("Operation %s canceled during retry attempt %d", operation, attempt+1)
 			return ctx.Err()
 		default:
 		}
@@ -162,7 +162,7 @@ func (r *Retryer) DoWithContext(ctx context.Context, operation string, fn RetryF
 		}
 	}
 
-	return fmt.Errorf("operation %s failed after %d attempts: %v", operation, r.config.MaxRetries+1, lastErr)
+	return fmt.Errorf("operation %s failed after %d attempts: %w", operation, r.config.MaxRetries+1, lastErr)
 }
 
 // calculateDelay calculates the delay for the next retry with jitter
@@ -275,7 +275,6 @@ func (cb *CircuitBreaker) ExecuteWithContext(ctx context.Context, fn RetryFuncWi
 
 	// Execute the function
 	err := fn(ctx)
-
 	if err != nil {
 		cb.onFailure()
 		return err
@@ -542,7 +541,7 @@ func (cr *CustomRetryer) ExecuteWithContext(ctx context.Context, operation strin
 		}
 	}
 
-	return fmt.Errorf("operation %s failed after %d attempts: %v", operation, cr.maxRetries+1, lastErr)
+	return fmt.Errorf("operation %s failed after %d attempts: %w", operation, cr.maxRetries+1, lastErr)
 }
 
 // calculateDelayForStrategy calculates delay based on the configured strategy

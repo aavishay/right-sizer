@@ -16,6 +16,7 @@ package metrics
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -48,7 +49,7 @@ func NewMetricsServerProvider(client client.Client) Provider {
 // FetchPodMetrics fetches CPU and memory usage for a pod from metrics-server
 func (m *MetricsServerProvider) FetchPodMetrics(namespace, podName string) (Metrics, error) {
 	if m.MetricsClient == nil {
-		return Metrics{}, fmt.Errorf("metrics client not available")
+		return Metrics{}, errors.New("metrics client not available")
 	}
 
 	// Get pod metrics from metrics-server

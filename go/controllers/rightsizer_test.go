@@ -1,13 +1,13 @@
 package controllers
 
 import (
-	"right-sizer/config"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"right-sizer/config"
 )
 
 func TestShouldSkipPod(t *testing.T) {
@@ -157,9 +157,9 @@ func TestCalculateNewResources(t *testing.T) {
 			expectedMinCPU := resource.MustParse(tt.expectedMinCPU)
 			expectedMinMem := resource.MustParse(tt.expectedMinMem)
 
-			assert.True(t, newCPURequest.Cmp(expectedMinCPU) >= 0,
+			assert.GreaterOrEqual(t, newCPURequest.Cmp(expectedMinCPU), 0,
 				"CPU calculation: got %s, expected >= %s", newCPURequest.String(), expectedMinCPU.String())
-			assert.True(t, newMemRequest.Cmp(expectedMinMem) >= 0,
+			assert.GreaterOrEqual(t, newMemRequest.Cmp(expectedMinMem), 0,
 				"Memory calculation: got %s, expected >= %s", newMemRequest.String(), expectedMinMem.String())
 		})
 	}
@@ -179,10 +179,10 @@ func TestResourceMultipliers(t *testing.T) {
 	assert.Equal(t, 2.5, multipliers.MemoryLimit)
 
 	// Test validation
-	assert.True(t, multipliers.CPURequest > 1.0)
-	assert.True(t, multipliers.MemoryRequest > 1.0)
-	assert.True(t, multipliers.CPULimit >= 1.0)
-	assert.True(t, multipliers.MemoryLimit >= 1.0)
+	assert.Greater(t, multipliers.CPURequest, 1.0)
+	assert.Greater(t, multipliers.MemoryRequest, 1.0)
+	assert.GreaterOrEqual(t, multipliers.CPULimit, 1.0)
+	assert.GreaterOrEqual(t, multipliers.MemoryLimit, 1.0)
 }
 
 // Helper functions for testing

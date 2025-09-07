@@ -553,7 +553,7 @@ func TestThreadSafety(t *testing.T) {
 	operations := 100
 
 	// Concurrent updates
-	for i := 0; i < operations; i++ {
+	for i := range operations {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
@@ -596,7 +596,7 @@ func TestThreadSafety(t *testing.T) {
 	}
 
 	// Concurrent reads
-	for i := 0; i < operations; i++ {
+	for range operations {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -608,7 +608,7 @@ func TestThreadSafety(t *testing.T) {
 	}
 
 	// Concurrent clones
-	for i := 0; i < operations; i++ {
+	for range operations {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()

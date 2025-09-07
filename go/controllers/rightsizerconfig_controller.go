@@ -17,6 +17,7 @@ package controllers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -28,9 +29,10 @@ import (
 	"right-sizer/logger"
 	"right-sizer/metrics"
 
-	"k8s.io/apimachinery/pkg/api/errors"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -63,7 +65,7 @@ func (r *RightSizerConfigReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	rsc := &v1alpha1.RightSizerConfig{}
 	err := r.Get(ctx, req.NamespacedName, rsc)
 	if err != nil {
-		if errors.IsNotFound(err) {
+		if k8serrors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.
 			// Reset to default configuration
 			log.Info("RightSizerConfig resource not found. Resetting to default configuration")
@@ -513,7 +515,7 @@ func (r *RightSizerConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
 // parseResourceQuantity parses Kubernetes resource quantity strings to int64 values
 func parseResourceQuantity(quantity string, resourceType string) (int64, error) {
 	if quantity == "" {
-		return 0, fmt.Errorf("empty quantity string")
+		return 0, errors.New("empty quantity string")
 	}
 
 	// Simple parsing for common cases

@@ -23,16 +23,15 @@ import (
 	"sync"
 	"time"
 
-	"right-sizer/config"
-	"right-sizer/logger"
-	"right-sizer/metrics"
-
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+	"right-sizer/config"
+	"right-sizer/logger"
+	"right-sizer/metrics"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
@@ -370,7 +369,6 @@ func (r *AdaptiveRightSizer) analyzeAllPods(ctx context.Context) ([]ResourceUpda
 				// Check cache before logging to prevent repetitive messages
 				if r.shouldLogResizeDecision(pod.Namespace, pod.Name, container.Name,
 					oldCPUReq.String(), newCPUReq.String(), oldMemReq.String(), newMemReq.String()) {
-
 					logger.Info("🔍 Scaling analysis - CPU: %s (usage: %.0fm/%.0fm, %.1f%%), Memory: %s (usage: %.0fMi/%.0fMi, %.1f%%)",
 						scalingDecisionString(scalingDecision.CPU), podMetrics.CPUMilli, cpuLimit, cpuUsagePercent,
 						scalingDecisionString(scalingDecision.Memory), podMetrics.MemMB, memLimit, memUsagePercent)
@@ -402,7 +400,6 @@ func (r *AdaptiveRightSizer) analyzeAllPods(ctx context.Context) ([]ResourceUpda
 func (r *AdaptiveRightSizer) analyzeStandalonePods(ctx context.Context) ([]ResourceUpdate, error) {
 	// This function is deprecated as we now analyze all pods in analyzeAllPods
 	return []ResourceUpdate{}, nil
-
 }
 
 // applyUpdates applies the calculated resource updates with batching and rate limiting
@@ -495,7 +492,7 @@ func (r *AdaptiveRightSizer) applyUpdates(ctx context.Context, updates []Resourc
 			// Check context cancellation
 			select {
 			case <-ctx.Done():
-				log.Printf("⚠️  Context cancelled, stopping pod updates")
+				log.Printf("⚠️  Context canceled, stopping pod updates")
 				return
 			default:
 			}
@@ -764,7 +761,6 @@ func (r *AdaptiveRightSizer) updatePodInPlace(ctx context.Context, update Resour
 		metav1.PatchOptions{},
 		"resize", // This is the crucial part - specifying the resize subresource
 	)
-
 	if err != nil {
 		// Check for specific memory decrease error
 		if strings.Contains(err.Error(), "memory limits cannot be decreased") ||

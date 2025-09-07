@@ -17,16 +17,12 @@ package controllers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"strings"
 	"sync"
 	"time"
-
-	"right-sizer/config"
-	"right-sizer/logger"
-	"right-sizer/metrics"
-	"right-sizer/validation"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -34,6 +30,10 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+	"right-sizer/config"
+	"right-sizer/logger"
+	"right-sizer/metrics"
+	"right-sizer/validation"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
@@ -325,7 +325,6 @@ func (r *InPlaceRightSizer) rightSizePod(ctx context.Context, pod *corev1.Pod) (
 				// Check cache before logging to prevent repetitive messages
 				if r.shouldLogResizeDecision(pod.Namespace, pod.Name, container.Name,
 					oldCPUReq.String(), newCPUReq.String(), oldMemReq.String(), newMemReq.String()) {
-
 					log.Printf("🔍 Scaling analysis - CPU: %s (usage: %.0fm/%.0fm, %.1f%%), Memory: %s (usage: %.0fMi/%.0fMi, %.1f%%)",
 						scalingDecisionString(scalingDecision.CPU), usage.CPUMilli, cpuLimit, cpuUsagePercent,
 						scalingDecisionString(scalingDecision.Memory), usage.MemMB, memLimit, memUsagePercent)
@@ -760,7 +759,6 @@ func (r *InPlaceRightSizer) applyInPlaceResize(ctx context.Context, pod *corev1.
 		metav1.PatchOptions{},
 		"resize", // This is the crucial part - specifying the resize subresource
 	)
-
 	if err != nil {
 		// Check if error is due to forbidden decrease
 		if strings.Contains(err.Error(), "Forbidden") && strings.Contains(err.Error(), "cannot be decreased") {
@@ -894,7 +892,7 @@ func ensureSafeResourcePatch(current, desired corev1.ResourceRequirements) corev
 func (r *InPlaceRightSizer) fallbackPatch(ctx context.Context, pod *corev1.Pod, newResourcesMap map[string]corev1.ResourceRequirements) error {
 	// Regular patches cannot modify pod resources after creation
 	// This is a Kubernetes limitation - only the resize subresource can change resources
-	return fmt.Errorf("cannot modify pod resources without resize subresource")
+	return errors.New("cannot modify pod resources without resize subresource")
 }
 
 // isSystemPod checks if a pod is a system/infrastructure pod

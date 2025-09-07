@@ -19,6 +19,7 @@ import (
 	"context"
 	"time"
 
+	"k8s.io/client-go/kubernetes"
 	"right-sizer/audit"
 	"right-sizer/config"
 	"right-sizer/logger"
@@ -26,8 +27,6 @@ import (
 	"right-sizer/policy"
 	"right-sizer/retry"
 	"right-sizer/validation"
-
-	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
@@ -218,7 +217,6 @@ func (e *EnhancedInPlaceRightSizer) rightSizeAllPodsEnhanced(ctx context.Context
 	err := e.RetryHandler.ExecuteWithContext(ctx, operation, func(ctx context.Context) error {
 		return e.rightSizeAllPodsWithEnhancements(ctx)
 	})
-
 	if err != nil {
 		logger.Error("❌ Enhanced right-sizing cycle failed: %v", err)
 		if e.OperatorMetrics != nil {
@@ -241,7 +239,6 @@ func (e *EnhancedAdaptiveRightSizer) rightSizeAllPodsEnhanced(ctx context.Contex
 	err := e.RetryHandler.ExecuteWithContext(ctx, operation, func(ctx context.Context) error {
 		return e.rightSizeAllPodsWithEnhancements(ctx)
 	})
-
 	if err != nil {
 		logger.Error("❌ Enhanced adaptive right-sizing cycle failed: %v", err)
 		if e.OperatorMetrics != nil {
