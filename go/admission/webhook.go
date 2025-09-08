@@ -23,11 +23,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-
-	"right-sizer/config"
-	"right-sizer/logger"
-	"right-sizer/metrics"
-	"right-sizer/validation"
+	"time"
 
 	admissionv1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -37,6 +33,11 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"right-sizer/config"
+	"right-sizer/logger"
+	"right-sizer/metrics"
+	"right-sizer/validation"
 )
 
 // WebhookServer represents the admission webhook server
@@ -79,8 +80,9 @@ func NewWebhookServer(
 
 	mux := http.NewServeMux()
 	server := &http.Server{
-		Addr:    fmt.Sprintf(":%d", webhookConfig.Port),
-		Handler: mux,
+		Addr:              fmt.Sprintf(":%d", webhookConfig.Port),
+		Handler:           mux,
+		ReadHeaderTimeout: 30 * time.Second,
 	}
 
 	ws := &WebhookServer{

@@ -30,12 +30,13 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
+
 	"right-sizer/config"
 	"right-sizer/logger"
 	"right-sizer/metrics"
 	"right-sizer/validation"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
 // InPlaceRightSizer performs in-place resource adjustments without pod restarts using Kubernetes 1.33+ resize subresource
