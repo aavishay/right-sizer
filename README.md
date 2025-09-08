@@ -115,7 +115,7 @@ Right-Sizer is a Kubernetes operator that automatically optimizes pod resource a
 - **Health Endpoints**: Comprehensive health monitoring
 - **Circuit Breakers**: Automatic failure recovery
 - **High Availability**: Multi-replica deployment support
-- **Grafana Dashboards**: Pre-built visualization dashboards
+
 
 ---
 
@@ -682,14 +682,7 @@ rightsizer_config_validation_errors{}
 
 
 
-### Grafana Dashboard
 
-Import the provided dashboard for visualization:
-```bash
-kubectl create configmap grafana-dashboard \
-  --from-file=docs/grafana/dashboard.json \
-  -n monitoring
-```
 
 ---
 

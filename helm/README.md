@@ -18,24 +18,7 @@
 
 ### Installation
 
-#### Option 1: Using OCI Registry (Recommended)
-
-```bash
-# Install directly from Docker Hub OCI registry
-helm install right-sizer oci://registry-1.docker.io/aavishay/right-sizer \
-  --version 0.1.14 \
-  --namespace right-sizer \
-  --create-namespace
-
-# Install with custom values
-helm install right-sizer oci://registry-1.docker.io/aavishay/right-sizer \
-  --version 0.1.14 \
-  --namespace right-sizer \
-  --create-namespace \
-  -f custom-values.yaml
-```
-
-#### Option 2: Using Helm Repository
+#### Using Helm Repository
 
 ```bash
 # Add the Helm repository
@@ -152,7 +135,7 @@ config:
 - **Prometheus metrics** for monitoring and alerting
 - **Health endpoints** for liveness and readiness probes
 - **Comprehensive logging** with configurable levels
-- **Grafana dashboard** templates included
+- **Monitoring** integration ready
 
 ## 🔧 Usage Examples
 

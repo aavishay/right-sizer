@@ -248,7 +248,7 @@ database-proxy:
 1. **Load Testing**: Extended testing with higher pod counts (100+ pods)
 2. **Resource Policies**: Test advanced policy configurations
 3. **Multi-Cluster**: Validate behavior across different cluster configurations
-4. **Grafana Integration**: Set up monitoring dashboards
+4. **Resource Monitoring**: Set up comprehensive monitoring
 
 ### Operational Recommendations
 1. **Production Deployment**: Ready for production with traditional Helm chart
