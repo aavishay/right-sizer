@@ -32,6 +32,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
+	"right-sizer/audit"
 	"right-sizer/config"
 	"right-sizer/logger"
 	"right-sizer/metrics"
@@ -69,6 +70,7 @@ type AdaptiveRightSizer struct {
 	ClientSet       *kubernetes.Clientset
 	RestConfig      *rest.Config
 	MetricsProvider metrics.Provider
+	AuditLogger     *audit.AuditLogger
 	Interval        time.Duration
 	InPlaceEnabled  bool       // Will be auto-detected
 	DryRun          bool       // If true, only log recommendations without applying
@@ -1262,7 +1264,7 @@ func getQoSClass(pod *corev1.Pod) corev1.PodQOSClass {
 }
 
 // SetupAdaptiveRightSizer creates and starts the adaptive rightsizer
-func SetupAdaptiveRightSizer(mgr manager.Manager, provider metrics.Provider, dryRun bool) error {
+func SetupAdaptiveRightSizer(mgr manager.Manager, provider metrics.Provider, auditLogger *audit.AuditLogger, dryRun bool) error {
 	cfg := config.Get()
 
 	// Get the rest config from the manager
@@ -1279,6 +1281,7 @@ func SetupAdaptiveRightSizer(mgr manager.Manager, provider metrics.Provider, dry
 		ClientSet:       clientSet,
 		RestConfig:      restConfig,
 		MetricsProvider: provider,
+		AuditLogger:     auditLogger,
 		Interval:        cfg.ResizeInterval,
 		DryRun:          dryRun,
 		resizeCache:     make(map[string]*ResizeDecisionCache),
