@@ -1,0 +1,146 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: test-workloads
+  labels:
+    app: right-sizer-test
+---
+# Over-provisioned CPU workload
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cpu-overprovisioned
+  namespace: test-workloads
+  labels:
+    app: cpu-test
+    rightsizer.io/enable: "true"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: cpu-test
+  template:
+    metadata:
+      labels:
+        app: cpu-test
+    spec:
+      containers:
+      - name: app
+        image: nginx:alpine
+        resources:
+          requests:
+            cpu: 500m      # Way too much CPU for nginx
+            memory: 64Mi
+          limits:
+            cpu: 1000m
+            memory: 128Mi
+        ports:
+        - containerPort: 80
+---
+# Over-provisioned Memory workload
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: memory-overprovisioned
+  namespace: test-workloads
+  labels:
+    app: memory-test
+    rightsizer.io/enable: "true"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: memory-test
+  template:
+    metadata:
+      labels:
+        app: memory-test
+    spec:
+      containers:
+      - name: app
+        image: busybox:latest
+        command: ["sleep", "3600"]
+        resources:
+          requests:
+            cpu: 50m
+            memory: 512Mi    # Way too much memory for busybox
+          limits:
+            cpu: 100m
+            memory: 1Gi
+---
+# Under-provisioned workload (will need scaling up)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: underprovisioned-app
+  namespace: test-workloads
+  labels:
+    app: stress-test
+    rightsizer.io/enable: "true"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: stress-test
+  template:
+    metadata:
+      labels:
+        app: stress-test
+    spec:
+      containers:
+      - name: stress
+        image: progrium/stress
+        args: ["--cpu", "1", "--timeout", "300s"]
+        resources:
+          requests:
+            cpu: 10m       # Too little CPU for stress test
+            memory: 16Mi   # Too little memory
+          limits:
+            cpu: 50m
+            memory: 32Mi
+---
+# API-like workload with variable usage
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-backend
+  namespace: test-workloads
+  labels:
+    app: api-backend
+    rightsizer.io/enable: "true"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: api-backend
+  template:
+    metadata:
+      labels:
+        app: api-backend
+    spec:
+      containers:
+      - name: api
+        image: httpd:alpine
+        resources:
+          requests:
+            cpu: 200m      # Likely too much for simple httpd
+            memory: 256Mi  # Probably too much memory
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        ports:
+        - containerPort: 80
+---
+# Service to make workloads accessible
+apiVersion: v1
+kind: Service
+metadata:
+  name: test-services
+  namespace: test-workloads
+spec:
+  selector:
+    app: api-backend
+  ports:
+  - port: 80
+    targetPort: 80
+  type: ClusterIP

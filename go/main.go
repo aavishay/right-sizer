@@ -698,59 +698,11 @@ func main() {
 				events = events[:20]
 			}
 
-			// If audit log is empty, create realistic events from recent pod optimization activity
-			if len(events) == 0 {
-				recentEvents := []map[string]interface{}{}
-
-				// Look for pods that have been recently optimized (pods in test-workloads and right-sizer namespaces)
-				testPods := []string{"api-backend-7bfd84d9c6-bzkqr", "api-backend-7bfd84d9c6-dq8lm", "right-sizer-b988c477c-jbt2f"}
-				now := time.Now()
-
-				for i, podName := range testPods {
-					eventTime := now.Add(-time.Duration(i*10) * time.Minute) // Events from 0, 10, 20 minutes ago
-					namespace := "test-workloads"
-					containerName := "api"
-					if strings.Contains(podName, "right-sizer") {
-						namespace = "right-sizer"
-						containerName = "right-sizer"
-					}
-
-					event := map[string]interface{}{
-						"timestamp":        eventTime.Unix(),
-						"eventId":          fmt.Sprintf("rs-opt-%d", 1000+i),
-						"podName":          podName,
-						"namespace":        namespace,
-						"containerName":    containerName,
-						"operation":        "resource_optimization",
-						"reason":           "Memory usage below threshold - optimizing for efficiency",
-						"status":           "success",
-						"action":           "resource_change",
-						"previousCPU":      "10m",
-						"currentCPU":       "10m",
-						"previousMemory":   "256Mi",
-						"currentMemory":    "64Mi",
-						"optimizationType": "memory_optimization",
-						"savings":          "192Mi memory saved",
-					}
-
-					if strings.Contains(podName, "right-sizer") {
-						event["previousMemory"] = "128Mi"
-						event["savings"] = "64Mi memory saved"
-					}
-
-					recentEvents = append(recentEvents, event)
-				}
-
-				json.NewEncoder(w).Encode(map[string]interface{}{
-					"events": recentEvents,
-					"total":  len(recentEvents),
-				})
-			} else {
-				json.NewEncoder(w).Encode(map[string]interface{}{
-					"events": events,
-					"total":  len(events),
-				})
-			}
+			// Return events (real data only, no mock data)
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"events": events,
+				"total":  len(events),
+			})
 		})
 
 		// Proxy endpoints for dashboard to access Kubernetes APIs securely
