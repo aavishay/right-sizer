@@ -90,6 +90,7 @@ jobs:
             zip "right-sizer-${VERSION}-${GOOS}-${GOARCH}.zip" "${BINARY_NAME}" README.md LICENSE
           else
             tar czf "right-sizer-${VERSION}-${GOOS}-${GOARCH}.tar.gz" "${BINARY_NAME}" README.md LICENSE
+          fi
 
       - name: Upload binary artifact
         uses: actions/upload-artifact@v4
