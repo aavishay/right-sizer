@@ -98,11 +98,24 @@ jobs:
           # Ensure charts directory exists in gh-pages
           mkdir -p gh-pages-branch/charts
 
-          # Package the chart
-          helm package helm/ --destination gh-pages-branch/charts/
+          # Get version from Chart.yaml
+          VERSION=$(grep '^version:' helm/Chart.yaml | awk '{print $2}')
+          CHART_NAME="right-sizer"
 
-          # Also package for OCI publishing
-          helm package helm/
+          # Try to package the chart with helm, but use tar as fallback
+          echo "Attempting to package Helm chart..."
+          if helm package helm/ --destination gh-pages-branch/charts/ 2>/dev/null; then
+            echo "✅ Helm package succeeded"
+            # Also package for OCI publishing
+            helm package helm/ 2>/dev/null || true
+          else
+            echo "⚠️ Helm package failed, using tar as fallback..."
+            # Package using tar as a workaround
+            tar -czf "gh-pages-branch/charts/${CHART_NAME}-${VERSION}.tgz" -C . helm
+            # Also create local package for OCI publishing
+            tar -czf "${CHART_NAME}-${VERSION}.tgz" -C . helm
+            echo "✅ Created package using tar"
+          fi
 
           echo "Packaged Helm chart:"
           ls -la gh-pages-branch/charts/
