@@ -38,11 +38,11 @@ The `applyInPlaceResize` method has been refactored to perform resizing in three
 func (r *InPlaceRightSizer) applyInPlaceResize(ctx context.Context, pod *corev1.Pod, newResourcesMap map[string]corev1.ResourceRequirements) error {
     // First, set resize policy
     r.applyResizePolicy(ctx, pod)
-    
+
     // Step 2: Resize CPU for all containers
     // ... CPU resize logic ...
-    
-    // Step 3: Resize Memory for all containers  
+
+    // Step 3: Resize Memory for all containers
     // ... Memory resize logic ...
 }
 ```
@@ -61,10 +61,10 @@ The `updatePodInPlace` method follows the same two-step approach using JSON patc
 func (r *AdaptiveRightSizer) updatePodInPlace(ctx context.Context, update ResourceUpdate) (string, error) {
     // Step 1: Apply resize policy
     r.applyResizePolicyForContainer(ctx, &pod, containerIndex)
-    
+
     // Step 2: Resize CPU
     // Creates JSON patch with CPU values only, keeping memory unchanged
-    
+
     // Step 3: Resize Memory
     // Creates JSON patch with memory values only, keeping CPU at new values
 }

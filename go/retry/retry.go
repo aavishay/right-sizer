@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"strings"
 	"sync"
 	"time"
 
@@ -371,6 +372,7 @@ func IsRetryableKubernetesError(err error) bool {
 	retryablePatterns := []string{
 		"connection refused",
 		"timeout",
+		"context deadline exceeded",
 		"temporary failure",
 		"server is currently unavailable",
 		"too many requests",
@@ -394,20 +396,12 @@ func IsRetryableKubernetesError(err error) bool {
 
 // contains checks if a string contains a substring (case-insensitive)
 func contains(s, substr string) bool {
-	return len(s) >= len(substr) &&
-		(s == substr ||
-			len(s) > len(substr) &&
-				(s[:len(substr)] == substr ||
-					s[len(s)-len(substr):] == substr ||
-					containsSubstring(s, substr)))
+	return strings.Contains(strings.ToLower(s), strings.ToLower(substr))
 }
 
 func containsSubstring(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
+	// This function is now redundant but kept for compatibility
+	return contains(s, substr)
 	return false
 }
 

@@ -205,4 +205,3 @@ The Helm chart repositories are now:
 - **Documented** - Comprehensive examples and guides
 - **Automated** - CI/CD pipelines for publishing
 - **Maintainable** - Following best practices and conventions
-

@@ -51,7 +51,7 @@ Replace both flags with a single `operationMode`:
 spec:
   operationMode: "resize-with-policies"  # Options below
   # - "dry-run": Preview only, no changes
-  # - "resize-only": Update resources without restart policies  
+  # - "resize-only": Update resources without restart policies
   # - "resize-with-policies": Update resources and add restart policies
 ```
 
@@ -72,7 +72,7 @@ Organize related settings together:
 spec:
   execution:
     dryRun: false              # Preview mode (overrides everything)
-    
+
   resizePolicy:
     enabled: true              # Whether to resize at all
     patchRestartPolicy: true  # Whether to add restart policies
@@ -137,18 +137,18 @@ spec:
 // Internal configuration resolution
 func resolveConfig(spec *RightSizerConfigSpec) *ResolvedConfig {
     config := &ResolvedConfig{}
-    
+
     // Handle legacy flags (deprecated)
     if spec.DryRun != nil {
         config.DryRun = *spec.DryRun
         log.Warn("spec.dryRun is deprecated, use spec.execution.dryRun")
     }
-    
+
     // New structure takes precedence
     if spec.Execution != nil {
         config.DryRun = spec.Execution.DryRun
     }
-    
+
     // Resolve resize behavior
     if config.DryRun {
         config.ApplyChanges = false
@@ -157,7 +157,7 @@ func resolveConfig(spec *RightSizerConfigSpec) *ResolvedConfig {
         config.ApplyChanges = spec.ResizePolicy.Enabled
         config.PatchPolicies = spec.ResizePolicy.PatchRestartPolicy
     }
-    
+
     return config
 }
 ```

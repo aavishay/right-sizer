@@ -164,16 +164,16 @@ Extend it by:
 
 ## Customization Tips
 
-1. Namespace Isolation  
+1. Namespace Isolation
    Wrap each manifest set with `kubectl -n your-namespace` or add `metadata.namespace` blocks.
 
-2. Resource Tuning  
+2. Resource Tuning
    For stress scenarios, scale `replicas` *and* widen CPU/memory request ranges to test resizing boundaries.
 
-3. Policy Synergy  
+3. Policy Synergy
    After deploying workloads, apply `RightSizerPolicy` CRDs to observe difference in recommendations.
 
-4. Cleanup  
+4. Cleanup
    ```
    kubectl delete -f examples/deploy/test-workloads.yaml
    kubectl delete -f examples/deploy/right-sizer-deployment.yaml

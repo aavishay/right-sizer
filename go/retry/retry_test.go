@@ -153,7 +153,8 @@ func TestRetryer_CalculateDelay(t *testing.T) {
 
 	// Test max delay cap
 	delay3 := retryer.calculateDelay(config.InitialDelay, 10) // Should be capped
-	assert.Equal(t, config.MaxDelay, delay3)
+	// Allow variance due to randomization factor (10% = 100ms for 1s max delay)
+	assert.InDelta(t, float64(config.MaxDelay), float64(delay3), float64(config.MaxDelay)*config.RandomizationFactor)
 }
 
 func TestRetryer_CalculateDelay_NoRandomization(t *testing.T) {
