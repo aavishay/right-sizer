@@ -246,11 +246,11 @@ spec:
 
   # Feature gates for experimental features
   featureGates:
-    UpdateResizePolicy: true
-    EnablePredictiveScaling: false
-    EnableCostOptimization: false
-    EnableMultiCluster: false
-    EnableAutoLearning: false
-    EnableWorkloadProfiling: false
-    EnableAdvancedScheduling: false
+    UpdateResizePolicy: {{ .Values.rightsizerConfig.featureGates.updateResizePolicy | default false }}
+    EnablePredictiveScaling: {{ .Values.rightsizerConfig.featureGates.enablePredictiveScaling | default false }}
+    EnableCostOptimization: {{ .Values.rightsizerConfig.featureGates.enableCostOptimization | default false }}
+    EnableMultiCluster: {{ .Values.rightsizerConfig.featureGates.enableMultiCluster | default false }}
+    EnableAutoLearning: {{ .Values.rightsizerConfig.featureGates.enableAutoLearning | default false }}
+    EnableWorkloadProfiling: {{ .Values.rightsizerConfig.featureGates.enableWorkloadProfiling | default false }}
+    EnableAdvancedScheduling: {{ .Values.rightsizerConfig.featureGates.enableAdvancedScheduling | default false }}
 {{- end }}

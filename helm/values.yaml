@@ -255,7 +255,7 @@ rightsizerConfig:
 
   # Feature gates for experimental features
   featureGates:
-    updateResizePolicy: true # Update resize policy for in-place pod resizing (K8s 1.27+)
+    updateResizePolicy: false # Update resize policy for in-place pod resizing (K8s 1.27+)
     enablePredictiveScaling: false # ML-based predictive scaling
     enableCostOptimization: false # Cost-aware resource optimization
     enableMultiCluster: false # Multi-cluster support

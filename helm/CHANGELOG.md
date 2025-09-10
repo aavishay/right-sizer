@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.16] - 2024-09-11
+
+### What's Changed
+
+- **BREAKING DEFAULT CHANGE**: `UpdateResizePolicy` feature flag is now disabled by default (was: enabled)
+- Fixed: All feature gates in Helm templates now properly use values from `values.yaml` instead of being hardcoded
+- Improved safety: In-place pod resizing now requires explicit opt-in via configuration
+
+### Migration Notes
+
+If you were relying on the default enabled state of `UpdateResizePolicy`, you must now explicitly enable it:
+
+```yaml
+rightsizerConfig:
+  featureGates:
+    updateResizePolicy: true
+```
+
 ## [0.1.14] - 2025-01-13
 
 ## What's Changed
