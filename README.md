@@ -3,7 +3,7 @@
 # 🎯 Right-Sizer Operator
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
-[![Version](https://img.shields.io/badge/Version-0.1.15-green.svg)](https://github.com/aavishay/right-sizer/releases)
+[![Version](https://img.shields.io/badge/Version-0.1.16-green.svg)](https://github.com/aavishay/right-sizer/releases)
 [![Kubernetes](https://img.shields.io/badge/Kubernetes-1.33%2B-326ce5)](https://kubernetes.io)
 [![Go Version](https://img.shields.io/badge/Go-1.25-00ADD8)](https://golang.org)
 [![Helm](https://img.shields.io/badge/Helm-3.0%2B-0F1689)](https://helm.sh)
@@ -28,15 +28,21 @@ Right-Sizer automatically adjusts Kubernetes pod resources based on actual usage
 
 ```bash
 # Quick Install (Helm)
+
+# Step 1: Install CRDs (required first)
+kubectl apply -f https://raw.githubusercontent.com/aavishay/right-sizer/main/helm/crds/rightsizer.io_rightsizerconfigs.yaml
+kubectl apply -f https://raw.githubusercontent.com/aavishay/right-sizer/main/helm/crds/rightsizer.io_rightsizerpolicies.yaml
+
+# Step 2: Add Helm repository and install
 helm repo add right-sizer https://aavishay.github.io/right-sizer/charts
 helm repo update
 helm install right-sizer right-sizer/right-sizer \
   --namespace right-sizer \
   --create-namespace \
-  --version 0.1.15
+  --version 0.1.16
 
 # Quick Install (Docker)
-docker pull aavishay/right-sizer:0.1.15  # Specific version
+docker pull aavishay/right-sizer:0.1.16  # Specific version
 docker pull aavishay/right-sizer:latest # Latest version
 ```
 

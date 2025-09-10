@@ -1,0 +1,63 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "right-sizer.fullname" . }}-config
+  labels:
+    {{- include "right-sizer.labels" . | nindent 4 }}
+data:
+  config.yaml: |
+    # Right-Sizer Operator Configuration
+    operator:
+      namespace: {{ .Release.Namespace }}
+      leaderElection: {{ .Values.rightsizerConfig.operator.leaderElection | default true }}
+      leaderElectionNamespace: {{ .Values.rightsizerConfig.operator.leaderElectionNamespace | default .Release.Namespace | quote }}
+      leaderElectionID: {{ .Values.rightsizerConfig.operator.leaderElectionID | default "right-sizer-leader" | quote }}
+      leaderElectionLeaseDuration: {{ .Values.rightsizerConfig.operator.leaderElectionLeaseDuration | default "15s" | quote }}
+      leaderElectionRenewDeadline: {{ .Values.rightsizerConfig.operator.leaderElectionRenewDeadline | default "10s" | quote }}
+      leaderElectionRetryPeriod: {{ .Values.rightsizerConfig.operator.leaderElectionRetryPeriod | default "2s" | quote }}
+      syncPeriod: {{ .Values.rightsizerConfig.operator.syncPeriod | default "30s" | quote }}
+      maxConcurrentReconciles: {{ .Values.rightsizerConfig.operator.maxConcurrentReconciles | default 3 }}
+      workerThreads: {{ .Values.rightsizerConfig.operator.workerThreads | default 10 }}
+      qps: {{ .Values.rightsizerConfig.operator.qps | default 20 }}
+      burst: {{ .Values.rightsizerConfig.operator.burst | default 30 }}
+      healthProbePort: {{ .Values.rightsizerConfig.operator.healthProbePort | default 8081 }}
+      readinessEndpoint: {{ .Values.rightsizerConfig.operator.readinessEndpoint | default "/readyz" | quote }}
+      livenessEndpoint: {{ .Values.rightsizerConfig.operator.livenessEndpoint | default "/healthz" | quote }}
+
+    logging:
+      level: {{ .Values.rightsizerConfig.logging.level | default "info" | quote }}
+      format: {{ .Values.rightsizerConfig.logging.format | default "json" | quote }}
+      enableAudit: {{ .Values.rightsizerConfig.logging.enableAudit | default true }}
+
+    metrics:
+      enabled: {{ .Values.rightsizerConfig.observability.enableMetricsExport | default true }}
+      port: {{ .Values.rightsizerConfig.observability.metricsPort | default 9090 }}
+      provider: {{ .Values.rightsizerConfig.monitoring.metricsProvider | default "metrics-server" | quote }}
+      {{- if .Values.rightsizerConfig.monitoring.prometheusURL }}
+      prometheusURL: {{ .Values.rightsizerConfig.monitoring.prometheusURL | quote }}
+      {{- end }}
+      {{- if .Values.rightsizerConfig.monitoring.metricsServerEndpoint }}
+      metricsServerEndpoint: {{ .Values.rightsizerConfig.monitoring.metricsServerEndpoint | quote }}
+      {{- end }}
+
+    observability:
+      enableTracing: {{ .Values.rightsizerConfig.observability.enableTracing | default false }}
+      {{- if .Values.rightsizerConfig.observability.tracingEndpoint }}
+      tracingEndpoint: {{ .Values.rightsizerConfig.observability.tracingEndpoint | quote }}
+      {{- end }}
+      enableProfiling: {{ .Values.rightsizerConfig.observability.enableProfiling | default false }}
+      profilingPort: {{ .Values.rightsizerConfig.observability.profilingPort | default 6060 }}
+
+    operational:
+      resizeInterval: {{ .Values.rightsizerConfig.operationalConfig.resizeInterval | default "5m" | quote }}
+      retryAttempts: {{ .Values.rightsizerConfig.operationalConfig.retryAttempts | default 3 }}
+      retryInterval: {{ .Values.rightsizerConfig.operationalConfig.retryInterval | default "5s" | quote }}
+      batchSize: {{ .Values.rightsizerConfig.operationalConfig.batchSize | default 3 }}
+      delayBetweenBatches: {{ .Values.rightsizerConfig.operationalConfig.delayBetweenBatches | default "5s" | quote }}
+      delayBetweenPods: {{ .Values.rightsizerConfig.operationalConfig.delayBetweenPods | default "500ms" | quote }}
+      maxUpdatesPerRun: {{ .Values.rightsizerConfig.operationalConfig.maxUpdatesPerRun | default 50 }}
+
+    runtime:
+      dryRun: {{ .Values.rightsizerConfig.dryRun | default false }}
+      enabled: {{ .Values.rightsizerConfig.enabled | default true }}
+      mode: {{ .Values.rightsizerConfig.mode | default "balanced" | quote }}

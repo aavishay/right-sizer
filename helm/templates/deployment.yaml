@@ -11,10 +11,20 @@ spec:
       {{- include "right-sizer.selectorLabels" . | nindent 6 }}
   template:
     metadata:
+      annotations:
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
       labels:
         {{- include "right-sizer.selectorLabels" . | nindent 8 }}
     spec:
       serviceAccountName: {{ include "right-sizer.serviceAccountName" . }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
         - name: {{ .Chart.Name }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
@@ -36,14 +46,29 @@ spec:
             httpGet:
               path: /healthz
               port: health
-            initialDelaySeconds: 15
+            initialDelaySeconds: 30
             periodSeconds: 20
+            timeoutSeconds: 10
+            failureThreshold: 3
+            successThreshold: 1
           readinessProbe:
             httpGet:
               path: /readyz
               port: health
-            initialDelaySeconds: 5
+            initialDelaySeconds: 20
             periodSeconds: 10
+            timeoutSeconds: 10
+            failureThreshold: 3
+            successThreshold: 1
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: health
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 10
+            failureThreshold: 30
+            successThreshold: 1
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           env:
@@ -51,7 +76,38 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.namespace
+            - name: LOG_LEVEL
+              value: {{ .Values.rightsizerConfig.logging.level | default "info" | quote }}
+            - name: LOG_FORMAT
+              value: {{ .Values.rightsizerConfig.logging.format | default "json" | quote }}
+            - name: METRICS_PORT
+              value: {{ .Values.metricsPort | default 9090 | quote }}
+            - name: ENABLE_LEADER_ELECTION
+              value: {{ .Values.rightsizerConfig.operator.leaderElection | default true | quote }}
+            - name: LEADER_ELECTION_NAMESPACE
+              value: {{ .Values.rightsizerConfig.operator.leaderElectionNamespace | default .Release.Namespace | quote }}
+            - name: LEADER_ELECTION_ID
+              value: {{ .Values.rightsizerConfig.operator.leaderElectionID | default "right-sizer-leader" | quote }}
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
-      securityContext:
-        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+          volumeMounts:
+            - name: config
+              mountPath: /config
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "right-sizer.fullname" . }}-config
+            optional: true
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
