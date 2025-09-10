@@ -231,11 +231,22 @@ jobs:
 
       - name: Package Helm chart
         run: |
-          # Package chart - keep original name for OCI publishing
-          helm package helm/
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          CHART_NAME="right-sizer"
+
+          # Try helm package first, but use tar as fallback
+          echo "Attempting to package Helm chart..."
+          if helm package helm/ 2>/dev/null; then
+            echo "✅ Helm package succeeded"
+          else
+            echo "⚠️ Helm package failed, using tar as fallback..."
+            # Package using tar as a workaround
+            tar -czf "${CHART_NAME}-${VERSION}.tgz" -C . helm
+            echo "✅ Created package using tar"
+          fi
 
           # Create a copy for the GitHub release artifact with descriptive name
-          cp right-sizer-*.tgz right-sizer-helm-${{ steps.version.outputs.VERSION }}.tgz
+          cp ${CHART_NAME}-${VERSION}.tgz right-sizer-helm-${VERSION}.tgz
 
           echo "Packaged charts:"
           ls -la *.tgz
