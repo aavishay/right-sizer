@@ -1,277 +1,330 @@
-# Right-Sizer Operator
+# Right-Sizer Helm Chart
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
-[![Version](https://img.shields.io/badge/Version-0.1.15-green.svg)](https://github.com/aavishay/right-sizer/releases)
-[![Kubernetes](https://img.shields.io/badge/Kubernetes-1.33%2B-326ce5)](https://kubernetes.io)
-[![Helm](https://img.shields.io/badge/Helm-3.0%2B-0F1689)](https://helm.sh)
+[![Version](https://img.shields.io/badge/Version-0.1.17-green.svg)](https://github.com/aavishay/right-sizer/releases)
+[![Kubernetes](https://img.shields.io/badge/Kubernetes-1.24%2B-326ce5)](https://kubernetes.io)
+[![Helm](https://img.shields.io/badge/Helm-3.8%2B-0F1689)](https://helm.sh)
+[![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/right-sizer)](https://artifacthub.io/packages/search?repo=right-sizer)
 
 **Intelligent Kubernetes Resource Optimization with Zero Downtime**
 
-[📖 Full Documentation](https://github.com/aavishay/right-sizer) | [🐛 Issues](https://github.com/aavishay/right-sizer/issues) | [💬 Discussions](https://github.com/aavishay/right-sizer/discussions)
+Right-Sizer automatically adjusts Kubernetes pod resources based on actual usage patterns, reducing costs by 20-40% while improving performance and stability.
 
-## 🚀 Quick Start
-
-### Prerequisites
-- Kubernetes 1.33+
-- Helm 3.0+
-- Metrics Server or Prometheus
-
-### Installation
-
-#### Using Helm Repository
+## 🚀 TL;DR
 
 ```bash
-# Add the Helm repository
-helm repo add right-sizer https://aavishay.github.io/right-sizer/charts
-helm repo update
+# IMPORTANT: Install CRDs first (required)
+kubectl apply -f https://raw.githubusercontent.com/aavishay/right-sizer/main/helm/crds/rightsizer.io_rightsizerconfigs.yaml
+kubectl apply -f https://raw.githubusercontent.com/aavishay/right-sizer/main/helm/crds/rightsizer.io_rightsizerpolicies.yaml
 
-# Install with default configuration
+# Add repository and install
+helm repo add right-sizer https://aavishay.github.io/right-sizer
+helm repo update
 helm install right-sizer right-sizer/right-sizer \
   --namespace right-sizer \
-  --create-namespace
+  --create-namespace \
+  --version 0.1.17
+```
+
+## 📋 Prerequisites
+
+- **Kubernetes** 1.24+ (1.27+ for in-place pod resizing)
+- **Helm** 3.8 or higher
+- **Metrics Server** or **Prometheus** for resource metrics
+- **Cluster admin permissions** for CRD installation
+
+## 📦 Installation
+
+### Step 1: Install Custom Resource Definitions (CRDs)
+
+⚠️ **IMPORTANT**: CRDs must be installed before the Helm chart. This is a one-time operation per cluster.
+
+```bash
+# Install CRDs
+kubectl apply -f https://raw.githubusercontent.com/aavishay/right-sizer/main/helm/crds/rightsizer.io_rightsizerconfigs.yaml
+kubectl apply -f https://raw.githubusercontent.com/aavishay/right-sizer/main/helm/crds/rightsizer.io_rightsizerpolicies.yaml
+
+# Verify CRDs are installed
+kubectl get crd rightsizerconfigs.rightsizer.io
+kubectl get crd rightsizerpolicies.rightsizer.io
+```
+
+### Step 2: Add Helm Repository
+
+```bash
+helm repo add right-sizer https://aavishay.github.io/right-sizer
+helm repo update
+```
+
+### Step 3: Install Right-Sizer
+
+```bash
+# Install with default values
+helm install right-sizer right-sizer/right-sizer \
+  --namespace right-sizer \
+  --create-namespace \
+  --version 0.1.17
 
 # Install with custom values
 helm install right-sizer right-sizer/right-sizer \
   --namespace right-sizer \
   --create-namespace \
-  -f custom-values.yaml
-```
-
-### Verify Installation
-
-```bash
-# Check operator status
-kubectl get pods -n right-sizer
-
-# View operator logs
-kubectl logs -n right-sizer -l app.kubernetes.io/name=right-sizer
-
-# Check CRDs
-kubectl get rightsizerconfigs
-kubectl get rightsizerpolicies
+  --version 0.1.17 \
+  --values custom-values.yaml
 ```
 
 ## ⚙️ Configuration
 
-### Key Parameters
+### Key Configuration Options
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `image.repository` | Docker image repository | `aavishay/right-sizer` |
-| `image.tag` | Docker image tag | `latest` |
-| `image.pullPolicy` | Image pull policy | `IfNotPresent` |
-| `replicaCount` | Number of operator replicas | `1` |
-| `serviceAccount.create` | Create service account | `true` |
-| `serviceAccount.name` | Service account name | `right-sizer` |
-| `rbac.create` | Create RBAC resources | `true` |
-| `metrics.enabled` | Enable Prometheus metrics | `true` |
-| `webhook.enabled` | Enable admission webhooks | `false` |
-| `rightsizerConfig.create` | Create default RightSizerConfig | `true` |
-| `rightsizerConfig.enabled` | Enable right-sizing | `true` |
-| `rightsizerConfig.mode` | Operating mode (adaptive/aggressive/balanced/conservative/custom) | `balanced` |
-| `rightsizerConfig.dryRun` | Dry-run mode (preview only) | `false` |
-
-### RightSizerConfig Parameters
-
-| Parameter | Description | Default |
-|-----------|-------------|---------|
+| `rightsizerConfig.enabled` | Enable/disable right-sizing | `true` |
+| `rightsizerConfig.mode` | Operating mode: adaptive, aggressive, balanced, conservative, custom | `balanced` |
+| `rightsizerConfig.dryRun` | Preview changes without applying | `false` |
+| `rightsizerConfig.featureGates.updateResizePolicy` | Enable in-place resizing (K8s 1.27+) | `false` |
+| `rightsizerConfig.namespaceConfig.excludeNamespaces` | Namespaces to exclude | `[kube-system, kube-public, kube-node-lease]` |
 | `rightsizerConfig.resourceDefaults.cpu.minRequest` | Minimum CPU request | `10m` |
 | `rightsizerConfig.resourceDefaults.cpu.maxLimit` | Maximum CPU limit | `4000m` |
 | `rightsizerConfig.resourceDefaults.memory.minRequest` | Minimum memory request | `64Mi` |
-| `rightsizerConfig.resourceDefaults.memory.maxLimit` | Maximum memory limit | `8Gi` |
-| `rightsizerConfig.sizingStrategy.algorithm` | Algorithm (percentile/peak/average) | `percentile` |
+| `rightsizerConfig.resourceDefaults.memory.maxLimit` | Maximum memory limit | `8192Mi` |
+| `rightsizerConfig.operationalConfig.resizeInterval` | Resize check interval | `5m` |
+| `rightsizerConfig.sizingStrategy.algorithm` | Algorithm: percentile, peak, average | `percentile` |
 | `rightsizerConfig.sizingStrategy.percentile` | Percentile value (if using percentile) | `95` |
-| `rightsizerConfig.operationalConfig.resizeMode` | Resize mode (InPlace/Rolling) | `InPlace` |
-| `rightsizerConfig.operationalConfig.resizeInterval` | How often to check resources | `5m` |
-| `rightsizerConfig.namespaceConfig.excludeNamespaces` | Namespaces to exclude | `[kube-system, kube-public]` |
 
-### Example Configuration
+### Example Values Files
 
+#### Production Environment (Conservative)
 ```yaml
-# values.yaml
-image:
-  repository: aavishay/right-sizer
-  tag: "0.1.3"
-  pullPolicy: IfNotPresent
-
-replicaCount: 1
-
-serviceAccount:
-  create: true
-  name: right-sizer
-
-rbac:
-  create: true
-
-metrics:
+# values-production.yaml
+rightsizerConfig:
   enabled: true
-
-webhook:
-  enabled: false
-
-# Custom resource configuration
-config:
-  enabled: true
-  mode: balanced
-  resizeInterval: "30s"
-  dryRun: false
+  mode: "conservative"
+  dryRun: true  # Start with dry-run
+  
+  featureGates:
+    updateResizePolicy: false  # Disabled by default for safety
+  
+  resourceDefaults:
+    cpu:
+      minRequest: "50m"
+      maxLimit: "8000m"
+    memory:
+      minRequest: "128Mi"
+      maxLimit: "16384Mi"
+  
+  sizingStrategy:
+    algorithm: "percentile"
+    percentile: 99
+    lookbackPeriod: "14d"
+    
+  operationalConfig:
+    resizeInterval: "30m"
+    maxUpdatesPerRun: 10
+    
+  namespaceConfig:
+    includeNamespaces:
+      - "production"
+    excludeNamespaces:
+      - "kube-system"
+      - "kube-public"
+      - "kube-node-lease"
+      - "right-sizer"
 ```
 
-## 📊 Key Features
+#### Development Environment (Aggressive)
+```yaml
+# values-development.yaml
+rightsizerConfig:
+  enabled: true
+  mode: "aggressive"
+  dryRun: false
+  
+  featureGates:
+    updateResizePolicy: true  # Enable for faster updates
+  
+  resourceDefaults:
+    cpu:
+      minRequest: "10m"
+      maxLimit: "2000m"
+    memory:
+      minRequest: "32Mi"
+      maxLimit: "4096Mi"
+  
+  sizingStrategy:
+    algorithm: "average"
+    lookbackPeriod: "1d"
+    
+  operationalConfig:
+    resizeInterval: "5m"
+    maxUpdatesPerRun: 50
+    
+  namespaceConfig:
+    includeNamespaces:
+      - "dev"
+      - "staging"
+```
 
-### 🚀 Core Functionality
-- **Zero-downtime resizing** with Kubernetes 1.33+ in-place updates
-- **Multi-strategy optimization**: adaptive, conservative, aggressive modes
-- **Multi-source metrics**: Metrics Server and Prometheus support
-- **Intelligent validation**: Respects node capacity and quotas
+## 🎯 Operating Modes
 
-### 🧠 Intelligence & Safety
-- **CRD-based configuration** for native Kubernetes management
-- **Priority-based policies** with fine-grained control
-- **Safety thresholds** and configurable guardrails
-- **Audit logging** for compliance and troubleshooting
+| Mode | Description | Use Case |
+|------|-------------|----------|
+| **adaptive** | Learns from workload patterns and adjusts strategy | General purpose, mixed workloads |
+| **aggressive** | Minimizes resource allocation, frequent adjustments | Development, cost optimization |
+| **balanced** | Moderate optimization with stability | Default, most workloads |
+| **conservative** | Prioritizes stability, gradual changes | Production, critical services |
+| **custom** | Full manual control over all parameters | Advanced users |
 
-### 📈 Observability
-- **Prometheus metrics** for monitoring and alerting
-- **Health endpoints** for liveness and readiness probes
-- **Comprehensive logging** with configurable levels
-- **Monitoring** integration ready
+## 🚦 Feature Gates
 
-## 🔧 Usage Examples
+| Feature | Default | K8s Version | Description |
+|---------|---------|-------------|-------------|
+| `updateResizePolicy` | `false` | 1.27+ | Enable in-place pod resizing without restarts |
+| `enablePredictiveScaling` | `false` | All | ML-based predictive scaling (experimental) |
+| `enableCostOptimization` | `false` | All | Cost-aware resource optimization |
+| `enableMultiCluster` | `false` | All | Multi-cluster support (experimental) |
 
-### Install with Different Profiles
+## 📊 Metrics and Monitoring
 
+Right-Sizer exposes Prometheus metrics on port 9090:
+
+```yaml
+# ServiceMonitor for Prometheus Operator
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: right-sizer
+  namespace: right-sizer
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: right-sizer
+  endpoints:
+  - port: metrics
+    interval: 30s
+```
+
+Key metrics:
+- `rightsizer_resize_operations_total` - Total resize operations
+- `rightsizer_resize_failures_total` - Failed resize operations
+- `rightsizer_resource_savings_percentage` - Estimated resource savings
+- `rightsizer_pods_monitored` - Number of pods being monitored
+
+## 🔧 Common Use Cases
+
+### Enable for Specific Namespaces Only
 ```bash
-# Conservative mode for production
 helm install right-sizer right-sizer/right-sizer \
-  --set rightsizerConfig.mode=conservative \
-  --set rightsizerConfig.sizingStrategy.algorithm=peak \
-  --set rightsizerConfig.operationalConfig.resizeInterval=10m
+  --set rightsizerConfig.namespaceConfig.includeNamespaces="{app1,app2,app3}"
+```
 
-# Balanced mode (default)
-helm install right-sizer right-sizer/right-sizer \
-  --set rightsizerConfig.mode=balanced \
-  --set rightsizerConfig.sizingStrategy.algorithm=percentile \
-  --set rightsizerConfig.operationalConfig.resizeInterval=1m
-
-# Aggressive mode for development
-helm install right-sizer right-sizer/right-sizer \
-  --set rightsizerConfig.mode=aggressive \
-  --set rightsizerConfig.sizingStrategy.algorithm=average \
-  --set rightsizerConfig.operationalConfig.resizeInterval=30s
-
-# Adaptive mode
-helm install right-sizer right-sizer/right-sizer \
-  --set rightsizerConfig.mode=adaptive \
-  --set rightsizerConfig.sizingStrategy.algorithm=percentile \
-  --set rightsizerConfig.operationalConfig.resizeInterval=5m
-
-# Dry-run mode for testing
+### Dry-Run Mode for Testing
+```bash
 helm install right-sizer right-sizer/right-sizer \
   --set rightsizerConfig.dryRun=true \
   --set rightsizerConfig.logging.level=debug
 ```
 
-### Basic Configuration
-The Helm chart automatically creates a default RightSizerConfig:
-```yaml
-apiVersion: rightsizer.io/v1alpha1
-kind: RightSizerConfig
-metadata:
-  name: right-sizer-config
-spec:
-  enabled: true
-  mode: adaptive
-  dryRun: false
-
-  resourceDefaults:
-    cpu:
-      minRequest: "10m"
-      maxLimit: "4000m"
-    memory:
-      minRequest: "64Mi"
-      maxLimit: "8Gi"
-
-  sizingStrategy:
-    algorithm: "percentile"
-    percentile: 95
-
-  operationalConfig:
-    resizeMode: "InPlace"
-    resizeInterval: "5m"
-```
-
-
-### Workload-Specific Policy
-```yaml
-apiVersion: rightsizer.io/v1alpha1
-kind: RightSizerPolicy
-metadata:
-  name: production-critical
-spec:
-  enabled: true
-  priority: 100
-  mode: conservative
-  targetRef:
-    kind: Deployment
-    namespaces: ["production"]
-    labelSelector:
-      matchLabels:
-        tier: critical
-```
-
-## 📋 Requirements
-
-- **Kubernetes**: 1.33+ (for in-place pod resizing)
-- **Helm**: 3.0+
-- **Metrics**: Metrics Server 0.5+ or Prometheus
-- **Resources**: 2GB RAM, 1 CPU core minimum
-
-## 🔍 Troubleshooting
-
-### Common Issues
-
-**Pods not resizing:**
+### Enable In-Place Resizing (K8s 1.27+)
 ```bash
-kubectl logs -n right-sizer -l app.kubernetes.io/name=right-sizer
+helm install right-sizer right-sizer/right-sizer \
+  --set rightsizerConfig.featureGates.updateResizePolicy=true
 ```
 
-**Permission errors:**
+### Custom Resource Limits
 ```bash
-kubectl apply -f helm/templates/rbac.yaml
+helm install right-sizer right-sizer/right-sizer \
+  --set rightsizerConfig.resourceDefaults.cpu.maxLimit="16000m" \
+  --set rightsizerConfig.resourceDefaults.memory.maxLimit="32Gi"
 ```
 
-**Metrics not available:**
+## 🐛 Troubleshooting
+
+### Issue: CRDs Not Found
 ```bash
-kubectl top pods  # Check if metrics-server is working
+Error: unable to build kubernetes objects from release manifest: 
+resource mapping not found for name: "right-sizer-config" 
+namespace: "" from "": no matches for kind "RightSizerConfig"
 ```
 
-### Debug Commands
+**Solution**: Install CRDs first (see Installation Step 1)
+
+### Issue: Readiness Probe Failures
 ```bash
-# View operator status
-kubectl get pods -n right-sizer
+Warning  Unhealthy  kubelet  Readiness probe failed: Get "http://10.244.0.12:8081/readyz": 
+context deadline exceeded
+```
 
-# Check CRDs
-kubectl get rightsizerconfigs -A
-kubectl get rightsizerpolicies -A
+**Solution**: The operator needs time to initialize. Version 0.1.17+ includes improved probe configuration. If issues persist:
+```bash
+# Check operator logs
+kubectl logs -n right-sizer deployment/right-sizer
 
-# View events
-kubectl get events -n right-sizer --sort-by='.lastTimestamp'
+# Increase resource limits if needed
+helm upgrade right-sizer right-sizer/right-sizer \
+  --set resources.limits.cpu=1000m \
+  --set resources.limits.memory=1024Mi
+```
+
+### Issue: Pods Not Being Resized
+```bash
+# Check if operator is enabled
+kubectl get rightsizerconfig -o jsonpath='{.items[0].spec.enabled}'
+
+# Check if in dry-run mode
+kubectl get rightsizerconfig -o jsonpath='{.items[0].spec.dryRun}'
+
+# Check operator logs
+kubectl logs -n right-sizer deployment/right-sizer | grep -i error
+```
+
+## 📈 Upgrade Instructions
+
+### Upgrade Chart
+```bash
+# Update repository
+helm repo update
+
+# Upgrade to latest version
+helm upgrade right-sizer right-sizer/right-sizer \
+  --namespace right-sizer \
+  --version 0.1.17
+```
+
+### Update CRDs (Manual)
+```bash
+# CRDs must be updated manually
+kubectl apply -f https://raw.githubusercontent.com/aavishay/right-sizer/main/helm/crds/rightsizer.io_rightsizerconfigs.yaml
+kubectl apply -f https://raw.githubusercontent.com/aavishay/right-sizer/main/helm/crds/rightsizer.io_rightsizerpolicies.yaml
+```
+
+## 🗑️ Uninstallation
+
+```bash
+# Remove Helm release
+helm uninstall right-sizer -n right-sizer
+
+# Remove namespace
+kubectl delete namespace right-sizer
+
+# Remove CRDs (optional - will delete all configs)
+kubectl delete crd rightsizerconfigs.rightsizer.io
+kubectl delete crd rightsizerpolicies.rightsizer.io
 ```
 
 ## 📚 Documentation
 
-- [📖 Full Documentation](https://github.com/aavishay/right-sizer)
-- [🚀 Quick Start Guide](https://github.com/aavishay/right-sizer#quick-start)
-- [⚙️ Configuration Guide](https://github.com/aavishay/right-sizer#configuration)
-- [🔍 Troubleshooting](https://github.com/aavishay/right-sizer#troubleshooting)
-- [🤝 Contributing](https://github.com/aavishay/right-sizer/blob/main/docs/CONTRIBUTING.md)
+- [GitHub Repository](https://github.com/aavishay/right-sizer)
+- [Installation Guide](https://github.com/aavishay/right-sizer/blob/main/INSTALLATION_GUIDE.md)
+- [Troubleshooting Guide](https://github.com/aavishay/right-sizer/blob/main/TROUBLESHOOTING_K8S.md)
+- [Configuration Reference](https://github.com/aavishay/right-sizer/blob/main/docs/configuration.md)
+- [API Documentation](https://github.com/aavishay/right-sizer/blob/main/docs/api/README.md)
 
 ## 🆘 Support
 
 - **Issues**: [GitHub Issues](https://github.com/aavishay/right-sizer/issues)
 - **Discussions**: [GitHub Discussions](https://github.com/aavishay/right-sizer/discussions)
-- **Documentation**: [Full Docs](https://github.com/aavishay/right-sizer)
+- **Slack**: [Join our community](https://right-sizer.slack.com)
 
 ## 📄 License
 
