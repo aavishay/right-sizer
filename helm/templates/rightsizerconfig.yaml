@@ -38,12 +38,15 @@ spec:
 
   # Global constraints for resource changes
   globalConstraints:
-    maxChangePercentage: 50
-    minChangeThreshold: 10
-    maxMemoryGB: 32
-    maxCPUCores: 16
-    preventOOMKill: true
-    respectPodDisruptionBudget: true
+    maxChangePercentage: {{ .Values.rightsizerConfig.constraints.maxChangePercentage | default 50 }}
+    minChangeThreshold: {{ .Values.rightsizerConfig.constraints.minChangeThreshold | default 5 }}
+    maxMemoryGB: {{ .Values.rightsizerConfig.constraints.maxMemoryGB | default 32 }}
+    maxCPUCores: {{ .Values.rightsizerConfig.constraints.maxCPUCores | default 16 }}
+    cooldownPeriod: {{ .Values.rightsizerConfig.constraints.cooldownPeriod | default "5m" | quote }}
+    maxConcurrentResizes: {{ .Values.rightsizerConfig.constraints.maxConcurrentResizes | default 10 }}
+    respectPDB: {{ .Values.rightsizerConfig.constraints.respectPDB | default true }}
+    respectHPA: {{ .Values.rightsizerConfig.constraints.respectHPA | default true }}
+    respectVPA: {{ .Values.rightsizerConfig.constraints.respectVPA | default true }}
 
   # Metrics configuration
   metricsConfig:
@@ -65,17 +68,19 @@ spec:
   observabilityConfig:
     logLevel: {{ .Values.rightsizerConfig.logging.level | default "info" | quote }}
     logFormat: {{ .Values.rightsizerConfig.logging.format | default "json" | quote }}
-    enableAuditLogging: {{ .Values.rightsizerConfig.logging.enableAudit | default true }}
+    enableAuditLog: {{ .Values.rightsizerConfig.logging.enableAudit | default true }}
+    enableEvents: {{ .Values.rightsizerConfig.logging.enableEvents | default true }}
     enableMetricsExport: true
     metricsPort: 9090
     enableTracing: false
+    enableProfiling: false
+    profilingPort: 6060
+    auditLogPath: "/var/log/right-sizer/audit.log"
     {{- with .Values.rightsizerConfig.observability }}
     {{- if .tracingEndpoint }}
     tracingEndpoint: {{ .tracingEndpoint | quote }}
     {{- end }}
     {{- end }}
-    enableProfiling: false
-    profilingPort: 6060
 
   # Security configuration
   securityConfig:
@@ -106,6 +111,10 @@ spec:
     healthProbePort: 8081
     readinessEndpoint: "/readyz"
     livenessEndpoint: "/healthz"
+    enableCircuitBreaker: true
+    circuitBreakerThreshold: 5
+    reconcileInterval: "10m"
+    maxRetries: 3
 
   # Namespace configuration
   namespaceConfig:
@@ -178,47 +187,66 @@ spec:
     {{- with .slack }}
     slackConfig:
       webhookURL: {{ .webhookURL | quote }}
-      channel: {{ .channel | default "#right-sizer" | quote }}
-      username: {{ .username | default "RightSizer" | quote }}
-      iconEmoji: {{ .iconEmoji | default ":robot:" | quote }}
-      notifyOnSuccess: {{ .notifyOnSuccess | default false }}
-      notifyOnFailure: {{ .notifyOnFailure | default true }}
-      notifyOnDryRun: {{ .notifyOnDryRun | default false }}
+      {{- if .channel }}
+      channel: {{ .channel | quote }}
+      {{- end }}
+      {{- if .username }}
+      username: {{ .username | quote }}
+      {{- end }}
+      {{- if .iconEmoji }}
+      iconEmoji: {{ .iconEmoji | quote }}
+      {{- end }}
     {{- end }}
     {{- with .email }}
     emailConfig:
-      smtpHost: {{ .smtpHost | quote }}
+      smtpServer: {{ .smtpServer | quote }}
       smtpPort: {{ .smtpPort | default 587 }}
-      smtpUsername: {{ .smtpUsername | quote }}
-      smtpPasswordSecret: {{ .smtpPasswordSecret | quote }}
+      {{- if .authSecretRef }}
+      authSecretRef:
+        name: {{ .authSecretRef.name | quote }}
+        key: {{ .authSecretRef.key | default "password" | quote }}
+        {{- if .authSecretRef.optional }}
+        optional: {{ .authSecretRef.optional }}
+        {{- end }}
+      {{- end }}
       from: {{ .from | quote }}
       to:
       {{- range .to }}
         - {{ . | quote }}
       {{- end }}
-      subject: {{ .subject | default "RightSizer Alert" | quote }}
+      useTLS: {{ .useTLS | default true }}
     {{- end }}
     {{- with .webhook }}
-    webhookConfig:
-      - url: {{ .url | quote }}
-        method: {{ .method | default "POST" | quote }}
+    webhookConfigs:
+      - name: {{ .name | default "default-webhook" | quote }}
+        url: {{ .url | quote }}
+        {{- if .method }}
+        method: {{ .method | quote }}
+        {{- end }}
         {{- if .headers }}
         headers:
           {{- toYaml .headers | nindent 10 }}
         {{- end }}
-        retryCount: {{ .retryCount | default 3 }}
-        retryDelay: {{ .retryDelay | default "5s" | quote }}
+        {{- if .retryCount }}
+        retryCount: {{ .retryCount }}
+        {{- end }}
+        {{- if .timeout }}
+        timeout: {{ .timeout | quote }}
+        {{- end }}
+    {{- end }}
+    notificationLevel: {{ .notificationLevel | default "warning" | quote }}
+    {{- else }}
+    enableNotifications: false
+    notificationLevel: "warning"
     {{- end }}
     {{- else }}
     enableNotifications: false
-    {{- end }}
-    {{- else }}
-    enableNotifications: false
+    notificationLevel: "warning"
     {{- end }}
 
   # Feature gates for experimental features
   featureGates:
-    EnableInPlaceResize: true
+    UpdateResizePolicy: true
     EnablePredictiveScaling: false
     EnableCostOptimization: false
     EnableMultiCluster: false

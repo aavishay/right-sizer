@@ -3,12 +3,12 @@ package controllers
 import (
 	"testing"
 
+	"right-sizer/config"
+
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
-	"right-sizer/config"
 )
 
 func TestShouldSkipPod(t *testing.T) {
@@ -237,7 +237,7 @@ type ResourceMultipliers struct {
 	MemoryLimit   float64
 }
 
-func createTestPod(name, namespace string) *corev1.Pod {
+func createBasicTestPod(name, namespace string) *corev1.Pod {
 	return &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,

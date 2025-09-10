@@ -20,8 +20,6 @@ import (
 	"time"
 
 	"k8s.io/client-go/kubernetes"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
-
 	"right-sizer/audit"
 	"right-sizer/config"
 	"right-sizer/logger"
@@ -29,6 +27,7 @@ import (
 	"right-sizer/policy"
 	"right-sizer/retry"
 	"right-sizer/validation"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
 // EnhancedInPlaceRightSizer is an enhanced version with all features

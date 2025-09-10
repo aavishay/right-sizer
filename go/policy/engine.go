@@ -26,11 +26,10 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/labels"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-
 	"right-sizer/config"
 	"right-sizer/logger"
 	"right-sizer/metrics"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // PolicyEngine manages and evaluates resource sizing policies

@@ -41,8 +41,8 @@
 ### ✅ 4. Test Workload Deployment
 - **Status**: COMPLETED
 - **Deployments Created**:
-  - `web-frontend` (3 replicas) - Under-provisioned for testing
-  - `api-backend` (2 replicas) - Over-provisioned for testing
+  - `test-workload` (3 replicas) - Under-provisioned for testing
+  - `test-service` (2 replicas) - Over-provisioned for testing
   - `database-proxy` (1 replica) - Minimal resources
   - `load-generator` (1 replica) - Load generation
   - `batch-processor` (Job) - Completed successfully
@@ -84,26 +84,26 @@ Mode: balanced
 #### Current Pod Resource Usage (via kubectl top)
 | Pod | CPU | Memory | Status |
 |-----|-----|--------|---------|
-| web-frontend (3x) | 1m each | 7Mi each | Under-provisioned (32Mi requested) |
-| api-backend (2x) | 1m each | 4Mi each | Over-provisioned (256Mi requested) |
+| test-workload (3x) | 1m each | 7Mi each | Under-provisioned (32Mi requested) |
+| test-service (2x) | 1m each | 4Mi each | Over-provisioned (256Mi requested) |
 | database-proxy | 0m | 0Mi | Appropriately sized |
 | load-generator | 5m | 0Mi | Appropriately sized |
 
 #### Right-Sizer Optimization Detections
 ✅ **Successfully Detected**:
-- Over-provisioned api-backend: 256Mi requested → 4Mi actual usage (98.4% over-allocation)
-- Under-provisioned web-frontend: 32Mi requested → 7Mi actual usage (needs scaling up)
+- Over-provisioned test-service: 256Mi requested → 4Mi actual usage (98.4% over-allocation)
+- Under-provisioned test-workload: 32Mi requested → 7Mi actual usage (needs scaling up)
 - Right-Sizer itself: Planning to optimize its own memory usage (128Mi→64Mi)
 
 #### Resource Specifications Analysis
 ```yaml
-web-frontend:
+test-workload:
   Current Request: CPU: 50m, Memory: 32Mi, Storage: 100Mi
   Current Limit: CPU: 200m, Memory: 128Mi, Storage: 500Mi
   Actual Usage: CPU: 1m, Memory: 7Mi
   Recommendation: Scale up memory request (under-provisioned)
 
-api-backend:
+test-service:
   Current Request: CPU: 100m, Memory: 256Mi, Storage: 200Mi
   Current Limit: CPU: 500m, Memory: 512Mi, Storage: 1Gi
   Actual Usage: CPU: 1m, Memory: 4Mi
@@ -129,13 +129,13 @@ Key Log Messages:
 ## 🧪 Test Scenarios Executed
 
 ### Scenario 1: Over-Provisioned Workloads ✅
-- **Setup**: api-backend with 256Mi memory request
+- **Setup**: test-service with 256Mi memory request
 - **Actual Usage**: 4Mi memory
 - **Result**: Right-Sizer correctly identified 98.4% over-allocation
 - **Action**: Planning resource reduction
 
 ### Scenario 2: Under-Provisioned Workloads ✅
-- **Setup**: web-frontend with 32Mi memory request
+- **Setup**: test-workload with 32Mi memory request
 - **Actual Usage**: 7Mi memory (22% utilization)
 - **Result**: Right-Sizer monitoring for potential upscaling needs
 - **Behavior**: Conservative approach - monitoring before adjustment
@@ -187,11 +187,11 @@ status:
 
 ### Test Workload Annotations
 ```yaml
-web-frontend:
+test-workload:
   right-sizer.io/mode: "adaptive"
   right-sizer.io/policy: "balanced"
 
-api-backend:
+test-service:
   right-sizer.io/mode: "conservative"
   right-sizer.io/policy: "conservative"
 

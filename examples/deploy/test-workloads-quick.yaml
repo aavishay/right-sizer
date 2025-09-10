@@ -1,0 +1,88 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: test-workloads
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: memory-overprovisioned
+  namespace: test-workloads
+  labels:
+    app: memory-overprovisioned
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: memory-overprovisioned
+  template:
+    metadata:
+      labels:
+        app: memory-overprovisioned
+    spec:
+      containers:
+      - name: app
+        image: nginx:alpine
+        resources:
+          requests:
+            memory: 512Mi
+            cpu: 10m
+          limits:
+            memory: 1Gi
+            cpu: 100m
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cpu-overprovisioned
+  namespace: test-workloads
+  labels:
+    app: cpu-overprovisioned
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cpu-overprovisioned
+  template:
+    metadata:
+      labels:
+        app: cpu-overprovisioned
+    spec:
+      containers:
+      - name: app
+        image: nginx:alpine
+        resources:
+          requests:
+            memory: 64Mi
+            cpu: 500m
+          limits:
+            memory: 128Mi
+            cpu: 1000m
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend-services
+  namespace: test-workloads
+  labels:
+    app: backend-services
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: backend-services
+  template:
+    metadata:
+      labels:
+        app: backend-services
+    spec:
+      containers:
+      - name: app
+        image: nginx:alpine
+        resources:
+          requests:
+            memory: 256Mi
+            cpu: 100m
+          limits:
+            memory: 512Mi
+            cpu: 200m

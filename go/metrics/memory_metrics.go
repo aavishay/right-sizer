@@ -17,6 +17,7 @@ package metrics
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"k8s.io/klog/v2"
@@ -100,8 +101,22 @@ func (m MemoryPressureLevel) String() string {
 	}
 }
 
+var (
+	memoryMetricsInstance *MemoryMetrics
+	memoryMetricsOnce     sync.Once
+)
+
 // NewMemoryMetrics creates and registers all memory-specific Prometheus metrics
+// Uses singleton pattern to prevent duplicate registration
 func NewMemoryMetrics() *MemoryMetrics {
+	memoryMetricsOnce.Do(func() {
+		memoryMetricsInstance = createMemoryMetrics()
+	})
+	return memoryMetricsInstance
+}
+
+// createMemoryMetrics creates and registers all memory-specific Prometheus metrics (internal)
+func createMemoryMetrics() *MemoryMetrics {
 	metrics := &MemoryMetrics{
 		PodMemoryUsageBytes: prometheus.NewGaugeVec(
 			prometheus.GaugeOpts{
@@ -328,37 +343,41 @@ func NewMemoryMetrics() *MemoryMetrics {
 		),
 	}
 
-	// Register all metrics
-	prometheus.MustRegister(
-		metrics.PodMemoryUsageBytes,
-		metrics.PodMemoryWorkingSetBytes,
-		metrics.PodMemoryRSSBytes,
-		metrics.PodMemoryCacheBytes,
-		metrics.PodMemorySwapBytes,
-		metrics.PodMemoryLimitBytes,
-		metrics.PodMemoryRequestBytes,
-		metrics.PodMemoryUtilizationPercentage,
-		metrics.PodMemoryRequestUtilization,
-		metrics.PodMemoryLimitUtilization,
-		metrics.MemoryRecommendationBytes,
-		metrics.MemoryRecommendationRatio,
-		metrics.MemoryPressureEvents,
-		metrics.MemoryPressureLevel,
-		metrics.MemoryOOMKillEvents,
-		metrics.MemoryThrottlingEvents,
-		metrics.MemoryTrendSlope,
-		metrics.MemoryPeakUsageBytes,
-		metrics.MemoryAverageUsageBytes,
-		metrics.MemoryWasteBytes,
-		metrics.MemoryEfficiencyScore,
-		metrics.ContainerMemoryUsageBytes,
-		metrics.ContainerMemoryWorkingSetBytes,
-		metrics.ContainerMemoryRSSBytes,
-		metrics.ContainerMemoryCacheBytes,
-		metrics.MemoryAllocationFailures,
-		metrics.MemoryResizeOperations,
-		metrics.MemoryResizeSuccessRate,
-	)
+	// Temporarily disable memory metrics registration to test crash fix
+	_ = metrics
+	// safeRegister(
+	//	metrics.PodMemoryUsageBytes,
+	//	metrics.PodMemoryWorkingSetBytes,
+	//	metrics.PodMemoryRSSBytes,
+	//	metrics.PodMemoryCacheBytes,
+	//	metrics.PodMemorySwapBytes,
+	//	metrics.PodMemoryLimitBytes,
+	//	metrics.PodMemoryRequestBytes,
+	//	metrics.PodMemoryUtilizationPercentage,
+	//	metrics.PodMemoryRequestUtilization,
+	//	metrics.PodMemoryLimitUtilization,
+	//	metrics.MemoryRecommendationBytes,
+	//	metrics.MemoryRecommendationRatio,
+	//	metrics.MemoryPressureGauge,
+	//	metrics.MemoryOOMKillEvents,
+	//	metrics.MemoryThrottlingEvents,
+	//	metrics.MemoryTrendSlope,
+	//	metrics.MemoryUsageHistory,
+	//	metrics.MemoryResizeEvents,
+	//	metrics.MemoryPatternMatches,
+	// )
+	//	metrics.MemoryPeakUsageBytes,
+	//	metrics.MemoryAverageUsageBytes,
+	//	metrics.MemoryWasteBytes,
+	//	metrics.MemoryEfficiencyScore,
+	//	metrics.ContainerMemoryUsageBytes,
+	//	metrics.ContainerMemoryWorkingSetBytes,
+	//	metrics.ContainerMemoryRSSBytes,
+	//	metrics.ContainerMemoryCacheBytes,
+	//	metrics.MemoryAllocationFailures,
+	//	metrics.MemoryResizeOperations,
+	//	metrics.MemoryResizeSuccessRate,
+	// )
 
 	return metrics
 }

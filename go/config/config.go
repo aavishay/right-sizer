@@ -17,6 +17,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -114,7 +115,8 @@ type Config struct {
 	IncludeCustomMetrics bool   // Enable custom metrics
 
 	// Feature flags
-	EnableInPlaceResize bool // Enable in-place pod resizing (Kubernetes 1.33+)
+	UpdateResizePolicy bool // Update resize policy for in-place pod resizing (Kubernetes 1.27+)
+	PatchResizePolicy  bool // Automatically patch parent resources with resize policy
 
 	// QoS preservation settings
 	PreserveGuaranteedQoS      bool // Preserve Guaranteed QoS class during resizing
@@ -173,8 +175,8 @@ func GetDefaults() *Config {
 		MemoryLimitAddition:     0,
 		MaxCPULimit:             4000,
 		MaxMemoryLimit:          8192,
-		MinCPURequest:           10,
-		MinMemoryRequest:        64,
+		MinCPURequest:           1,
+		MinMemoryRequest:        1,
 
 		// Default algorithm
 		Algorithm: "percentile",
@@ -236,7 +238,7 @@ func GetDefaults() *Config {
 		IncludeCustomMetrics:  false,
 
 		// Default feature flags
-		EnableInPlaceResize: false,
+		UpdateResizePolicy: false,
 
 		// Default observability configuration
 		EnableAuditLogging: true,
@@ -326,7 +328,7 @@ func (c *Config) UpdateFromCRD(
 	maxRetries int,
 	retryInterval time.Duration,
 	metricsProvider, prometheusURL string,
-	enableInPlaceResize bool,
+	updateResizePolicy bool,
 	qps float32, burst, maxConcurrentReconciles int,
 	memoryScaleUpThreshold, memoryScaleDownThreshold float64,
 	cpuScaleUpThreshold, cpuScaleDownThreshold float64,
@@ -443,7 +445,7 @@ func (c *Config) UpdateFromCRD(
 	}
 
 	// Update feature flags
-	c.EnableInPlaceResize = enableInPlaceResize
+	c.UpdateResizePolicy = updateResizePolicy
 
 	// Update scaling thresholds
 	if memoryScaleUpThreshold > 0 && memoryScaleUpThreshold <= 1 {
@@ -566,7 +568,8 @@ func (c *Config) ResetToDefaults() {
 	c.AggregationMethod = defaults.AggregationMethod
 	c.HistoryRetention = defaults.HistoryRetention
 	c.IncludeCustomMetrics = defaults.IncludeCustomMetrics
-	c.EnableInPlaceResize = defaults.EnableInPlaceResize
+	c.UpdateResizePolicy = defaults.UpdateResizePolicy
+	c.PatchResizePolicy = defaults.PatchResizePolicy
 	c.PreserveGuaranteedQoS = defaults.PreserveGuaranteedQoS
 	c.ForceGuaranteedForCritical = defaults.ForceGuaranteedForCritical
 	c.QoSTransitionWarning = defaults.QoSTransitionWarning
@@ -798,7 +801,7 @@ func (c *Config) Clone() *Config {
 		AggregationMethod:           c.AggregationMethod,
 		HistoryRetention:            c.HistoryRetention,
 		IncludeCustomMetrics:        c.IncludeCustomMetrics,
-		EnableInPlaceResize:         c.EnableInPlaceResize,
+		UpdateResizePolicy:          c.UpdateResizePolicy,
 		PreserveGuaranteedQoS:       c.PreserveGuaranteedQoS,
 		ForceGuaranteedForCritical:  c.ForceGuaranteedForCritical,
 		QoSTransitionWarning:        c.QoSTransitionWarning,
@@ -869,7 +872,7 @@ func (c *Config) GetSafeValue(getter func(*Config) interface{}) interface{} {
 // parseResourceQuantity parses Kubernetes resource quantity strings to int64 values
 func parseResourceQuantity(quantity string, resourceType string) (int64, error) {
 	if quantity == "" {
-		return 0, fmt.Errorf("empty quantity string")
+		return 0, errors.New("empty quantity string")
 	}
 
 	// Simple parsing for common cases
@@ -911,7 +914,7 @@ func parseResourceQuantity(quantity string, resourceType string) (int64, error) 
 // parseIntFromString is a simple integer parser
 func parseIntFromString(s string) (int64, error) {
 	if s == "" {
-		return 0, fmt.Errorf("empty string")
+		return 0, errors.New("empty string")
 	}
 	var result int64
 	for _, ch := range s {

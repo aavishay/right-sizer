@@ -169,7 +169,7 @@ spec:
 
   # Feature gates for experimental features
   featureGates:
-    EnableInPlaceResize: true # Use in-place pod resizing (K8s 1.27+)
+    UpdateResizePolicy: true # Update resize policy for in-place pod resizing (K8s 1.27+)
     EnablePredictiveScaling: false # ML-based predictive scaling
     EnableCostOptimization: false # Cost-aware resource optimization
     EnableMultiCluster: false # Multi-cluster support

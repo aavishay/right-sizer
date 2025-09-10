@@ -23,6 +23,12 @@ import (
 	"sync"
 	"time"
 
+	"right-sizer/audit"
+	"right-sizer/config"
+	"right-sizer/logger"
+	"right-sizer/metrics"
+
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -31,11 +37,6 @@ import (
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
-
-	"right-sizer/audit"
-	"right-sizer/config"
-	"right-sizer/logger"
-	"right-sizer/metrics"
 )
 
 // ResizeDecisionCache represents a cached resize decision for a pod container
@@ -67,10 +68,12 @@ type ResourceScalingDecision struct {
 // in-place updates (when available) and deployment updates as fallback
 type AdaptiveRightSizer struct {
 	Client          client.Client
-	ClientSet       *kubernetes.Clientset
+	ClientSet       kubernetes.Interface
 	RestConfig      *rest.Config
 	MetricsProvider metrics.Provider
+	OperatorMetrics *metrics.OperatorMetrics // Prometheus metrics recorder
 	AuditLogger     *audit.AuditLogger
+	Config          *config.Config // Configuration with feature flags
 	Interval        time.Duration
 	InPlaceEnabled  bool       // Will be auto-detected
 	DryRun          bool       // If true, only log recommendations without applying
@@ -533,6 +536,8 @@ func (r *AdaptiveRightSizer) applyUpdates(ctx context.Context, updates []Resourc
 
 // updatePodInPlace attempts to update pod resources in-place with mutex protection
 // Returns a description of what was actually changed
+// updatePodInPlace performs in-place resource update in two steps: CPU first, then memory
+// According to K8s 1.33 best practices, we resize CPU and memory separately
 func (r *AdaptiveRightSizer) updatePodInPlace(ctx context.Context, update ResourceUpdate) (string, error) {
 	// Use mutex to prevent concurrent API calls that could overwhelm the server
 	r.updateMutex.Lock()
@@ -544,7 +549,7 @@ func (r *AdaptiveRightSizer) updatePodInPlace(ctx context.Context, update Resour
 		Namespace: update.Namespace,
 		Name:      update.Name,
 	}, &pod); err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to get pod: %w", err)
 	}
 
 	// Find the container index and check current resources
@@ -592,7 +597,16 @@ func (r *AdaptiveRightSizer) updatePodInPlace(ctx context.Context, update Resour
 	memoryLimitDecreased := currentMemLimit != nil && newMemLimit != nil && currentMemLimit.Cmp(*newMemLimit) > 0
 	memoryRequestDecreased := currentMemRequest != nil && newMemRequest != nil && currentMemRequest.Cmp(*newMemRequest) > 0
 
-	cpuOnly := false
+	// STEP 0: First ensure parent resource (Deployment/StatefulSet/DaemonSet) has resize policy
+	// This should happen only if UpdateResizePolicy feature flag is enabled
+	if r.Config != nil && r.Config.UpdateResizePolicy {
+		log.Printf("📝 Step 0: Ensuring parent resource has resize policy for pod %s/%s", update.Namespace, update.Name)
+		if err := r.ensureParentHasResizePolicy(ctx, &pod); err != nil {
+			log.Printf("⚠️  Failed to update parent resource with resize policy: %v", err)
+			// Continue anyway as parent might not exist or already have the policy
+		}
+	}
+
 	if memoryLimitDecreased || memoryRequestDecreased {
 		// Check if CPU is actually changing by comparing current pod resources with desired
 		currentCPURequest := currentResources.Requests.Cpu()
@@ -642,7 +656,6 @@ func (r *AdaptiveRightSizer) updatePodInPlace(ctx context.Context, update Resour
 			update.NewResources.Requests[corev1.ResourceMemory] = currentMemLimit.DeepCopy()
 		}
 
-		cpuOnly = true
 	}
 
 	// Before creating the patch, do a final check if anything is actually changing
@@ -678,9 +691,9 @@ func (r *AdaptiveRightSizer) updatePodInPlace(ctx context.Context, update Resour
 		}
 	}
 
-	// If nothing is actually changing, skip the update
+	// If nothing is actually changing in the pod's resources, we can skip the rest
 	if !actuallyChanging {
-		log.Printf("⏭️ DEBUG: Skipping patch for %s/%s - no changes needed", update.Namespace, update.Name)
+		log.Printf("⏭️ Pod %s/%s resources already at target values, skipping resize", update.Namespace, update.Name)
 		return "", nil // Return empty string to suppress logging
 	}
 
@@ -692,108 +705,513 @@ func (r *AdaptiveRightSizer) updatePodInPlace(ctx context.Context, update Resour
 		Value interface{} `json:"value"`
 	}
 
-	var patchOps []JSONPatchOp
+	// STEP 1: Apply resize policy to the pod if needed
+	log.Printf("📝 Step 1: Setting resize policy for pod %s/%s container %s", update.Namespace, update.Name, update.ContainerName)
+	if err := r.applyResizePolicyForContainer(ctx, &pod, containerIndex); err != nil {
+		log.Printf("⚠️  Failed to set resize policy: %v", err)
+		// Continue anyway as it might already be set
+	}
 
-	// Ensure safe resource patch - never try to remove existing resources
+	// Refresh pod state after policy update
+	time.Sleep(100 * time.Millisecond)
+	if err := r.Client.Get(ctx, types.NamespacedName{
+		Namespace: update.Namespace,
+		Name:      update.Name,
+	}, &pod); err != nil {
+		return "", fmt.Errorf("failed to refresh pod state: %w", err)
+	}
+
+	// Re-find container after refresh
+	containerIndex = -1
+	for i, container := range pod.Spec.Containers {
+		if container.Name == update.ContainerName {
+			containerIndex = i
+			currentResources = &container.Resources
+			break
+		}
+	}
+
+	// Ensure safe resource patch
 	safeResources := ensureSafeResourcePatchAdaptive(*currentResources, update.NewResources)
 
-	// Only patch requests if they actually differ from current
-	if len(safeResources.Requests) > 0 {
-		requestsChanged := false
-		for resName, newVal := range safeResources.Requests {
-			if currentVal, exists := currentResources.Requests[resName]; exists {
-				if !currentVal.Equal(newVal) {
-					requestsChanged = true
-					break
-				}
-			} else {
-				requestsChanged = true
-				break
+	// STEP 2: Resize CPU first
+	cpuChanged := false
+	var cpuPatchOps []JSONPatchOp
+
+	// Check CPU requests
+	if cpuReq, exists := safeResources.Requests[corev1.ResourceCPU]; exists {
+		if currentCPU, currentExists := currentResources.Requests[corev1.ResourceCPU]; !currentExists || !currentCPU.Equal(cpuReq) {
+			cpuChanged = true
+			// Create a resource list with only CPU and current memory
+			cpuRequests := corev1.ResourceList{
+				corev1.ResourceCPU: cpuReq,
 			}
-		}
-		if requestsChanged {
-			patchOps = append(patchOps, JSONPatchOp{
+			if memReq, memExists := currentResources.Requests[corev1.ResourceMemory]; memExists {
+				cpuRequests[corev1.ResourceMemory] = memReq
+			}
+			cpuPatchOps = append(cpuPatchOps, JSONPatchOp{
 				Op:    "replace",
 				Path:  fmt.Sprintf("/spec/containers/%d/resources/requests", containerIndex),
-				Value: safeResources.Requests,
+				Value: cpuRequests,
 			})
+			log.Printf("⚡ Container %s: CPU request %s -> %s", update.ContainerName, formatResource(currentCPU), formatResource(cpuReq))
 		}
 	}
 
-	// Only patch limits if they actually differ from current
-	if len(safeResources.Limits) > 0 {
-		limitsChanged := false
-		for resName, newVal := range safeResources.Limits {
-			if currentVal, exists := currentResources.Limits[resName]; exists {
-				if !currentVal.Equal(newVal) {
-					limitsChanged = true
-					break
-				}
-			} else {
-				limitsChanged = true
+	// Check CPU limits
+	if cpuLim, exists := safeResources.Limits[corev1.ResourceCPU]; exists {
+		if currentCPU, currentExists := currentResources.Limits[corev1.ResourceCPU]; !currentExists || !currentCPU.Equal(cpuLim) {
+			cpuChanged = true
+			// Create a resource list with only CPU and current memory
+			cpuLimits := corev1.ResourceList{
+				corev1.ResourceCPU: cpuLim,
+			}
+			if memLim, memExists := currentResources.Limits[corev1.ResourceMemory]; memExists {
+				cpuLimits[corev1.ResourceMemory] = memLim
+			}
+			cpuPatchOps = append(cpuPatchOps, JSONPatchOp{
+				Op:    "replace",
+				Path:  fmt.Sprintf("/spec/containers/%d/resources/limits", containerIndex),
+				Value: cpuLimits,
+			})
+			log.Printf("⚡ Container %s: CPU limit %s -> %s", update.ContainerName, formatResource(currentCPU), formatResource(cpuLim))
+		}
+	}
+
+	// Apply CPU resize if needed
+	if cpuChanged && len(cpuPatchOps) > 0 {
+		log.Printf("⚡ Step 2: Resizing CPU for pod %s/%s container %s", update.Namespace, update.Name, update.ContainerName)
+		cpuPatchData, err := json.Marshal(cpuPatchOps)
+		if err != nil {
+			return "", fmt.Errorf("failed to marshal CPU patch: %w", err)
+		}
+
+		_, err = r.ClientSet.CoreV1().Pods(update.Namespace).Patch(
+			ctx,
+			update.Name,
+			types.JSONPatchType,
+			cpuPatchData,
+			metav1.PatchOptions{},
+			"resize",
+		)
+		if err != nil {
+			log.Printf("❌ CPU resize failed: %v", err)
+			// Continue to try memory resize
+		} else {
+			log.Printf("✅ CPU resize successful")
+		}
+
+		// Wait between CPU and memory resize
+		time.Sleep(200 * time.Millisecond)
+
+		// Refresh pod state after CPU resize
+		if err := r.Client.Get(ctx, types.NamespacedName{
+			Namespace: update.Namespace,
+			Name:      update.Name,
+		}, &pod); err != nil {
+			return "", fmt.Errorf("failed to refresh pod after CPU resize: %w", err)
+		}
+
+		// Re-find container after refresh
+		for i, container := range pod.Spec.Containers {
+			if container.Name == update.ContainerName {
+				containerIndex = i
+				currentResources = &container.Resources
 				break
 			}
 		}
-		if limitsChanged {
-			patchOps = append(patchOps, JSONPatchOp{
+	}
+
+	// STEP 3: Resize Memory
+	memChanged := false
+	var memPatchOps []JSONPatchOp
+
+	// Check memory requests
+	if memReq, exists := safeResources.Requests[corev1.ResourceMemory]; exists {
+		if currentMem, currentExists := currentResources.Requests[corev1.ResourceMemory]; !currentExists || !currentMem.Equal(memReq) {
+			memChanged = true
+			// Create a resource list with current CPU and new memory
+			memRequests := corev1.ResourceList{
+				corev1.ResourceMemory: memReq,
+			}
+			if cpuReq, cpuExists := currentResources.Requests[corev1.ResourceCPU]; cpuExists {
+				memRequests[corev1.ResourceCPU] = cpuReq
+			}
+			memPatchOps = append(memPatchOps, JSONPatchOp{
+				Op:    "replace",
+				Path:  fmt.Sprintf("/spec/containers/%d/resources/requests", containerIndex),
+				Value: memRequests,
+			})
+			log.Printf("💾 Container %s: Memory request %s -> %s", update.ContainerName, formatMemory(currentMem), formatMemory(memReq))
+		}
+	}
+
+	// Check memory limits
+	if memLim, exists := safeResources.Limits[corev1.ResourceMemory]; exists {
+		if currentMem, currentExists := currentResources.Limits[corev1.ResourceMemory]; !currentExists || !currentMem.Equal(memLim) {
+			memChanged = true
+			// Create a resource list with current CPU and new memory
+			memLimits := corev1.ResourceList{
+				corev1.ResourceMemory: memLim,
+			}
+			if cpuLim, cpuExists := currentResources.Limits[corev1.ResourceCPU]; cpuExists {
+				memLimits[corev1.ResourceCPU] = cpuLim
+			}
+			memPatchOps = append(memPatchOps, JSONPatchOp{
 				Op:    "replace",
 				Path:  fmt.Sprintf("/spec/containers/%d/resources/limits", containerIndex),
-				Value: safeResources.Limits,
+				Value: memLimits,
 			})
+			log.Printf("💾 Container %s: Memory limit %s -> %s", update.ContainerName, formatMemory(currentMem), formatMemory(memLim))
 		}
 	}
 
-	// Check if we have any patch operations
-	if len(patchOps) == 0 {
-		return "", nil // Return empty string to suppress logging
-	}
-
-	// Marshal the patch
-	patchData, err := json.Marshal(patchOps)
-	if err != nil {
-		return "", fmt.Errorf("failed to marshal resize patch: %w", err)
-	}
-
-	// Use the Kubernetes client-go to patch with the resize subresource
-	// Using JSONPatch type for more precise control
-	_, err = r.ClientSet.CoreV1().Pods(update.Namespace).Patch(
-		ctx,
-		update.Name,
-		types.JSONPatchType,
-		patchData,
-		metav1.PatchOptions{},
-		"resize", // This is the crucial part - specifying the resize subresource
-	)
-	if err != nil {
-		// Check for specific memory decrease error
-		if strings.Contains(err.Error(), "memory limits cannot be decreased") ||
-			strings.Contains(err.Error(), "Forbidden: pod updates may not change fields") ||
-			strings.Contains(err.Error(), "resize is not supported") {
-			log.Printf("⚠️  Cannot resize pod %s/%s: %v", update.Namespace, update.Name, err)
-			log.Printf("   💡 Pod may need RestartPolicy or in-place resize may not be supported")
-			// Return empty string to not count this as an error
-			return "Skipped resize (not supported or forbidden)", nil
+	// Apply memory resize if needed
+	if memChanged && len(memPatchOps) > 0 {
+		log.Printf("💾 Step 3: Resizing Memory for pod %s/%s container %s", update.Namespace, update.Name, update.ContainerName)
+		memPatchData, err := json.Marshal(memPatchOps)
+		if err != nil {
+			return "", fmt.Errorf("failed to marshal memory patch: %w", err)
 		}
-		return "", fmt.Errorf("failed to resize pod: %w", err)
+
+		_, err = r.ClientSet.CoreV1().Pods(update.Namespace).Patch(
+			ctx,
+			update.Name,
+			types.JSONPatchType,
+			memPatchData,
+			metav1.PatchOptions{},
+			"resize",
+		)
+		if err != nil {
+			// Check for specific memory decrease error
+			if strings.Contains(err.Error(), "memory limits cannot be decreased") ||
+				strings.Contains(err.Error(), "Forbidden: pod updates may not change fields") ||
+				strings.Contains(err.Error(), "resize is not supported") {
+				log.Printf("⚠️  Cannot resize memory for pod %s/%s: %v", update.Namespace, update.Name, err)
+				log.Printf("   💡 Pod may need RestartContainer policy for memory decreases")
+				// Return partial success if CPU was changed
+				if cpuChanged {
+					return "CPU resized successfully (memory resize skipped)", nil
+				}
+				return "Skipped resize (memory not supported or forbidden)", nil
+			}
+			return "", fmt.Errorf("failed to resize memory: %w", err)
+		}
+		log.Printf("✅ Memory resize successful")
 	}
 
 	// Build success message based on what was actually changed
-	var successMsg string
-	if cpuOnly {
-		newCpuReq := update.NewResources.Requests[corev1.ResourceCPU]
-		currentCpuReq := currentResources.Requests[corev1.ResourceCPU]
-		successMsg = fmt.Sprintf("Successfully resized pod %s/%s (CPU only: %s→%s)",
-			update.Namespace, update.Name, currentCpuReq.String(), newCpuReq.String())
-	} else {
-		newCpuReq := update.NewResources.Requests[corev1.ResourceCPU]
-		newMemReq := update.NewResources.Requests[corev1.ResourceMemory]
-		currentCpuReq := currentResources.Requests[corev1.ResourceCPU]
-		currentMemReq := currentResources.Requests[corev1.ResourceMemory]
-		successMsg = fmt.Sprintf("Successfully resized pod %s/%s (CPU: %s→%s, Memory: %s→%s)",
-			update.Namespace, update.Name, currentCpuReq.String(), newCpuReq.String(), currentMemReq.String(), newMemReq.String())
+	if !cpuChanged && !memChanged {
+		return "", nil // Nothing changed
 	}
 
+	var successMsg string
+	if cpuChanged && memChanged {
+		successMsg = fmt.Sprintf("Resized CPU and memory for container %s", update.ContainerName)
+	} else if cpuChanged {
+		successMsg = fmt.Sprintf("Resized CPU for container %s", update.ContainerName)
+	} else if memChanged {
+		successMsg = fmt.Sprintf("Resized memory for container %s", update.ContainerName)
+	}
+
+	log.Printf("🎯 %s in pod %s/%s", successMsg, update.Namespace, update.Name)
 	return successMsg, nil
+}
+
+// applyResizePolicyForContainer sets the resize policy for a specific container
+func (r *AdaptiveRightSizer) applyResizePolicyForContainer(ctx context.Context, pod *corev1.Pod, containerIndex int) error {
+	// Check if UpdateResizePolicy feature flag is enabled
+	if r.Config == nil || !r.Config.UpdateResizePolicy {
+		log.Printf("📝 Skipping resize policy patch for container - UpdateResizePolicy feature flag is disabled")
+		return nil
+	}
+
+	if containerIndex < 0 || containerIndex >= len(pod.Spec.Containers) {
+		return fmt.Errorf("invalid container index: %d", containerIndex)
+	}
+
+	container := &pod.Spec.Containers[containerIndex]
+
+	// Check if resize policy already exists and is correctly configured
+	hasCorrectPolicy := false
+	if container.ResizePolicy != nil {
+		cpuNotRequired := false
+		memNotRequired := false
+		for _, policy := range container.ResizePolicy {
+			if policy.ResourceName == corev1.ResourceCPU && policy.RestartPolicy == corev1.NotRequired {
+				cpuNotRequired = true
+			}
+			if policy.ResourceName == corev1.ResourceMemory && policy.RestartPolicy == corev1.NotRequired {
+				memNotRequired = true
+			}
+		}
+		hasCorrectPolicy = cpuNotRequired && memNotRequired
+	}
+
+	// Skip if already has correct policy
+	if hasCorrectPolicy {
+		return nil
+	}
+
+	// Create resize policy
+	resizePolicy := []corev1.ContainerResizePolicy{
+		{
+			ResourceName:  corev1.ResourceCPU,
+			RestartPolicy: corev1.NotRequired,
+		},
+		{
+			ResourceName:  corev1.ResourceMemory,
+			RestartPolicy: corev1.NotRequired,
+		},
+	}
+
+	// Determine if we need to add or replace
+	resizePolicyOp := "add"
+	if container.ResizePolicy != nil && len(container.ResizePolicy) > 0 {
+		resizePolicyOp = "replace"
+	}
+
+	// Create JSON patch
+	patchOps := []struct {
+		Op    string      `json:"op"`
+		Path  string      `json:"path"`
+		Value interface{} `json:"value"`
+	}{
+		{
+			Op:    resizePolicyOp,
+			Path:  fmt.Sprintf("/spec/containers/%d/resizePolicy", containerIndex),
+			Value: resizePolicy,
+		},
+	}
+
+	patchData, err := json.Marshal(patchOps)
+	if err != nil {
+		return fmt.Errorf("failed to marshal resize policy patch: %w", err)
+	}
+
+	// Apply the patch (note: not using resize subresource for policy update)
+	_, err = r.ClientSet.CoreV1().Pods(pod.Namespace).Patch(
+		ctx,
+		pod.Name,
+		types.JSONPatchType,
+		patchData,
+		metav1.PatchOptions{},
+	)
+
+	if err != nil {
+		return fmt.Errorf("failed to apply resize policy: %w", err)
+	}
+
+	return nil
+}
+
+// ensureParentHasResizePolicy updates the parent resource (Deployment/StatefulSet/DaemonSet) with resize policy
+func (r *AdaptiveRightSizer) ensureParentHasResizePolicy(ctx context.Context, pod *corev1.Pod) error {
+	// Check if UpdateResizePolicy feature flag is enabled
+	if r.Config == nil || !r.Config.UpdateResizePolicy {
+		log.Printf("📝 Skipping resize policy patch - UpdateResizePolicy feature flag is disabled")
+		return nil
+	}
+
+	// Check if pod has owner references
+	if len(pod.OwnerReferences) == 0 {
+		return nil // Pod has no owner, skip
+	}
+
+	for _, owner := range pod.OwnerReferences {
+		switch owner.Kind {
+		case "ReplicaSet":
+			// For ReplicaSet, we need to find the Deployment
+			return r.updateDeploymentResizePolicy(ctx, pod, owner)
+		case "StatefulSet":
+			return r.updateStatefulSetResizePolicy(ctx, pod.Namespace, owner.Name)
+		case "DaemonSet":
+			return r.updateDaemonSetResizePolicy(ctx, pod.Namespace, owner.Name)
+		}
+	}
+
+	return nil
+}
+
+// updateDeploymentResizePolicy updates a Deployment's pod template with resize policy
+func (r *AdaptiveRightSizer) updateDeploymentResizePolicy(ctx context.Context, pod *corev1.Pod, rsOwner metav1.OwnerReference) error {
+	// Get the ReplicaSet
+	var rs appsv1.ReplicaSet
+	if err := r.Client.Get(ctx, types.NamespacedName{
+		Namespace: pod.Namespace,
+		Name:      rsOwner.Name,
+	}, &rs); err != nil {
+		return fmt.Errorf("failed to get replicaset: %w", err)
+	}
+
+	// Find the Deployment owner
+	var deploymentName string
+	for _, owner := range rs.OwnerReferences {
+		if owner.Kind == "Deployment" {
+			deploymentName = owner.Name
+			break
+		}
+	}
+
+	if deploymentName == "" {
+		return nil // No deployment found
+	}
+
+	// Get the Deployment
+	var deployment appsv1.Deployment
+	if err := r.Client.Get(ctx, types.NamespacedName{
+		Namespace: pod.Namespace,
+		Name:      deploymentName,
+	}, &deployment); err != nil {
+		return fmt.Errorf("failed to get deployment: %w", err)
+	}
+
+	// Check if resize policy needs to be added
+	needsUpdate := false
+	for i := range deployment.Spec.Template.Spec.Containers {
+		container := &deployment.Spec.Template.Spec.Containers[i]
+		if !hasCorrectResizePolicy(container) {
+			container.ResizePolicy = []corev1.ContainerResizePolicy{
+				{
+					ResourceName:  corev1.ResourceCPU,
+					RestartPolicy: corev1.NotRequired,
+				},
+				{
+					ResourceName:  corev1.ResourceMemory,
+					RestartPolicy: corev1.NotRequired,
+				},
+			}
+			needsUpdate = true
+		}
+	}
+
+	if needsUpdate {
+		// Add annotation to prevent rollout
+		if deployment.Spec.Template.Annotations == nil {
+			deployment.Spec.Template.Annotations = make(map[string]string)
+		}
+		deployment.Spec.Template.Annotations["right-sizer/resize-policy-added"] = time.Now().Format(time.RFC3339)
+
+		// Update the deployment
+		if err := r.Client.Update(ctx, &deployment); err != nil {
+			return fmt.Errorf("failed to update deployment with resize policy: %w", err)
+		}
+		log.Printf("✅ Updated Deployment %s/%s with resize policy", deployment.Namespace, deployment.Name)
+	}
+
+	return nil
+}
+
+// updateStatefulSetResizePolicy updates a StatefulSet's pod template with resize policy
+func (r *AdaptiveRightSizer) updateStatefulSetResizePolicy(ctx context.Context, namespace, name string) error {
+	var statefulSet appsv1.StatefulSet
+	if err := r.Client.Get(ctx, types.NamespacedName{
+		Namespace: namespace,
+		Name:      name,
+	}, &statefulSet); err != nil {
+		return fmt.Errorf("failed to get statefulset: %w", err)
+	}
+
+	// Check if resize policy needs to be added
+	needsUpdate := false
+	for i := range statefulSet.Spec.Template.Spec.Containers {
+		container := &statefulSet.Spec.Template.Spec.Containers[i]
+		if !hasCorrectResizePolicy(container) {
+			container.ResizePolicy = []corev1.ContainerResizePolicy{
+				{
+					ResourceName:  corev1.ResourceCPU,
+					RestartPolicy: corev1.NotRequired,
+				},
+				{
+					ResourceName:  corev1.ResourceMemory,
+					RestartPolicy: corev1.NotRequired,
+				},
+			}
+			needsUpdate = true
+		}
+	}
+
+	if needsUpdate {
+		// Add annotation to prevent rollout
+		if statefulSet.Spec.Template.Annotations == nil {
+			statefulSet.Spec.Template.Annotations = make(map[string]string)
+		}
+		statefulSet.Spec.Template.Annotations["right-sizer/resize-policy-added"] = time.Now().Format(time.RFC3339)
+
+		// Update the statefulset
+		if err := r.Client.Update(ctx, &statefulSet); err != nil {
+			return fmt.Errorf("failed to update statefulset with resize policy: %w", err)
+		}
+		log.Printf("✅ Updated StatefulSet %s/%s with resize policy", statefulSet.Namespace, statefulSet.Name)
+	}
+
+	return nil
+}
+
+// updateDaemonSetResizePolicy updates a DaemonSet's pod template with resize policy
+func (r *AdaptiveRightSizer) updateDaemonSetResizePolicy(ctx context.Context, namespace, name string) error {
+	var daemonSet appsv1.DaemonSet
+	if err := r.Client.Get(ctx, types.NamespacedName{
+		Namespace: namespace,
+		Name:      name,
+	}, &daemonSet); err != nil {
+		return fmt.Errorf("failed to get daemonset: %w", err)
+	}
+
+	// Check if resize policy needs to be added
+	needsUpdate := false
+	for i := range daemonSet.Spec.Template.Spec.Containers {
+		container := &daemonSet.Spec.Template.Spec.Containers[i]
+		if !hasCorrectResizePolicy(container) {
+			container.ResizePolicy = []corev1.ContainerResizePolicy{
+				{
+					ResourceName:  corev1.ResourceCPU,
+					RestartPolicy: corev1.NotRequired,
+				},
+				{
+					ResourceName:  corev1.ResourceMemory,
+					RestartPolicy: corev1.NotRequired,
+				},
+			}
+			needsUpdate = true
+		}
+	}
+
+	if needsUpdate {
+		// Add annotation to prevent rollout
+		if daemonSet.Spec.Template.Annotations == nil {
+			daemonSet.Spec.Template.Annotations = make(map[string]string)
+		}
+		daemonSet.Spec.Template.Annotations["right-sizer/resize-policy-added"] = time.Now().Format(time.RFC3339)
+
+		// Update the daemonset
+		if err := r.Client.Update(ctx, &daemonSet); err != nil {
+			return fmt.Errorf("failed to update daemonset with resize policy: %w", err)
+		}
+		log.Printf("✅ Updated DaemonSet %s/%s with resize policy", daemonSet.Namespace, daemonSet.Name)
+	}
+
+	return nil
+}
+
+// hasCorrectResizePolicy checks if a container has the correct resize policy configured
+func hasCorrectResizePolicy(container *corev1.Container) bool {
+	if container.ResizePolicy == nil || len(container.ResizePolicy) == 0 {
+		return false
+	}
+
+	hasCPU := false
+	hasMemory := false
+	for _, policy := range container.ResizePolicy {
+		if policy.ResourceName == corev1.ResourceCPU && policy.RestartPolicy == corev1.NotRequired {
+			hasCPU = true
+		}
+		if policy.ResourceName == corev1.ResourceMemory && policy.RestartPolicy == corev1.NotRequired {
+			hasMemory = true
+		}
+	}
+
+	return hasCPU && hasMemory
 }
 
 // Helper functions
@@ -851,12 +1269,28 @@ func (r *AdaptiveRightSizer) calculateOptimalResources(usage metrics.Metrics) co
 	cpuRequest := int64(usage.CPUMilli*cfg.CPURequestMultiplier) + cfg.CPURequestAddition
 	memRequest := int64(usage.MemMB*cfg.MemoryRequestMultiplier) + cfg.MemoryRequestAddition
 
-	// Ensure minimum values
-	if cpuRequest < cfg.MinCPURequest {
+	// Only apply minimum if usage is actually zero or near-zero
+	// This prevents forcing minimum values when we have real metrics
+	if usage.CPUMilli < 0.1 && cpuRequest < cfg.MinCPURequest {
 		cpuRequest = cfg.MinCPURequest
 	}
-	if memRequest < cfg.MinMemoryRequest {
+	if usage.MemMB < 1 && memRequest < cfg.MinMemoryRequest {
 		memRequest = cfg.MinMemoryRequest
+	}
+
+	// If we have real usage data, use it properly with buffer
+	if usage.CPUMilli > 0.1 {
+		// Ensure we use at least the actual usage plus buffer
+		minBasedOnUsage := int64(usage.CPUMilli * 1.2) // 20% buffer
+		if cpuRequest < minBasedOnUsage {
+			cpuRequest = minBasedOnUsage
+		}
+	}
+	if usage.MemMB > 1 {
+		minBasedOnUsage := int64(usage.MemMB * 1.2) // 20% buffer
+		if memRequest < minBasedOnUsage {
+			memRequest = minBasedOnUsage
+		}
 	}
 
 	// Calculate limits based on requests with multipliers and additions
@@ -977,12 +1411,28 @@ func (r *AdaptiveRightSizer) calculateOptimalResourcesWithDecision(usage metrics
 		memRequest = int64(usage.MemMB*cfg.MemoryRequestMultiplier) + cfg.MemoryRequestAddition
 	}
 
-	// Ensure minimum values
-	if cpuRequest < cfg.MinCPURequest {
+	// Only apply minimum if usage is actually zero or near-zero
+	// This prevents forcing minimum values when we have real metrics
+	if usage.CPUMilli < 0.1 && cpuRequest < cfg.MinCPURequest {
 		cpuRequest = cfg.MinCPURequest
 	}
-	if memRequest < cfg.MinMemoryRequest {
+	if usage.MemMB < 1 && memRequest < cfg.MinMemoryRequest {
 		memRequest = cfg.MinMemoryRequest // Already in MB
+	}
+
+	// If we have real usage data, use it properly with buffer
+	if usage.CPUMilli > 0.1 {
+		// Ensure we use at least the actual usage plus buffer
+		minBasedOnUsage := int64(usage.CPUMilli * 1.2) // 20% buffer
+		if cpuRequest < minBasedOnUsage {
+			cpuRequest = minBasedOnUsage
+		}
+	}
+	if usage.MemMB > 1 {
+		minBasedOnUsage := int64(usage.MemMB * 1.2) // 20% buffer
+		if memRequest < minBasedOnUsage {
+			memRequest = minBasedOnUsage
+		}
 	}
 
 	// Calculate limits
@@ -1282,11 +1732,14 @@ func SetupAdaptiveRightSizer(mgr manager.Manager, provider metrics.Provider, aud
 		RestConfig:      restConfig,
 		MetricsProvider: provider,
 		AuditLogger:     auditLogger,
+		Config:          cfg,
 		Interval:        cfg.ResizeInterval,
 		DryRun:          dryRun,
 		resizeCache:     make(map[string]*ResizeDecisionCache),
 		cacheExpiry:     5 * time.Minute, // Cache entries for 5 minutes
 	}
+	// Temporarily disable metrics to avoid registration panic
+	rightsizer.OperatorMetrics = nil
 
 	// Start the rightsizer
 	go func() {

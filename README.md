@@ -8,6 +8,9 @@
 [![Go Version](https://img.shields.io/badge/Go-1.25-00ADD8)](https://golang.org)
 [![Helm](https://img.shields.io/badge/Helm-3.0%2B-0F1689)](https://helm.sh)
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED)](https://www.docker.com)
+[![Test Coverage](https://img.shields.io/badge/Coverage-Report-brightgreen)](./build/coverage/coverage.html)
+[![API Docs](https://img.shields.io/badge/API-OpenAPI%203.0-orange)](./docs/api/openapi.yaml)
+[![CI/CD](https://github.com/aavishay/right-sizer/actions/workflows/test-coverage.yml/badge.svg)](https://github.com/aavishay/right-sizer/actions/workflows/test-coverage.yml)
 
 **Intelligent Kubernetes Resource Optimization with Zero Downtime**
 
@@ -115,6 +118,8 @@ Right-Sizer is a Kubernetes operator that automatically optimizes pod resource a
 - **Health Endpoints**: Comprehensive health monitoring
 - **Circuit Breakers**: Automatic failure recovery
 - **High Availability**: Multi-replica deployment support
+- **OpenAPI Documentation**: Full API specification with Swagger/OpenAPI 3.0
+- **Test Coverage**: Comprehensive unit and integration test suites with coverage reporting
 
 
 ---
@@ -875,6 +880,160 @@ make mk-test
 
 ---
 
+## 🧪 Testing
+
+Right-Sizer maintains high code quality through comprehensive testing strategies. All tests must pass before code is merged.
+
+### Test Types
+
+| Test Type | Command | Coverage | Purpose |
+|-----------|---------|----------|---------|
+| **Unit Tests** | `make test` | Core logic | Validate individual components |
+| **Integration Tests** | `make test-integration` | Component interaction | End-to-end workflows |
+| **Security Tests** | `make vuln-check` | Dependencies | Vulnerability scanning |
+| **Linting** | `make test-lint` | Code quality | Style and best practices |
+| **Coverage** | `make test-coverage` | >80% required | Code coverage analysis |
+| **E2E Tests** | `npm run test:e2e` | Full application | Browser automation |
+
+### Running Tests
+
+#### Comprehensive Test Suite
+```bash
+# Run all Go tests with comprehensive checks
+./scripts/test-all.sh
+
+# Run all tests across both projects
+../test-all-projects.sh
+```
+
+#### Individual Test Commands
+```bash
+# Go project tests
+make test                    # Unit tests
+make test-integration       # Integration tests
+make test-coverage          # Coverage report
+make test-lint             # Linting
+make vuln-check            # Security scan
+make test-all              # All tests + lint + coverage
+
+```
+
+### Pre-commit Hooks
+
+Pre-commit hooks ensure code quality before commits:
+
+```bash
+# Install pre-commit hooks
+pip install pre-commit
+pre-commit install
+
+# Run manually
+pre-commit run --all-files
+
+# Update hooks
+pre-commit autoupdate
+```
+
+#### Pre-commit Checks
+- **Go Formatting**: `go fmt` and `goimports`
+- **Linting**: `golangci-lint` for Go code
+- **Security**: `govulncheck` for vulnerabilities
+- **Testing**: Unit tests with coverage requirements
+- **Build**: Verify code compiles successfully
+- **Dependencies**: Check for outdated packages
+
+### CI/CD Testing
+
+GitHub Actions automatically run tests on every push and PR:
+
+#### Test Coverage Requirements
+- **Minimum Coverage**: 80% for Go code
+- **Coverage Reports**: Generated and uploaded to Codecov
+- **Coverage Badges**: Updated automatically
+- **PR Comments**: Coverage summary in pull requests
+
+#### Security Scanning
+- **Dependency Scanning**: `govulncheck` for Go dependencies
+- **Container Scanning**: Trivy for Docker images
+- **License Compliance**: Automated license checking
+
+### Test Coverage
+
+Current coverage status:
+
+```bash
+# View coverage report
+make test-coverage-html
+open build/coverage/coverage.html
+
+# Coverage summary
+make test-coverage
+```
+
+### Integration Testing
+
+```bash
+# Local integration tests
+make test-integration
+
+# Minikube-based E2E tests
+make mk-test
+
+# Full E2E tests
+make test-e2e
+```
+
+### Performance Testing
+
+```bash
+# Benchmark tests
+make test-benchmark
+
+# Load testing (requires cluster)
+kubectl apply -f examples/stress-test.yaml
+```
+
+### Debugging Test Failures
+
+```bash
+# Verbose test output
+make test  # Add -v flag in Makefile
+
+# Run specific test
+go test -v ./controllers -run TestSpecificFunction
+
+# Debug with race detection
+go test -race -v ./...
+
+# Check test logs
+kubectl logs -n right-sizer -l app.kubernetes.io/name=right-sizer
+```
+
+### Test Data and Fixtures
+
+- **Mock Data**: Located in `test-deployments/` and `examples/`
+- **Test Workloads**: `test-workloads.yaml` for integration testing
+- **Stress Tests**: `stress-test.yaml` for performance validation
+
+### Contributing to Tests
+
+When adding new code:
+
+1. **Write Tests First**: Follow TDD principles
+2. **Maintain Coverage**: Ensure >80% coverage
+3. **Integration Tests**: Add for new features
+4. **Documentation**: Update test documentation
+5. **Pre-commit**: Verify all hooks pass
+
+```bash
+# Before committing
+./scripts/test-all.sh
+pre-commit run --all-files
+```
+
+---
+
+## 🤝 Contributing
 ## 📜 License
 
 This project is licensed under the **GNU Affero General Public License v3.0 (AGPL-3.0)**. See [LICENSE](LICENSE) for details.

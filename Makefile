@@ -152,6 +152,69 @@ docker-push: ## Push Docker image to registry
 	docker push $(DOCKER_IMAGE):latest
 	@echo "$(GREEN)Docker image pushed successfully$(NC)"
 
+##@ Testing
+
+.PHONY: test
+test: ## Run all tests
+	@echo "$(BLUE)Running tests...$(NC)"
+	cd go && go test -v -race ./...
+	@echo "$(GREEN)Tests completed$(NC)"
+
+.PHONY: test-coverage
+test-coverage: ## Run tests with coverage report
+	@echo "$(BLUE)Running tests with coverage...$(NC)"
+	@mkdir -p $(BUILD_DIR)/coverage
+	cd go && go test -v -race -coverprofile=../$(BUILD_DIR)/coverage/coverage.out -covermode=atomic ./...
+	cd go && go tool cover -func=../$(BUILD_DIR)/coverage/coverage.out -o ../$(BUILD_DIR)/coverage/coverage.txt
+	@echo "$(GREEN)Coverage report generated$(NC)"
+	@echo ""
+	@echo "$(YELLOW)Coverage Summary:$(NC)"
+	@tail -n 1 $(BUILD_DIR)/coverage/coverage.txt
+
+.PHONY: test-coverage-html
+test-coverage-html: test-coverage ## Generate HTML coverage report
+	@echo "$(BLUE)Generating HTML coverage report...$(NC)"
+	cd go && go tool cover -html=../$(BUILD_DIR)/coverage/coverage.out -o ../$(BUILD_DIR)/coverage/coverage.html
+	@echo "$(GREEN)HTML report generated: $(BUILD_DIR)/coverage/coverage.html$(NC)"
+	@echo "$(YELLOW)Opening coverage report...$(NC)"
+	@if command -v open > /dev/null; then \
+		open $(BUILD_DIR)/coverage/coverage.html; \
+	elif command -v xdg-open > /dev/null; then \
+		xdg-open $(BUILD_DIR)/coverage/coverage.html; \
+	else \
+		echo "Please open $(BUILD_DIR)/coverage/coverage.html in your browser"; \
+	fi
+
+.PHONY: test-benchmark
+test-benchmark: ## Run benchmark tests
+	@echo "$(BLUE)Running benchmarks...$(NC)"
+	cd go && go test -bench=. -benchmem ./...
+	@echo "$(GREEN)Benchmarks completed$(NC)"
+
+.PHONY: test-integration
+test-integration: ## Run integration tests
+	@echo "$(BLUE)Running integration tests...$(NC)"
+	cd go && go test -v -tags=integration ./...
+	@echo "$(GREEN)Integration tests completed$(NC)"
+
+.PHONY: test-lint
+test-lint: ## Run linting checks
+	@echo "$(BLUE)Running linting checks...$(NC)"
+	@if command -v golangci-lint > /dev/null; then \
+		cd go && golangci-lint run ./...; \
+	else \
+		echo "$(YELLOW)golangci-lint not installed, installing...$(NC)"; \
+		go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest; \
+		cd go && golangci-lint run ./...; \
+	fi
+	@echo "$(GREEN)Linting completed$(NC)"
+
+.PHONY: test-all
+test-all: test-lint test test-coverage ## Run all tests, linting, and coverage
+	docker push $(DOCKER_IMAGE):$(DOCKER_TAG)
+	docker push $(DOCKER_IMAGE):latest
+	@echo "$(GREEN)Docker image pushed successfully$(NC)"
+
 ##@ Helm
 
 .PHONY: helm-lint
@@ -339,6 +402,19 @@ clean-all: clean ## Clean all artifacts including Docker images
 	@docker rmi $(DOCKER_IMAGE):$(DOCKER_TAG) 2>/dev/null || true
 	@docker rmi $(DOCKER_IMAGE):latest 2>/dev/null || true
 	@echo "$(GREEN)Deep cleanup complete$(NC)"
+
+.PHONY: prune-archive
+prune-archive: ## Interactively prune contents of archive/ directory
+	@echo "$(YELLOW)Pruning archive directory (interactive)...$(NC)"
+	@if [ ! -d archive ]; then echo "archive/ directory not found (nothing to prune)"; exit 0; fi
+	@echo "Contents to remove:" && ls -1 archive || true
+	@read -p "This will permanently delete files inside archive/. Continue? [y/N] " ans; \
+	  if [ "$$ans" = "y" ] || [ "$$ans" = "Y" ]; then \
+	    rm -rf archive/*; \
+	    echo "$(GREEN)Archive directory pruned$(NC)"; \
+	  else \
+	    echo "Aborted"; \
+	  fi
 
 ##@ Utilities
 

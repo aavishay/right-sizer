@@ -23,9 +23,8 @@ import (
 	"sync"
 	"time"
 
-	"sigs.k8s.io/controller-runtime/pkg/healthz"
-
 	"right-sizer/logger"
+	"sigs.k8s.io/controller-runtime/pkg/healthz"
 )
 
 // ComponentStatus represents the health status of a component

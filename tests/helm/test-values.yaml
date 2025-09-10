@@ -1,77 +1,14 @@
 # Test values for right-sizer Helm chart
-# Used for testing Guaranteed QoS pod fixes
+# Optimized for testing and development environments
 
 image:
   repository: right-sizer
-  tag: test-fix
-  pullPolicy: Never  # Use local image from minikube
+  tag: test
+  pullPolicy: Never # Use local image for testing
 
-config:
-  # Enable debug logging to see detailed operations
-  logLevel: debug
+# Operator configuration
+replicaCount: 1
 
-  # Short interval for faster testing
-  resizeInterval: 30s
-
-  # Enable dry run initially to see what would happen
-  dryRun: false
-
-  # QoS preservation settings (testing the fix)
-  preserveGuaranteedQoS: true
-  forceGuaranteedForCritical: false
-  qosTransitionWarning: true
-
-  # Resource sizing multipliers
-  cpuRequestMultiplier: 1.2
-  memoryRequestMultiplier: 1.2
-  cpuLimitMultiplier: 1.0      # For Guaranteed QoS testing
-  memoryLimitMultiplier: 1.0   # For Guaranteed QoS testing
-  cpuLimitAddition: 0
-  memoryLimitAddition: 0
-
-  # Minimum resources
-  minCPURequest: 10
-  minMemoryRequest: 64
-
-  # Maximum resources
-  maxCPULimit: 2000
-  maxMemoryLimit: 2048
-
-  # Scaling thresholds
-  cpuScaleUpThreshold: 0.8
-  cpuScaleDownThreshold: 0.3
-  memoryScaleUpThreshold: 0.8
-  memoryScaleDownThreshold: 0.3
-
-  # Safety threshold
-  safetyThreshold: 0.3
-
-  # Namespace configuration - test in specific namespaces
-  namespaceInclude:
-    - test-apps
-    - test-guaranteed
-  namespaceExclude:
-    - kube-system
-    - kube-public
-    - kube-node-lease
-    - right-sizer
-    - default
-
-  # Enable in-place resize
-  enableInPlaceResize: true
-
-  # Metrics provider
-  metricsProvider: metrics-server
-  metricsServerEndpoint: https://metrics-server.kube-system.svc.cluster.local
-
-rbac:
-  create: true
-
-serviceAccount:
-  create: true
-  name: right-sizer
-
-# Resource limits for right-sizer itself
 resources:
   limits:
     cpu: 500m
@@ -80,7 +17,15 @@ resources:
     cpu: 100m
     memory: 128Mi
 
-# Pod security context
+# RBAC
+rbac:
+  create: true
+
+serviceAccount:
+  create: true
+  name: right-sizer
+
+# Security contexts
 securityContext:
   runAsNonRoot: true
   runAsUser: 65532
@@ -88,7 +33,6 @@ securityContext:
   seccompProfile:
     type: RuntimeDefault
 
-# Container security context
 containerSecurityContext:
   allowPrivilegeEscalation: false
   capabilities:
@@ -98,7 +42,7 @@ containerSecurityContext:
   runAsNonRoot: true
   runAsUser: 65532
 
-# Liveness and readiness probes
+# Health checks
 livenessProbe:
   httpGet:
     path: /healthz
@@ -113,69 +57,77 @@ readinessProbe:
   initialDelaySeconds: 5
   periodSeconds: 10
 
-# Metrics and monitoring
+# Metrics
 metrics:
   enabled: true
   port: 8080
   path: /metrics
 
-# Admission webhook configuration (disabled for initial testing)
-admissionWebhook:
-  enabled: false
-  port: 8443
-  certPath: /etc/webhook/certs/tls.crt
-  keyPath: /etc/webhook/certs/tls.key
-
-# Audit logging
-audit:
-  enabled: true
-  logLevel: info
-
-# Node selector (if needed)
-nodeSelector: {}
-
-# Tolerations
-tolerations: []
-
-# Affinity rules
-affinity: {}
-
-# Priority class
-priorityClassName: ""
-
-# Service configuration
+# Service
 service:
   type: ClusterIP
   port: 8080
-  annotations: {}
 
-# Additional environment variables
-env:
-  - name: PRESERVE_GUARANTEED_QOS
-    value: "true"
-  - name: QOS_TRANSITION_WARNING
-    value: "true"
-  - name: FORCE_GUARANTEED_FOR_CRITICAL
-    value: "false"
+# Right-sizer configuration
+rightsizerConfig:
+  create: true
+  enabled: true
+  mode: balanced
+  dryRun: false
 
-# Volume mounts (if needed for certificates, etc.)
-volumeMounts: []
+  # Resource defaults
+  resourceDefaults:
+    cpu:
+      minRequest: "10m"
+      maxLimit: "2000m"
+      requestToLimitRatio: 1.5
+    memory:
+      minRequest: "64Mi"
+      maxLimit: "2048Mi"
+      requestToLimitRatio: 1.5
 
-# Volumes
-volumes: []
+  # Sizing strategy
+  sizingStrategy:
+    algorithm: "percentile"
+    percentile: 95
+    lookbackPeriod: "1h"
+    sampleInterval: "30s"
 
-# Labels to add to all resources
+    scalingFactors:
+      scaleUpMultiplier: 1.2
+      scaleDownMultiplier: 0.8
+      minChangeThreshold: 10
+
+  # Operational config
+  operationalConfig:
+    resizeMode: "InPlace"
+    resizeInterval: "30s"
+    batchSize: 10
+    concurrentOperations: 5
+    retryAttempts: 3
+
+  # Namespace config
+  namespaceConfig:
+    includeNamespaces:
+      - test-apps
+      - test-guaranteed
+    excludeNamespaces:
+      - kube-system
+      - kube-public
+      - kube-node-lease
+      - right-sizer
+      - default
+
+  # Logging
+  logging:
+    level: debug
+    format: json
+
+# Additional test labels
 labels:
-  version: test-fix
-  test: guaranteed-qos
+  environment: test
+  purpose: testing
 
-# Annotations to add to the pod
+# Pod annotations
 podAnnotations:
-  test.right-sizer.io/purpose: "guaranteed-qos-fix-testing"
-
-# Deployment strategy
-strategy:
-  type: Recreate
-
-# Replicas (keeping it simple for testing)
-replicaCount: 1
+  test.right-sizer.io/version: "test"

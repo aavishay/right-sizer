@@ -206,7 +206,7 @@ namespace-specific:
 
     namespaceConfig:
       includeNamespaces:
-        - "frontend"  # UI services - can be more aggressive
+        - "workload"  # UI services - can be more aggressive
         - "backend"   # API services - moderate optimization
         - "database"  # Database services - conservative
       excludeNamespaces:

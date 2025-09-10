@@ -1,0 +1,225 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: test-resize-policy
+  labels:
+    app: test-resize
+    test: resize-policy
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: test-resize
+  template:
+    metadata:
+      labels:
+        app: test-resize
+        test: resize-policy
+      annotations:
+        right-sizer.io/enable: "true"
+        right-sizer.io/mode: "aggressive"
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:latest
+        ports:
+        - containerPort: 80
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "128Mi"
+          limits:
+            cpu: "500m"
+            memory: "512Mi"
+        resizePolicy:
+        - resourceName: cpu
+          restartPolicy: NotRequired
+        - resourceName: memory
+          restartPolicy: NotRequired
+        env:
+        - name: ENABLE_METRICS
+          value: "true"
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 10
+          periodSeconds: 15
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: test-resize-memory-only
+  labels:
+    app: test-memory
+    test: resize-policy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: test-memory
+  template:
+    metadata:
+      labels:
+        app: test-memory
+        test: resize-policy
+      annotations:
+        right-sizer.io/enable: "true"
+        right-sizer.io/strategy: "memory-focused"
+    spec:
+      containers:
+      - name: memory-consumer
+        image: busybox
+        command: ["sh", "-c"]
+        args:
+        - |
+          echo "Starting memory consumer...";
+          # Allocate some memory
+          dd if=/dev/zero of=/tmp/file bs=1M count=50;
+          while true; do
+            echo "Memory consumer running at $(date)";
+            sleep 30;
+          done
+        resources:
+          requests:
+            cpu: "50m"
+            memory: "256Mi"
+          limits:
+            cpu: "200m"
+            memory: "1Gi"
+        resizePolicy:
+        - resourceName: memory
+          restartPolicy: NotRequired
+        - resourceName: cpu
+          restartPolicy: RestartContainer
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: test-resize-cpu-intensive
+  labels:
+    app: test-cpu
+    test: resize-policy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: test-cpu
+  template:
+    metadata:
+      labels:
+        app: test-cpu
+        test: resize-policy
+      annotations:
+        right-sizer.io/enable: "true"
+        right-sizer.io/strategy: "cpu-focused"
+    spec:
+      containers:
+      - name: cpu-consumer
+        image: busybox
+        command: ["sh", "-c"]
+        args:
+        - |
+          echo "Starting CPU consumer...";
+          while true; do
+            # Simulate some CPU work
+            echo "scale=5000; 4*a(1)" | bc -l > /dev/null 2>&1 || true;
+            sleep 5;
+          done
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "64Mi"
+          limits:
+            cpu: "1000m"
+            memory: "256Mi"
+        resizePolicy:
+        - resourceName: cpu
+          restartPolicy: NotRequired
+        - resourceName: memory
+          restartPolicy: NotRequired
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: test-resize-multi-container
+  labels:
+    app: test-multi
+    test: resize-policy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: test-multi
+  template:
+    metadata:
+      labels:
+        app: test-multi
+        test: resize-policy
+      annotations:
+        right-sizer.io/enable: "true"
+        right-sizer.io/mode: "balanced"
+    spec:
+      containers:
+      - name: web-server
+        image: nginx:alpine
+        ports:
+        - containerPort: 80
+        resources:
+          requests:
+            cpu: "50m"
+            memory: "64Mi"
+          limits:
+            cpu: "200m"
+            memory: "256Mi"
+        resizePolicy:
+        - resourceName: cpu
+          restartPolicy: NotRequired
+        - resourceName: memory
+          restartPolicy: NotRequired
+      - name: sidecar
+        image: busybox
+        command: ["sh", "-c"]
+        args:
+        - |
+          while true; do
+            echo "Sidecar running at $(date)";
+            # Simulate log processing
+            for i in $(seq 1 100); do
+              echo "Processing log entry $i" > /dev/null;
+            done
+            sleep 10;
+          done
+        resources:
+          requests:
+            cpu: "25m"
+            memory: "32Mi"
+          limits:
+            cpu: "100m"
+            memory: "128Mi"
+        resizePolicy:
+        - resourceName: cpu
+          restartPolicy: NotRequired
+        - resourceName: memory
+          restartPolicy: NotRequired
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: test-resize-service
+  labels:
+    test: resize-policy
+spec:
+  selector:
+    app: test-resize
+  ports:
+  - port: 80
+    targetPort: 80
+    protocol: TCP
+  type: ClusterIP

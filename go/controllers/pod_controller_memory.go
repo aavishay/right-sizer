@@ -34,11 +34,6 @@ import (
 	"k8s.io/klog/v2"
 	metricsv1beta1 "k8s.io/metrics/pkg/apis/metrics/v1beta1"
 	metricsclient "k8s.io/metrics/pkg/client/clientset/versioned"
-	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-
 	"right-sizer/audit"
 	"right-sizer/config"
 	"right-sizer/health"
@@ -46,6 +41,10 @@ import (
 	"right-sizer/metrics"
 	"right-sizer/retry"
 	"right-sizer/validation"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 // PodMemoryController handles pod reconciliation with memory metrics focus
@@ -452,6 +451,10 @@ func (r *PodMemoryController) applyMemoryRecommendations(ctx context.Context, po
 	}
 
 	r.OperatorMetrics.RecordPodResized(pod.Namespace, pod.Name, "", "memory")
+	// Increment optimization counter exposed via metrics API (Gauge supports Inc)
+	if r.OperatorMetrics != nil {
+		r.OperatorMetrics.OptimizedResourcesTotal.Inc()
+	}
 
 	return nil
 }

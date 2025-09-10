@@ -47,6 +47,11 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 # - scratch (most minimal, requires copying ca-certificates from builder)
 FROM gcr.io/distroless/static-debian12:nonroot
 
+# Re-declare build args for final stage label expansion
+ARG VERSION=dev
+ARG BUILD_DATE
+ARG GIT_COMMIT
+
 # Labels for OCI compliance
 LABEL org.opencontainers.image.title="Right-Sizer" \
   org.opencontainers.image.description="Kubernetes operator for automatic pod resource right-sizing" \

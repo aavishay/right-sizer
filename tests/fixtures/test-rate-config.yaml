@@ -74,7 +74,7 @@ spec:
 
   # Feature gates
   featureGates:
-    EnableInPlaceResize: true
+    UpdateResizePolicy: true
     EnableCostOptimization: false
     EnablePredictiveScaling: false
 

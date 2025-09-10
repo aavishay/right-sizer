@@ -1,0 +1,27 @@
+FROM golang:1.21-alpine AS builder
+
+WORKDIR /build
+COPY minimal-operator.go .
+
+# Download dependencies
+RUN go mod init minimal-operator && \
+    go get k8s.io/client-go@v0.28.0 && \
+    go get k8s.io/apimachinery@v0.28.0 && \
+    go get k8s.io/metrics@v0.28.0
+
+# Build
+RUN CGO_ENABLED=0 go build -o operator minimal-operator.go
+
+# Final image
+FROM alpine:3.18
+RUN apk add --no-cache ca-certificates
+RUN adduser -D -s /bin/sh appuser
+
+COPY --from=builder /build/operator /app/operator
+RUN chmod +x /app/operator
+
+USER appuser
+WORKDIR /app
+EXPOSE 8081
+
+CMD ["/app/operator"]

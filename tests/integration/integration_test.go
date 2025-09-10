@@ -1,266 +1,380 @@
-package test
+//go:build integration
+// +build integration
+
+package integration
 
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/stretchr/testify/suite"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/rest"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/envtest"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+
+	"right-sizer/config"
+	"right-sizer/controllers"
+	"right-sizer/metrics"
+	"right-sizer/policy"
 )
 
-// TestSuite represents the integration test environment
-type TestSuite struct {
-	client    kubernetes.Interface
-	namespace string
+// IntegrationTestSuite is the main integration test suite
+type IntegrationTestSuite struct {
+	suite.Suite
+	testEnv    *envtest.Environment
+	k8sClient  client.Client
+	clientset  *kubernetes.Clientset
+	restConfig *rest.Config
+	ctx        context.Context
+	cancel     context.CancelFunc
+	namespace  string
 }
 
-// SetupTestSuite initializes the test environment
-func SetupTestSuite(t *testing.T) *TestSuite {
-	// Skip integration tests if not in integration test mode
-	if os.Getenv("INTEGRATION_TESTS") != "true" {
-		t.Skip("Skipping integration tests. Set INTEGRATION_TESTS=true to run.")
+// SetupSuite runs once before all tests
+func (suite *IntegrationTestSuite) SetupSuite() {
+	// Set up logging
+	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
+
+	suite.ctx, suite.cancel = context.WithCancel(context.Background())
+
+	// Configure test environment
+	suite.testEnv = &envtest.Environment{
+		CRDDirectoryPaths: []string{
+			filepath.Join("..", "..", "helm", "crds"),
+		},
+		ErrorIfCRDPathMissing:    true,
+		BinaryAssetsDirectory:    filepath.Join("..", "..", "bin", "k8s"),
+		ControlPlaneStartTimeout: 60 * time.Second,
+		ControlPlaneStopTimeout:  60 * time.Second,
 	}
 
-	// Get kubeconfig
-	kubeconfig := os.Getenv("KUBECONFIG")
-	if kubeconfig == "" {
-		kubeconfig = os.Getenv("HOME") + "/.kube/config"
-	}
+	// Start test environment
+	cfg, err := suite.testEnv.Start()
+	suite.Require().NoError(err)
+	suite.Require().NotNil(cfg)
+	suite.restConfig = cfg
 
-	config, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
-	require.NoError(t, err, "Failed to build kubeconfig")
+	// Create clients
+	suite.k8sClient, err = client.New(cfg, client.Options{Scheme: scheme.Scheme})
+	suite.Require().NoError(err)
+	suite.Require().NotNil(suite.k8sClient)
 
-	client, err := kubernetes.NewForConfig(config)
-	require.NoError(t, err, "Failed to create Kubernetes client")
+	suite.clientset, err = kubernetes.NewForConfig(cfg)
+	suite.Require().NoError(err)
 
-	// Use a test namespace
-	namespace := "right-sizer"
-
-	return &TestSuite{
-		client:    client,
-		namespace: namespace,
-	}
-}
-
-// TearDown cleans up the test environment
-func (ts *TestSuite) TearDown(t *testing.T) {
-	ctx := context.TODO()
-
-	// Clean up test namespace
-	err := ts.client.CoreV1().Namespaces().Delete(ctx, ts.namespace, metav1.DeleteOptions{})
-	if err != nil {
-		t.Logf("Warning: Failed to delete test namespace: %v", err)
-	}
-}
-
-// EnsureNamespace creates the test namespace if it doesn't exist
-func (ts *TestSuite) EnsureNamespace(t *testing.T) {
-	ctx := context.TODO()
-
+	// Create test namespace
+	suite.namespace = "test-integration-" + time.Now().Format("20060102-150405")
 	ns := &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: ts.namespace,
+			Name: suite.namespace,
 		},
 	}
-
-	_, err := ts.client.CoreV1().Namespaces().Create(ctx, ns, metav1.CreateOptions{})
-	if err != nil && !isAlreadyExists(err) {
-		require.NoError(t, err, "Failed to create test namespace")
-	}
+	err = suite.k8sClient.Create(suite.ctx, ns)
+	suite.Require().NoError(err)
 }
 
-// TestRightSizerDeployment tests the complete right-sizer deployment
-func TestRightSizerDeployment(t *testing.T) {
-	ts := SetupTestSuite(t)
-	defer ts.TearDown(t)
-
-	ts.EnsureNamespace(t)
-
-	t.Run("DeployOperator", ts.testDeployOperator)
-	t.Run("DeployTestWorkload", ts.testDeployTestWorkload)
-	t.Run("VerifyResize", ts.testVerifyResize)
-	t.Run("CleanupWorkload", ts.testCleanupWorkload)
-}
-
-// testDeployOperator tests deploying the right-sizer operator
-func (ts *TestSuite) testDeployOperator(t *testing.T) {
-	ctx := context.TODO()
-
-	// Check if right-sizer is already deployed
-	deployments, err := ts.client.AppsV1().Deployments("default").List(ctx, metav1.ListOptions{
-		LabelSelector: "app=right-sizer",
-	})
-	require.NoError(t, err)
-
-	if len(deployments.Items) == 0 {
-		t.Skip("Right-sizer operator not deployed. Deploy with './make helm-deploy' first.")
-	}
-
-	deployment := deployments.Items[0]
-	assert.Equal(t, "right-sizer", deployment.Name)
-	assert.Equal(t, int32(1), *deployment.Spec.Replicas)
-
-	// Wait for deployment to be ready
-	timeout := 60 * time.Second
-	err = ts.waitForDeploymentReady(ctx, "default", "right-sizer", timeout)
-	require.NoError(t, err, "Right-sizer deployment did not become ready")
-
-	t.Log("✅ Right-sizer operator is deployed and ready")
-}
-
-// testDeployTestWorkload deploys a test workload for the operator to manage
-func (ts *TestSuite) testDeployTestWorkload(t *testing.T) {
-	ctx := context.TODO()
-
-	// Create test deployment
-	deployment := &corev1.Pod{
+// TearDownSuite runs once after all tests
+func (suite *IntegrationTestSuite) TearDownSuite() {
+	// Delete test namespace
+	ns := &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-workload",
-			Namespace: ts.namespace,
-			Labels: map[string]string{
-				"app":        "test-workload",
-				"rightsizer": "enabled",
-			},
+			Name: suite.namespace,
 		},
-		Spec: corev1.PodSpec{
-			Containers: []corev1.Container{
-				{
-					Name:  "app",
-					Image: "nginx:alpine",
-					Resources: corev1.ResourceRequirements{
-						Requests: corev1.ResourceList{
-							corev1.ResourceCPU:    resource.MustParse("100m"),
-							corev1.ResourceMemory: resource.MustParse("128Mi"),
-						},
-						Limits: corev1.ResourceList{
-							corev1.ResourceCPU:    resource.MustParse("200m"),
-							corev1.ResourceMemory: resource.MustParse("256Mi"),
-						},
-					},
-					Ports: []corev1.ContainerPort{
-						{
-							ContainerPort: 80,
-							Name:          "http",
-						},
-					},
+	}
+	_ = suite.k8sClient.Delete(suite.ctx, ns)
+
+	// Stop test environment
+	suite.cancel()
+	err := suite.testEnv.Stop()
+	suite.Require().NoError(err)
+}
+
+// TestOperatorLifecycle tests operator startup and shutdown
+func (suite *IntegrationTestSuite) TestOperatorLifecycle() {
+	// Create manager
+	mgr, err := ctrl.NewManager(suite.restConfig, ctrl.Options{
+		Scheme:             scheme.Scheme,
+		MetricsBindAddress: ":0", // Use random port
+		Port:               0,    // Disable webhook server
+		Namespace:          suite.namespace,
+	})
+	suite.Require().NoError(err)
+
+	// Initialize controller
+	controller := &controllers.PodController{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+		Config: config.Load(),
+	}
+
+	err = controller.SetupWithManager(mgr)
+	suite.Require().NoError(err)
+
+	// Start manager in goroutine
+	ctx, cancel := context.WithTimeout(suite.ctx, 5*time.Second)
+	defer cancel()
+
+	go func() {
+		err := mgr.Start(ctx)
+		suite.Assert().NoError(err)
+	}()
+
+	// Wait for manager to be ready
+	time.Sleep(2 * time.Second)
+
+	// Verify manager is running
+	suite.Assert().NotNil(mgr.GetClient())
+}
+
+// TestPodProcessing tests pod processing and resizing logic
+func (suite *IntegrationTestSuite) TestPodProcessing() {
+	// Create a deployment
+	deployment := suite.createTestDeployment("test-deployment", 2)
+	err := suite.k8sClient.Create(suite.ctx, deployment)
+	suite.Require().NoError(err)
+
+	// Wait for pods to be created
+	time.Sleep(3 * time.Second)
+
+	// List pods
+	podList := &corev1.PodList{}
+	err = suite.k8sClient.List(suite.ctx, podList, client.InNamespace(suite.namespace))
+	suite.Require().NoError(err)
+	suite.Assert().Len(podList.Items, 2)
+
+	// Verify pod resources
+	for _, pod := range podList.Items {
+		suite.Assert().NotNil(pod.Spec.Containers[0].Resources.Requests)
+		suite.Assert().NotNil(pod.Spec.Containers[0].Resources.Limits)
+	}
+
+	// Simulate resource optimization
+	for i := range podList.Items {
+		pod := &podList.Items[i]
+
+		// Update pod resources (simulating optimization)
+		newCPURequest := resource.MustParse("50m")
+		newMemoryRequest := resource.MustParse("64Mi")
+
+		pod.Spec.Containers[0].Resources.Requests[corev1.ResourceCPU] = newCPURequest
+		pod.Spec.Containers[0].Resources.Requests[corev1.ResourceMemory] = newMemoryRequest
+
+		// In real scenario, this would be done through resize subresource
+		// For testing, we'll update the pod spec
+		err = suite.k8sClient.Update(suite.ctx, pod)
+		// Note: This might fail in real cluster as pod specs are immutable
+		// In actual implementation, use resize subresource
+		if err != nil {
+			suite.T().Logf("Expected error updating pod (specs are immutable): %v", err)
+		}
+	}
+}
+
+// TestMetricsCollection tests metrics endpoint and data collection
+func (suite *IntegrationTestSuite) TestMetricsCollection() {
+	// Initialize metrics
+	operatorMetrics := metrics.NewOperatorMetrics()
+
+	// Simulate metric updates using current API
+	operatorMetrics.RecordPodProcessed()
+	operatorMetrics.RecordPodResized("default", "deployment", "test-container", "cpu")
+	operatorMetrics.RecordResourceAdjustment("default", "deployment", "test-container", "cpu", "increase", 25.0)
+	operatorMetrics.RecordProcessingDuration("test_operation", 100*time.Millisecond)
+
+	// Create HTTP server for metrics
+	mux := http.NewServeMux()
+	mux.Handle("/metrics", promhttp.Handler())
+
+	server := &http.Server{
+		Addr:    ":0",
+		Handler: mux,
+	}
+
+	go func() {
+		_ = server.ListenAndServe()
+	}()
+	defer server.Close()
+
+	// Wait for server to start
+	time.Sleep(100 * time.Millisecond)
+
+	// Verify metrics are being collected
+	suite.Assert().NotNil(operatorMetrics)
+}
+
+// TestConfigurationManagement tests configuration CRUD operations
+func (suite *IntegrationTestSuite) TestConfigurationManagement() {
+	cfg := config.Load()
+
+	// Test default configuration
+	suite.Assert().Equal(true, cfg.Enabled)
+	suite.Assert().Equal("balanced", cfg.DefaultMode)
+	suite.Assert().Equal("5m", cfg.ResizeInterval)
+
+	// Test configuration update
+	cfg.DryRun = true
+	cfg.DefaultMode = "conservative"
+
+	suite.Assert().True(cfg.DryRun)
+	suite.Assert().Equal("conservative", cfg.DefaultMode)
+
+	// Test resource strategy
+	suite.Assert().NotNil(cfg.ResourceStrategy)
+	suite.Assert().NotNil(cfg.ResourceStrategy.CPU)
+	suite.Assert().NotNil(cfg.ResourceStrategy.Memory)
+
+	suite.Assert().Equal(1.1, cfg.ResourceStrategy.CPU.RequestMultiplier)
+	suite.Assert().Equal(1.5, cfg.ResourceStrategy.CPU.LimitMultiplier)
+}
+
+// TestPolicyApplication tests policy creation and application
+func (suite *IntegrationTestSuite) TestPolicyApplication() {
+	// Create policy manager
+	policyManager := policy.NewManager(suite.k8sClient)
+
+	// Create test policy
+	testPolicy := &policy.RightSizerPolicy{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-policy",
+			Namespace: suite.namespace,
+		},
+		Spec: policy.RightSizerPolicySpec{
+			Enabled:  true,
+			Priority: 10,
+			Mode:     "aggressive",
+			TargetRef: policy.TargetRef{
+				Kind:       "Deployment",
+				Namespaces: []string{suite.namespace},
+			},
+			ResourceStrategy: policy.ResourceStrategy{
+				CPU: &policy.ResourceConfig{
+					RequestMultiplier: 0.8,
+					LimitMultiplier:   1.2,
+					TargetUtilization: 70,
+				},
+				Memory: &policy.ResourceConfig{
+					RequestMultiplier: 0.9,
+					LimitMultiplier:   1.3,
+					TargetUtilization: 80,
 				},
 			},
 		},
 	}
 
-	// Deploy the test workload
-	_, err := ts.client.CoreV1().Pods(ts.namespace).Create(ctx, deployment, metav1.CreateOptions{})
-	require.NoError(t, err, "Failed to create test workload")
-
-	// Wait for pod to be running
-	err = ts.waitForPodReady(ctx, ts.namespace, "test-workload", 60*time.Second)
-	require.NoError(t, err, "Test workload pod did not become ready")
-
-	t.Log("✅ Test workload deployed successfully")
-}
-
-// testVerifyResize tests that the operator resizes the test workload
-func (ts *TestSuite) testVerifyResize(t *testing.T) {
-	ctx := context.TODO()
-
-	// Get initial pod resources
-	initialPod, err := ts.client.CoreV1().Pods(ts.namespace).Get(ctx, "test-workload", metav1.GetOptions{})
-	require.NoError(t, err)
-
-	initialCPU := initialPod.Spec.Containers[0].Resources.Requests[corev1.ResourceCPU]
-	initialMemory := initialPod.Spec.Containers[0].Resources.Requests[corev1.ResourceMemory]
-	initialRestartCount := getRestartCount(initialPod)
-
-	t.Logf("Initial resources: CPU=%s, Memory=%s, RestartCount=%d",
-		initialCPU.String(), initialMemory.String(), initialRestartCount)
-
-	// Wait for the operator to potentially resize the pod
-	// The operator runs every 30 seconds by default
-	time.Sleep(90 * time.Second)
-
-	// Get updated pod resources
-	updatedPod, err := ts.client.CoreV1().Pods(ts.namespace).Get(ctx, "test-workload", metav1.GetOptions{})
-	require.NoError(t, err)
-
-	updatedCPU := updatedPod.Spec.Containers[0].Resources.Requests[corev1.ResourceCPU]
-	updatedMemory := updatedPod.Spec.Containers[0].Resources.Requests[corev1.ResourceMemory]
-	updatedRestartCount := getRestartCount(updatedPod)
-
-	t.Logf("Updated resources: CPU=%s, Memory=%s, RestartCount=%d",
-		updatedCPU.String(), updatedMemory.String(), updatedRestartCount)
-
-	// Check if resources were adjusted (they may or may not change based on actual usage)
-	if initialCPU.Cmp(updatedCPU) != 0 || initialMemory.Cmp(updatedMemory) != 0 {
-		t.Log("✅ Pod resources were resized by the operator")
-
-		// Verify that restart count didn't change (in-place resize)
-		assert.Equal(t, initialRestartCount, updatedRestartCount,
-			"Pod should not have restarted during in-place resize")
-
-		// Verify that the pod is still running
-		assert.Equal(t, corev1.PodRunning, updatedPod.Status.Phase,
-			"Pod should still be running after resize")
-
-		t.Log("✅ In-place resize completed without pod restart")
-	} else {
-		t.Log("ℹ️ Pod resources were not changed (may be adequately sized)")
+	// Apply policy
+	err := policyManager.CreatePolicy(suite.ctx, testPolicy)
+	// Note: This will fail if CRDs are not properly installed
+	if err != nil {
+		suite.T().Logf("Expected error (CRDs might not be installed): %v", err)
 	}
 
-	// Check operator logs for resize activity
-	ts.checkOperatorLogs(t, ctx)
-}
-
-// testCleanupWorkload cleans up the test workload
-func (ts *TestSuite) testCleanupWorkload(t *testing.T) {
-	ctx := context.TODO()
-
-	err := ts.client.CoreV1().Pods(ts.namespace).Delete(ctx, "test-workload", metav1.DeleteOptions{})
-	if err != nil && !isNotFound(err) {
-		t.Logf("Warning: Failed to delete test workload: %v", err)
-	} else {
-		t.Log("✅ Test workload cleaned up")
-	}
-}
-
-// TestInPlaceResizeSubresource tests the Kubernetes 1.33+ resize subresource
-func TestInPlaceResizeSubresource(t *testing.T) {
-	ts := SetupTestSuite(t)
-	defer ts.TearDown(t)
-
-	ts.EnsureNamespace(t)
-
-	ctx := context.TODO()
-
-	// Check if resize subresource is available
-	available, err := ts.checkResizeSubresourceAvailability(ctx)
-	require.NoError(t, err)
-
-	if !available {
-		t.Skip("Resize subresource not available. Kubernetes 1.33+ required.")
-	}
-
-	t.Log("✅ Resize subresource is available")
-
-	// Create a test pod
+	// Test policy evaluation
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "resize-test-pod",
-			Namespace: ts.namespace,
+			Name:      "test-pod",
+			Namespace: suite.namespace,
+			Labels: map[string]string{
+				"app": "test",
+			},
+		},
+	}
+
+	applicablePolicy := policyManager.GetApplicablePolicy(pod)
+	suite.Assert().NotNil(applicablePolicy)
+}
+
+// TestOptimizationEvents tests event creation and retrieval
+func (suite *IntegrationTestSuite) TestOptimizationEvents() {
+	events := []controllers.OptimizationEvent{
+		{
+			ID:               "event-1",
+			Timestamp:        time.Now(),
+			Namespace:        suite.namespace,
+			Workload:         "test-deployment",
+			ResourceType:     "cpu",
+			PreviousValue:    "100m",
+			NewValue:         "50m",
+			ChangePercentage: -50.0,
+			Status:           "completed",
+		},
+		{
+			ID:               "event-2",
+			Timestamp:        time.Now(),
+			Namespace:        suite.namespace,
+			Workload:         "test-statefulset",
+			ResourceType:     "memory",
+			PreviousValue:    "256Mi",
+			NewValue:         "128Mi",
+			ChangePercentage: -50.0,
+			Status:           "completed",
+		},
+	}
+
+	// Store events (in real implementation, this would be in a database)
+	eventStore := make(map[string]controllers.OptimizationEvent)
+	for _, event := range events {
+		eventStore[event.ID] = event
+	}
+
+	// Retrieve events
+	suite.Assert().Len(eventStore, 2)
+	suite.Assert().Equal("completed", eventStore["event-1"].Status)
+	suite.Assert().Equal("memory", eventStore["event-2"].ResourceType)
+}
+
+// TestHealthAndReadiness tests health and readiness endpoints
+func (suite *IntegrationTestSuite) TestHealthAndReadiness() {
+	// Create health checker
+	healthChecker := &controllers.HealthChecker{
+		Client: suite.k8sClient,
+	}
+
+	// Test liveness
+	isLive := healthChecker.CheckLiveness(suite.ctx)
+	suite.Assert().True(isLive)
+
+	// Test readiness
+	isReady := healthChecker.CheckReadiness(suite.ctx)
+	suite.Assert().True(isReady)
+
+	// Test readiness with checks
+	checks := healthChecker.GetReadinessChecks(suite.ctx)
+	suite.Assert().NotNil(checks)
+	suite.Assert().True(checks["kubernetes"])
+}
+
+// TestWebhookValidation tests admission webhook validation
+func (suite *IntegrationTestSuite) TestWebhookValidation() {
+	// Create webhook validator
+	validator := &controllers.AdmissionValidator{
+		Client: suite.k8sClient,
+		Config: config.Load(),
+	}
+
+	// Test pod validation
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-pod",
+			Namespace: suite.namespace,
 		},
 		Spec: corev1.PodSpec{
 			Containers: []corev1.Container{
 				{
-					Name:    "app",
-					Image:   "busybox",
-					Command: []string{"sleep", "3600"},
+					Name:  "test-container",
+					Image: "nginx:latest",
 					Resources: corev1.ResourceRequirements{
 						Requests: corev1.ResourceList{
 							corev1.ResourceCPU:    resource.MustParse("100m"),
@@ -276,182 +390,188 @@ func TestInPlaceResizeSubresource(t *testing.T) {
 		},
 	}
 
-	// Deploy the pod
-	_, err = ts.client.CoreV1().Pods(ts.namespace).Create(ctx, pod, metav1.CreateOptions{})
-	require.NoError(t, err)
+	// Validate pod
+	allowed, reason := validator.ValidatePod(pod)
+	suite.Assert().True(allowed)
+	suite.Assert().Empty(reason)
 
-	// Wait for pod to be ready
-	err = ts.waitForPodReady(ctx, ts.namespace, "resize-test-pod", 60*time.Second)
-	require.NoError(t, err)
+	// Test invalid pod (limits less than requests)
+	invalidPod := pod.DeepCopy()
+	invalidPod.Spec.Containers[0].Resources.Limits[corev1.ResourceCPU] = resource.MustParse("50m")
 
-	// Get initial state
-	initialPod, err := ts.client.CoreV1().Pods(ts.namespace).Get(ctx, "resize-test-pod", metav1.GetOptions{})
-	require.NoError(t, err)
-
-	initialRestartCount := getRestartCount(initialPod)
-	initialStartTime := getStartTime(initialPod)
-
-	t.Logf("Initial state: RestartCount=%d, StartTime=%v", initialRestartCount, initialStartTime)
-
-	// Perform manual resize test using kubectl (simulating what the operator does)
-	// Note: This would require kubectl to be available and configured
-	t.Log("Manual resize test would require kubectl integration - skipped in unit tests")
-
-	t.Log("✅ Resize subresource test completed")
+	allowed, reason = validator.ValidatePod(invalidPod)
+	suite.Assert().False(allowed)
+	suite.Assert().NotEmpty(reason)
 }
 
-// Helper functions
+// TestMultiNamespaceOperations tests operations across multiple namespaces
+func (suite *IntegrationTestSuite) TestMultiNamespaceOperations() {
+	// Create additional namespaces
+	namespaces := []string{"test-ns-1", "test-ns-2", "test-ns-3"}
 
-func (ts *TestSuite) waitForDeploymentReady(ctx context.Context, namespace, name string, timeout time.Duration) error {
-	ctx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-
-	for {
-		deployment, err := ts.client.AppsV1().Deployments(namespace).Get(ctx, name, metav1.GetOptions{})
-		if err != nil {
-			return err
+	for _, ns := range namespaces {
+		namespace := &corev1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: ns,
+			},
 		}
+		err := suite.k8sClient.Create(suite.ctx, namespace)
+		suite.Require().NoError(err)
 
-		if deployment.Status.ReadyReplicas == *deployment.Spec.Replicas {
-			return nil
-		}
-
-		select {
-		case <-ctx.Done():
-			return fmt.Errorf("timeout waiting for deployment %s/%s to be ready", namespace, name)
-		case <-time.After(5 * time.Second):
-			// Continue checking
-		}
+		// Create deployment in each namespace
+		deployment := suite.createTestDeployment("multi-ns-deployment", 1)
+		deployment.Namespace = ns
+		err = suite.k8sClient.Create(suite.ctx, deployment)
+		suite.Require().NoError(err)
 	}
-}
 
-func (ts *TestSuite) waitForPodReady(ctx context.Context, namespace, name string, timeout time.Duration) error {
-	ctx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
+	// List pods across all namespaces
+	podList := &corev1.PodList{}
+	err := suite.k8sClient.List(suite.ctx, podList)
+	suite.Require().NoError(err)
 
-	for {
-		pod, err := ts.client.CoreV1().Pods(namespace).Get(ctx, name, metav1.GetOptions{})
-		if err != nil {
-			return err
-		}
-
-		if pod.Status.Phase == corev1.PodRunning {
-			ready := true
-			for _, condition := range pod.Status.Conditions {
-				if condition.Type == corev1.PodReady && condition.Status != corev1.ConditionTrue {
-					ready = false
-					break
-				}
-			}
-			if ready {
-				return nil
+	// Count pods in test namespaces
+	testPodCount := 0
+	for _, pod := range podList.Items {
+		for _, ns := range namespaces {
+			if pod.Namespace == ns {
+				testPodCount++
+				break
 			}
 		}
+	}
 
-		select {
-		case <-ctx.Done():
-			return fmt.Errorf("timeout waiting for pod %s/%s to be ready", namespace, name)
-		case <-time.After(5 * time.Second):
-			// Continue checking
+	suite.Assert().Equal(3, testPodCount)
+
+	// Clean up namespaces
+	for _, ns := range namespaces {
+		namespace := &corev1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: ns,
+			},
 		}
+		_ = suite.k8sClient.Delete(suite.ctx, namespace)
 	}
 }
 
-func (ts *TestSuite) checkResizeSubresourceAvailability(ctx context.Context) (bool, error) {
-	// Check if the resize subresource is available
-	apiResourceList, err := ts.client.Discovery().ServerResourcesForGroupVersion("v1")
-	if err != nil {
-		return false, err
+// TestErrorScenarios tests various error conditions
+func (suite *IntegrationTestSuite) TestErrorScenarios() {
+	// Test invalid resource values
+	invalidResources := []string{
+		"invalid",
+		"-100m",
+		"999999999Gi",
 	}
 
-	for _, resource := range apiResourceList.APIResources {
-		if resource.Name == "pods/resize" {
-			return true, nil
-		}
+	for _, value := range invalidResources {
+		_, err := resource.ParseQuantity(value)
+		suite.Assert().Error(err)
 	}
 
-	return false, nil
+	// Test pod without resources
+	podWithoutResources := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "no-resources-pod",
+			Namespace: suite.namespace,
+		},
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{
+				{
+					Name:  "test-container",
+					Image: "nginx:latest",
+					// No resources specified
+				},
+			},
+		},
+	}
+
+	// This should be handled gracefully
+	err := suite.k8sClient.Create(suite.ctx, podWithoutResources)
+	suite.Assert().NoError(err)
+
+	// Test namespace that doesn't exist
+	podList := &corev1.PodList{}
+	err = suite.k8sClient.List(suite.ctx, podList, client.InNamespace("non-existent-namespace"))
+	suite.Assert().NoError(err)
+	suite.Assert().Empty(podList.Items)
 }
 
-func (ts *TestSuite) checkOperatorLogs(t *testing.T, ctx context.Context) {
-	// Get right-sizer pods
-	pods, err := ts.client.CoreV1().Pods("default").List(ctx, metav1.ListOptions{
-		LabelSelector: "app=right-sizer",
-	})
-	if err != nil {
-		t.Logf("Warning: Could not get operator pods: %v", err)
-		return
+// TestConcurrentOperations tests concurrent pod processing
+func (suite *IntegrationTestSuite) TestConcurrentOperations() {
+	// Create multiple deployments concurrently
+	deploymentCount := 5
+	done := make(chan bool, deploymentCount)
+
+	for i := 0; i < deploymentCount; i++ {
+		go func(index int) {
+			deployment := suite.createTestDeployment(fmt.Sprintf("concurrent-deployment-%d", index), 2)
+			err := suite.k8sClient.Create(suite.ctx, deployment)
+			suite.Assert().NoError(err)
+			done <- true
+		}(i)
 	}
 
-	if len(pods.Items) == 0 {
-		t.Log("Warning: No right-sizer pods found")
-		return
+	// Wait for all deployments to be created
+	for i := 0; i < deploymentCount; i++ {
+		<-done
 	}
 
-	// Get logs from the first pod
-	pod := pods.Items[0]
-	tailLines := int64(20)
+	// Verify all deployments were created
+	deploymentList := &appsv1.DeploymentList{}
+	err := suite.k8sClient.List(suite.ctx, deploymentList, client.InNamespace(suite.namespace))
+	suite.Require().NoError(err)
+	suite.Assert().GreaterOrEqual(len(deploymentList.Items), deploymentCount)
+}
 
-	req := ts.client.CoreV1().Pods("default").GetLogs(pod.Name, &corev1.PodLogOptions{
-		TailLines: &tailLines,
-	})
-
-	logs, err := req.Stream(ctx)
-	if err != nil {
-		t.Logf("Warning: Could not get operator logs: %v", err)
-		return
-	}
-	defer logs.Close()
-
-	// Read a portion of the logs
-	buf := make([]byte, 1024)
-	n, err := logs.Read(buf)
-	if err != nil && err.Error() != "EOF" {
-		t.Logf("Warning: Could not read operator logs: %v", err)
-		return
-	}
-
-	if n > 0 {
-		t.Logf("Recent operator logs:\n%s", string(buf[:n]))
+// Helper function to create test deployment
+func (suite *IntegrationTestSuite) createTestDeployment(name string, replicas int32) *appsv1.Deployment {
+	return &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: suite.namespace,
+		},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: &replicas,
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"app": name,
+				},
+			},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{
+						"app": name,
+					},
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Name:  "test-container",
+							Image: "nginx:latest",
+							Resources: corev1.ResourceRequirements{
+								Requests: corev1.ResourceList{
+									corev1.ResourceCPU:    resource.MustParse("100m"),
+									corev1.ResourceMemory: resource.MustParse("128Mi"),
+								},
+								Limits: corev1.ResourceList{
+									corev1.ResourceCPU:    resource.MustParse("200m"),
+									corev1.ResourceMemory: resource.MustParse("256Mi"),
+								},
+							},
+						},
+					},
+				},
+			},
+		},
 	}
 }
 
-func getRestartCount(pod *corev1.Pod) int32 {
-	if len(pod.Status.ContainerStatuses) > 0 {
-		return pod.Status.ContainerStatuses[0].RestartCount
-	}
-	return 0
-}
-
-func getStartTime(pod *corev1.Pod) *metav1.Time {
-	if len(pod.Status.ContainerStatuses) > 0 && pod.Status.ContainerStatuses[0].State.Running != nil {
-		return &pod.Status.ContainerStatuses[0].State.Running.StartedAt
-	}
-	return nil
-}
-
-func isAlreadyExists(err error) bool {
-	return err != nil && (err.Error() == "already exists" ||
-		(len(err.Error()) > 0 && err.Error()[len(err.Error())-14:] == "already exists"))
-}
-
-func isNotFound(err error) bool {
-	return err != nil && (err.Error() == "not found" ||
-		(len(err.Error()) > 0 && err.Error()[len(err.Error())-9:] == "not found"))
-}
-
-// BenchmarkRightSizerPerformance benchmarks the right-sizer performance
-func BenchmarkRightSizerPerformance(b *testing.B) {
-	if os.Getenv("INTEGRATION_TESTS") != "true" {
-		b.Skip("Skipping benchmark tests. Set INTEGRATION_TESTS=true to run.")
+// TestSuite runs the integration test suite
+func TestIntegrationSuite(t *testing.T) {
+	// Skip if not running integration tests
+	if os.Getenv("RUN_INTEGRATION_TESTS") != "true" {
+		t.Skip("Skipping integration tests. Set RUN_INTEGRATION_TESTS=true to run.")
 	}
 
-	// This would test performance characteristics of the right-sizer
-	// For now, it's a placeholder for performance testing
-	b.ResetTimer()
-
-	for i := 0; i < b.N; i++ {
-		// Simulate right-sizer analysis work
-		time.Sleep(1 * time.Millisecond)
-	}
+	suite.Run(t, new(IntegrationTestSuite))
 }

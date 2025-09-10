@@ -25,8 +25,6 @@ vendor/
 
 # Build directories
 bin/
-dist/
-build/
 _output/
 
 # IDE specific files
@@ -107,5 +105,15 @@ debug.test
 .build-number
 
 # Test artifacts
-playwright-report
-test-results
+
+# Repository hygiene additions
+archive/
+archive/**
+tests/logs/
+coverage.out
+logs.txt
+examples/deploy/generated/
+
+# Additional temp/backup patterns
+*.bak~
+*.orig.*

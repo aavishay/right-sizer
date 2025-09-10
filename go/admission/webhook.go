@@ -25,6 +25,11 @@ import (
 	"strings"
 	"time"
 
+	"right-sizer/config"
+	"right-sizer/logger"
+	"right-sizer/metrics"
+	"right-sizer/validation"
+
 	admissionv1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -33,11 +38,12 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+)
 
-	"right-sizer/config"
-	"right-sizer/logger"
-	"right-sizer/metrics"
-	"right-sizer/validation"
+const (
+	readHeaderTimeout    = 30 * time.Second
+	trueStr              = "true"
+	initialPatchCapacity = 2
 )
 
 // WebhookServer represents the admission webhook server
@@ -82,7 +88,7 @@ func NewWebhookServer(
 	server := &http.Server{
 		Addr:              fmt.Sprintf(":%d", webhookConfig.Port),
 		Handler:           mux,
-		ReadHeaderTimeout: 30 * time.Second,
+		ReadHeaderTimeout: readHeaderTimeout,
 	}
 
 	ws := &WebhookServer{
@@ -157,7 +163,7 @@ func (ws *WebhookServer) handleValidate(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	response := ws.validatePodResourceChange(&review)
+	response := ws.validatePodResourceChange(r.Context(), &review)
 	ws.sendResponse(w, response.Response)
 }
 
@@ -187,7 +193,7 @@ func (ws *WebhookServer) handleMutate(w http.ResponseWriter, r *http.Request) {
 }
 
 // validatePodResourceChange validates pod resource changes
-func (ws *WebhookServer) validatePodResourceChange(review *admissionv1.AdmissionReview) admissionv1.AdmissionReview {
+func (ws *WebhookServer) validatePodResourceChange(ctx context.Context, review *admissionv1.AdmissionReview) admissionv1.AdmissionReview {
 	req := review.Request
 	response := &admissionv1.AdmissionResponse{
 		UID:     req.UID,
@@ -235,7 +241,8 @@ func (ws *WebhookServer) validatePodResourceChange(review *admissionv1.Admission
 	var validationErrors []string
 	var validationWarnings []string
 
-	for i, container := range newPod.Spec.Containers {
+	for i := range newPod.Spec.Containers {
+		container := &newPod.Spec.Containers[i]
 		// Compare with old container resources if available
 		var oldResources corev1.ResourceRequirements
 		if req.Operation == admissionv1.Update && len(oldPod.Spec.Containers) > i {
@@ -249,7 +256,7 @@ func (ws *WebhookServer) validatePodResourceChange(review *admissionv1.Admission
 
 		// Validate the resource change
 		validationResult := ws.validator.ValidateResourceChange(
-			context.Background(),
+			ctx,
 			&newPod,
 			container.Resources,
 			container.Name,
@@ -347,17 +354,17 @@ func (ws *WebhookServer) mutatePodResources(review *admissionv1.AdmissionReview)
 func (ws *WebhookServer) shouldSkipValidation(pod *corev1.Pod) bool {
 	// Check for opt-out annotation
 	if pod.Annotations != nil {
-		if skip, exists := pod.Annotations["rightsizer.io/skip-validation"]; exists && skip == "true" {
+		if skip, exists := pod.Annotations["rightsizer.io/skip-validation"]; exists && skip == trueStr {
 			return true
 		}
-		if disable, exists := pod.Annotations["rightsizer.io/disable"]; exists && disable == "true" {
+		if disable, exists := pod.Annotations["rightsizer.io/disable"]; exists && disable == trueStr {
 			return true
 		}
 	}
 
 	// Check for opt-out label
 	if pod.Labels != nil {
-		if skip, exists := pod.Labels["rightsizer.skip-validation"]; exists && skip == "true" {
+		if skip, exists := pod.Labels["rightsizer.skip-validation"]; exists && skip == trueStr {
 			return true
 		}
 	}
@@ -369,17 +376,17 @@ func (ws *WebhookServer) shouldSkipValidation(pod *corev1.Pod) bool {
 func (ws *WebhookServer) shouldSkipMutation(pod *corev1.Pod) bool {
 	// Check for opt-out annotation
 	if pod.Annotations != nil {
-		if skip, exists := pod.Annotations["rightsizer.io/skip-mutation"]; exists && skip == "true" {
+		if skip, exists := pod.Annotations["rightsizer.io/skip-mutation"]; exists && skip == trueStr {
 			return true
 		}
-		if disable, exists := pod.Annotations["rightsizer.io/disable"]; exists && disable == "true" {
+		if disable, exists := pod.Annotations["rightsizer.io/disable"]; exists && disable == trueStr {
 			return true
 		}
 	}
 
 	// Check for opt-out label
 	if pod.Labels != nil {
-		if skip, exists := pod.Labels["rightsizer.skip-mutation"]; exists && skip == "true" {
+		if skip, exists := pod.Labels["rightsizer.skip-mutation"]; exists && skip == trueStr {
 			return true
 		}
 	}
@@ -388,14 +395,14 @@ func (ws *WebhookServer) shouldSkipMutation(pod *corev1.Pod) bool {
 }
 
 // areResourcesEqual compares two resource requirements
-func (ws *WebhookServer) areResourcesEqual(old, new corev1.ResourceRequirements) bool {
+func (ws *WebhookServer) areResourcesEqual(old, newRes corev1.ResourceRequirements) bool {
 	// Compare requests
-	if !ws.areResourceListsEqual(old.Requests, new.Requests) {
+	if !ws.areResourceListsEqual(old.Requests, newRes.Requests) {
 		return false
 	}
 
 	// Compare limits
-	if !ws.areResourceListsEqual(old.Limits, new.Limits) {
+	if !ws.areResourceListsEqual(old.Limits, newRes.Limits) {
 		return false
 	}
 
@@ -403,13 +410,13 @@ func (ws *WebhookServer) areResourcesEqual(old, new corev1.ResourceRequirements)
 }
 
 // areResourceListsEqual compares two resource lists
-func (ws *WebhookServer) areResourceListsEqual(old, new corev1.ResourceList) bool {
-	if len(old) != len(new) {
+func (ws *WebhookServer) areResourceListsEqual(old, newRes corev1.ResourceList) bool {
+	if len(old) != len(newRes) {
 		return false
 	}
 
 	for k, v := range old {
-		if newV, exists := new[k]; !exists || !v.Equal(newV) {
+		if newV, exists := newRes[k]; !exists || !v.Equal(newV) {
 			return false
 		}
 	}
@@ -419,7 +426,7 @@ func (ws *WebhookServer) areResourceListsEqual(old, new corev1.ResourceList) boo
 
 // generateResourcePatches generates JSON patches for resource optimization
 func (ws *WebhookServer) generateResourcePatches(pod *corev1.Pod) []JSONPatch {
-	var patches []JSONPatch
+	patches := make([]JSONPatch, 0, initialPatchCapacity)
 
 	// Determine if we should maintain Guaranteed QoS
 	maintainGuaranteed := false
@@ -430,7 +437,8 @@ func (ws *WebhookServer) generateResourcePatches(pod *corev1.Pod) []JSONPatch {
 	}
 
 	// Add default resource requests if missing
-	for i, container := range pod.Spec.Containers {
+	for i := range pod.Spec.Containers {
+		container := &pod.Spec.Containers[i]
 		if container.Resources.Requests == nil {
 			cpuRequest := fmt.Sprintf("%dm", ws.config.MinCPURequest)
 			memRequest := fmt.Sprintf("%dMi", ws.config.MinMemoryRequest)
@@ -464,21 +472,48 @@ func (ws *WebhookServer) generateResourcePatches(pod *corev1.Pod) []JSONPatch {
 			})
 		}
 
-		// Add labels for tracking
-		if pod.Labels == nil {
-			patches = append(patches, JSONPatch{
-				Op:    "add",
-				Path:  "/metadata/labels",
-				Value: map[string]string{},
-			})
+		// Add resize policy to enable in-place updates without container restart per K8s 1.33
+		// Check if container already has a resize policy
+		hasResizePolicy := container.ResizePolicy != nil && len(container.ResizePolicy) > 0
+
+		resizePolicy := []corev1.ContainerResizePolicy{
+			{
+				ResourceName:  corev1.ResourceCPU,
+				RestartPolicy: corev1.NotRequired,
+			},
+			{
+				ResourceName:  corev1.ResourceMemory,
+				RestartPolicy: corev1.NotRequired,
+			},
+		}
+
+		// Use "add" if no resize policy exists, "replace" if it does
+		resizePolicyOp := "add"
+		if hasResizePolicy {
+			resizePolicyOp = "replace"
 		}
 
 		patches = append(patches, JSONPatch{
-			Op:    "add",
-			Path:  "/metadata/labels/rightsizer.io~1managed",
-			Value: "true",
+			Op:    resizePolicyOp,
+			Path:  fmt.Sprintf("/spec/containers/%d/resizePolicy", i),
+			Value: resizePolicy,
 		})
 	}
+
+	// Add labels for tracking
+	if pod.Labels == nil {
+		patches = append(patches, JSONPatch{
+			Op:    "add",
+			Path:  "/metadata/labels",
+			Value: map[string]string{},
+		})
+	}
+
+	patches = append(patches, JSONPatch{
+		Op:    "add",
+		Path:  "/metadata/labels/rightsizer.io~1managed",
+		Value: "true",
+	})
 
 	return patches
 }
@@ -497,7 +532,8 @@ func (ws *WebhookServer) getQoSClass(pod *corev1.Pod) corev1.PodQOSClass {
 	zeroQuantity := resource.MustParse("0")
 	isGuaranteed := true
 
-	for _, container := range pod.Spec.Containers {
+	for i := range pod.Spec.Containers {
+		container := &pod.Spec.Containers[i]
 		// Accumulate requests
 		for name, quantity := range container.Resources.Requests {
 			if value, exists := requests[name]; !exists {
@@ -647,7 +683,7 @@ func (wm *WebhookManager) Start(ctx context.Context) error {
 	case err := <-errChan:
 		return err
 	case <-ctx.Done():
-		return wm.server.Stop(context.Background())
+		return wm.server.Stop(ctx)
 	}
 }
 

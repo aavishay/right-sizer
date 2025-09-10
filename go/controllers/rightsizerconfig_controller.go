@@ -21,13 +21,6 @@ import (
 	"fmt"
 	"time"
 
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
-	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller"
-
 	"right-sizer/admission"
 	"right-sizer/api/v1alpha1"
 	"right-sizer/audit"
@@ -35,6 +28,13 @@ import (
 	"right-sizer/health"
 	"right-sizer/logger"
 	"right-sizer/metrics"
+
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 )
 
 // RightSizerConfigReconciler reconciles a RightSizerConfig object
@@ -239,9 +239,9 @@ func (r *RightSizerConfigReconciler) applyConfiguration(ctx context.Context, rsc
 	}
 
 	// Extract feature flags
-	enableInPlaceResize := false
+	updateResizePolicy := false
 	if rsc.Spec.FeatureGates != nil {
-		enableInPlaceResize = rsc.Spec.FeatureGates["EnableInPlaceResize"]
+		updateResizePolicy = rsc.Spec.FeatureGates["UpdateResizePolicy"]
 	}
 
 	// Extract new fields
@@ -377,7 +377,7 @@ func (r *RightSizerConfigReconciler) applyConfiguration(ctx context.Context, rsc
 		retryInterval,
 		metricsProvider,
 		prometheusURL,
-		enableInPlaceResize,
+		updateResizePolicy,
 		rsc.Spec.OperatorConfig.QPS,
 		int(rsc.Spec.OperatorConfig.Burst),
 		int(rsc.Spec.OperatorConfig.MaxConcurrentReconciles),

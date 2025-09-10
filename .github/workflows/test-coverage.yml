@@ -1,0 +1,195 @@
+name: Test Coverage
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - "go/**"
+      - ".github/workflows/test-coverage.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "go/**"
+      - ".github/workflows/test-coverage.yml"
+
+env:
+  GO_VERSION: "1.25"
+
+jobs:
+  test-coverage:
+    name: Test and Coverage
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+          cache-dependency-path: go/go.sum
+
+      - name: Install dependencies
+        working-directory: ./go
+        run: |
+          go mod download
+          go mod verify
+
+      - name: Run tests with coverage
+        working-directory: ./go
+        run: |
+          go test -v -race -coverprofile=coverage.out -covermode=atomic ./...
+          go tool cover -func=coverage.out -o coverage.txt
+          COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print $3}' | sed 's/%//')
+          echo "COVERAGE=$COVERAGE" >> $GITHUB_ENV
+          echo "Coverage: $COVERAGE%"
+
+      - name: Generate coverage report
+        working-directory: ./go
+        run: |
+          go tool cover -html=coverage.out -o coverage.html
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          file: ./go/coverage.out
+          flags: unittests
+          name: codecov-umbrella
+          fail_ci_if_error: false
+          verbose: true
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: Generate coverage badge
+        if: github.ref == 'refs/heads/main'
+        run: |
+          COVERAGE=${{ env.COVERAGE }}
+          COLOR="red"
+          if (( $(echo "$COVERAGE >= 80" | bc -l) )); then
+            COLOR="green"
+          elif (( $(echo "$COVERAGE >= 60" | bc -l) )); then
+            COLOR="yellow"
+          elif (( $(echo "$COVERAGE >= 40" | bc -l) )); then
+            COLOR="orange"
+          fi
+
+          echo "Creating badge with coverage: $COVERAGE% and color: $COLOR"
+
+          # Create badge JSON
+          cat > .github/badges/coverage.json <<EOF
+          {
+            "schemaVersion": 1,
+            "label": "coverage",
+            "message": "${COVERAGE}%",
+            "color": "$COLOR"
+          }
+          EOF
+
+      - name: Upload coverage artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-reports
+          path: |
+            go/coverage.out
+            go/coverage.txt
+            go/coverage.html
+          retention-days: 30
+
+      - name: Comment PR with coverage
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const coverage = process.env.COVERAGE;
+            const body = `## 📊 Test Coverage Report
+
+            **Coverage:** ${coverage}%
+
+            <details>
+            <summary>Coverage Details</summary>
+
+            \`\`\`
+            ${require('fs').readFileSync('go/coverage.txt', 'utf8')}
+            \`\`\`
+
+            </details>
+
+            ---
+            *Coverage report generated for commit ${context.sha.substring(0, 7)}*`;
+
+            // Find existing comment
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            const botComment = comments.find(comment =>
+              comment.user.type === 'Bot' &&
+              comment.body.includes('Test Coverage Report')
+            );
+
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: body
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: body
+              });
+            }
+
+      - name: Commit badge update
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add .github/badges/coverage.json || true
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Update coverage badge [skip ci]" && git push)
+
+  coverage-summary:
+    name: Coverage Summary
+    runs-on: ubuntu-latest
+    needs: [test-coverage]
+    if: always()
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download all coverage artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: coverage-artifacts
+
+      - name: Create coverage summary
+        run: |
+          echo "# 📊 Coverage Summary" > coverage-summary.md
+          echo "" >> coverage-summary.md
+          echo "## Right-Sizer Operator" >> coverage-summary.md
+          if [ -f coverage-artifacts/coverage-reports/coverage.txt ]; then
+            echo "\`\`\`" >> coverage-summary.md
+            tail -n 1 coverage-artifacts/coverage-reports/coverage.txt >> coverage-summary.md
+            echo "\`\`\`" >> coverage-summary.md
+          else
+            echo "No coverage data available" >> coverage-summary.md
+          fi
+
+          cat coverage-summary.md
+
+      - name: Upload summary
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-summary
+          path: coverage-summary.md
+          retention-days: 30

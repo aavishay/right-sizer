@@ -112,7 +112,7 @@ func TestUpdateFromCRD(t *testing.T) {
 		10*time.Second,                         // retryInterval
 		"prometheus",                           // metricsProvider
 		"http://prom:9090",                     // prometheusURL
-		true,                                   // enableInPlaceResize
+		true,                                   // updateResizePolicy
 		10.0,                                   // qps
 		20,                                     // burst
 		5,                                      // maxConcurrentReconciles
@@ -176,8 +176,8 @@ func TestUpdateFromCRD(t *testing.T) {
 		t.Errorf("Expected PrometheusURL to be 'http://prom:9090', got %s", cfg.PrometheusURL)
 	}
 
-	if !cfg.EnableInPlaceResize {
-		t.Error("Expected EnableInPlaceResize to be true")
+	if !cfg.UpdateResizePolicy {
+		t.Error("Expected UpdateResizePolicy to be true")
 	}
 
 	if cfg.ConfigSource != "crd" {
@@ -604,7 +604,7 @@ func TestThreadSafety(t *testing.T) {
 				5*time.Second,      // retryInterval
 				"metrics-server",   // metricsProvider
 				"",                 // prometheusURL
-				false,              // enableInPlaceResize
+				false,              // updateResizePolicy
 				10.0,               // qps
 				20,                 // burst
 				5,                  // maxConcurrentReconciles

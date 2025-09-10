@@ -104,10 +104,15 @@ rightsizerConfig:
 
   # Global constraints
   constraints:
+    maxChangePercentage: 50
+    minChangeThreshold: 5
     maxMemoryGB: 32
     maxCPUCores: 16
-    preventOOMKill: true
-    respectPodDisruptionBudget: true
+    cooldownPeriod: "5m"
+    maxConcurrentResizes: 10
+    respectPDB: true
+    respectHPA: true
+    respectVPA: true
 
   # Monitoring and metrics configuration
   monitoring:
@@ -250,7 +255,7 @@ rightsizerConfig:
 
   # Feature gates for experimental features
   featureGates:
-    enableInPlaceResize: true # Use in-place pod resizing (K8s 1.27+)
+    updateResizePolicy: true # Update resize policy for in-place pod resizing (K8s 1.27+)
     enablePredictiveScaling: false # ML-based predictive scaling
     enableCostOptimization: false # Cost-aware resource optimization
     enableMultiCluster: false # Multi-cluster support

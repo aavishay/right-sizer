@@ -1,0 +1,171 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: test-inplace-resize
+  labels:
+    test: inplace-resize
+    app: test-resize
+  annotations:
+    right-sizer.io/enable: "true"
+    right-sizer.io/mode: "aggressive"
+spec:
+  containers:
+  - name: nginx
+    image: nginx:alpine
+    ports:
+    - containerPort: 80
+    resources:
+      requests:
+        cpu: "200m"
+        memory: "128Mi"
+      limits:
+        cpu: "500m"
+        memory: "256Mi"
+    resizePolicy:
+    - resourceName: cpu
+      restartPolicy: NotRequired
+    - resourceName: memory
+      restartPolicy: NotRequired
+    env:
+    - name: NGINX_PORT
+      value: "80"
+    readinessProbe:
+      httpGet:
+        path: /
+        port: 80
+      initialDelaySeconds: 5
+      periodSeconds: 10
+    livenessProbe:
+      httpGet:
+        path: /
+        port: 80
+      initialDelaySeconds: 10
+      periodSeconds: 15
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: test-cpu-scaling
+  labels:
+    test: inplace-resize
+    app: cpu-test
+  annotations:
+    right-sizer.io/enable: "true"
+    right-sizer.io/strategy: "cpu-focused"
+spec:
+  containers:
+  - name: stress
+    image: busybox
+    command: ["sh", "-c"]
+    args:
+    - |
+      echo "Starting CPU test pod...";
+      while true; do
+        # Generate some CPU load
+        for i in $(seq 1 100); do
+          echo "scale=1000; 4*a(1)" | bc -l > /dev/null 2>&1 || true
+        done
+        sleep 30
+      done
+    resources:
+      requests:
+        cpu: "100m"
+        memory: "64Mi"
+      limits:
+        cpu: "1000m"
+        memory: "128Mi"
+    resizePolicy:
+    - resourceName: cpu
+      restartPolicy: NotRequired
+    - resourceName: memory
+      restartPolicy: NotRequired
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: test-memory-scaling
+  labels:
+    test: inplace-resize
+    app: memory-test
+  annotations:
+    right-sizer.io/enable: "true"
+    right-sizer.io/strategy: "memory-focused"
+spec:
+  containers:
+  - name: memory-consumer
+    image: busybox
+    command: ["sh", "-c"]
+    args:
+    - |
+      echo "Starting memory test pod...";
+      # Allocate 50MB of memory
+      dd if=/dev/zero of=/tmp/file1 bs=1M count=50;
+      # Keep the pod running
+      while true; do
+        echo "Memory test pod running at $(date)";
+        # Periodically access the memory
+        cat /tmp/file1 > /dev/null;
+        sleep 60;
+      done
+    resources:
+      requests:
+        cpu: "50m"
+        memory: "128Mi"
+      limits:
+        cpu: "100m"
+        memory: "512Mi"
+    resizePolicy:
+    - resourceName: cpu
+      restartPolicy: NotRequired
+    - resourceName: memory
+      restartPolicy: NotRequired
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: test-multi-container
+  labels:
+    test: inplace-resize
+    app: multi-container
+  annotations:
+    right-sizer.io/enable: "true"
+    right-sizer.io/mode: "balanced"
+spec:
+  containers:
+  - name: web
+    image: nginx:alpine
+    ports:
+    - containerPort: 80
+    resources:
+      requests:
+        cpu: "100m"
+        memory: "64Mi"
+      limits:
+        cpu: "200m"
+        memory: "128Mi"
+    resizePolicy:
+    - resourceName: cpu
+      restartPolicy: NotRequired
+    - resourceName: memory
+      restartPolicy: NotRequired
+  - name: sidecar
+    image: busybox
+    command: ["sh", "-c"]
+    args:
+    - |
+      while true; do
+        echo "[$(date)] Sidecar processing...";
+        sleep 10;
+      done
+    resources:
+      requests:
+        cpu: "25m"
+        memory: "32Mi"
+      limits:
+        cpu: "50m"
+        memory: "64Mi"
+    resizePolicy:
+    - resourceName: cpu
+      restartPolicy: NotRequired
+    - resourceName: memory
+      restartPolicy: NotRequired

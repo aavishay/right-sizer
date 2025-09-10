@@ -1,0 +1,268 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: real-events-collector-script
+  namespace: right-sizer
+data:
+  collector.py: |
+    #!/usr/bin/env python3
+    import json
+    import re
+    import time
+    from datetime import datetime
+    from collections import deque
+    from http.server import HTTPServer, BaseHTTPRequestHandler
+    import threading
+    import subprocess
+    import os
+
+    class EventsCollector:
+        def __init__(self, max_events=100):
+            self.events = deque(maxlen=max_events)
+            self.lock = threading.Lock()
+
+        def parse_log_line(self, line):
+            """Parse a log line for optimization events"""
+            # Pattern for resize events: "Pod namespace/name/container - Planned resize: CPU: X→Y, Memory: A→B"
+            resize_pattern = r'(\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}).*Pod (\S+)/(\S+)/(\S+) - Planned resize: CPU: (\S+)→(\S+), Memory: (\S+)→(\S+)'
+            match = re.search(resize_pattern, line)
+
+            if match:
+                timestamp_str, namespace, pod_name, container, cpu_from, cpu_to, mem_from, mem_to = match.groups()
+
+                # Calculate savings
+                cpu_savings = self.calculate_savings(cpu_from, cpu_to)
+                mem_savings = self.calculate_savings(mem_from, mem_to)
+
+                event = {
+                    "timestamp": datetime.now().isoformat() + "Z",
+                    "eventId": f"opt-{namespace}-{pod_name}-{int(time.time())}",
+                    "podName": pod_name,
+                    "namespace": namespace,
+                    "containerName": container,
+                    "operation": "resource_optimization",
+                    "reason": "Real-time optimization based on actual usage",
+                    "status": "completed",
+                    "action": "resource_change",
+                    "previousCPU": cpu_from,
+                    "newCPU": cpu_to,
+                    "previousMemory": mem_from,
+                    "newMemory": mem_to,
+                    "currentCPU": cpu_to,
+                    "currentMemory": mem_to,
+                    "savings": max(cpu_savings, mem_savings),
+                    "source": "real-metrics"
+                }
+                return event
+
+            # Pattern for scaling analysis
+            analysis_pattern = r'Scaling analysis - CPU: scale (\w+) \(usage: ([\d.]+)m?/([\d.]+)m?, ([\d.]+)%\), Memory: scale (\w+) \(usage: ([\d.]+)Mi?/([\d.]+)Mi?, ([\d.]+)%\)'
+            match = re.search(analysis_pattern, line)
+
+            if match:
+                cpu_direction, cpu_usage, cpu_limit, cpu_percent, mem_direction, mem_usage, mem_limit, mem_percent = match.groups()
+                # Store this for context but don't create an event yet
+                return None
+
+            return None
+
+        def calculate_savings(self, from_val, to_val):
+            """Calculate percentage savings"""
+            try:
+                # Remove units and convert to float
+                from_num = float(re.findall(r'[\d.]+', from_val)[0])
+                to_num = float(re.findall(r'[\d.]+', to_val)[0])
+
+                if from_num > 0:
+                    savings = ((from_num - to_num) / from_num) * 100
+                    return max(0, int(savings))
+            except:
+                pass
+            return 0
+
+        def collect_from_logs(self):
+            """Continuously collect events from Right Sizer logs"""
+            while True:
+                try:
+                    # Get logs from the last 5 minutes
+                    cmd = ["kubectl", "logs", "-n", "right-sizer",
+                           "-l", "app=right-sizer", "--since=5m",
+                           "--tail=1000", "-f"]
+
+                    process = subprocess.Popen(cmd, stdout=subprocess.PIPE,
+                                              stderr=subprocess.PIPE,
+                                              universal_newlines=True)
+
+                    for line in process.stdout:
+                        event = self.parse_log_line(line)
+                        if event:
+                            with self.lock:
+                                # Check if we already have this event
+                                exists = any(e['eventId'] == event['eventId']
+                                           for e in self.events)
+                                if not exists:
+                                    self.events.append(event)
+                                    print(f"Added event: {event['eventId']}")
+
+                except Exception as e:
+                    print(f"Error collecting logs: {e}")
+                    time.sleep(5)
+
+        def get_events(self):
+            """Get all collected events"""
+            with self.lock:
+                return list(self.events)
+
+    class EventsHTTPHandler(BaseHTTPRequestHandler):
+        def __init__(self, collector, *args, **kwargs):
+            self.collector = collector
+            super().__init__(*args, **kwargs)
+
+        def do_GET(self):
+            if self.path == '/events' or self.path == '/events.json':
+                events = self.collector.get_events()
+                response = {
+                    "events": events,
+                    "total": len(events),
+                    "source": "real-time-collector",
+                    "timestamp": datetime.now().isoformat() + "Z"
+                }
+
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.end_headers()
+                self.wfile.write(json.dumps(response, indent=2).encode())
+
+            elif self.path == '/health':
+                self.send_response(200)
+                self.send_header('Content-Type', 'text/plain')
+                self.end_headers()
+                self.wfile.write(b"OK")
+
+            else:
+                self.send_response(404)
+                self.end_headers()
+
+        def log_message(self, format, *args):
+            # Suppress default logging
+            pass
+
+    def main():
+        collector = EventsCollector(max_events=100)
+
+        # Start log collection in background thread
+        log_thread = threading.Thread(target=collector.collect_from_logs)
+        log_thread.daemon = True
+        log_thread.start()
+
+        # Create HTTP server
+        def handler(*args, **kwargs):
+            return EventsHTTPHandler(collector, *args, **kwargs)
+
+        port = 8083
+        server = HTTPServer(('0.0.0.0', port), handler)
+        print(f"Real Events Collector started on port {port}")
+        print("Collecting real optimization events from Right Sizer logs...")
+
+        server.serve_forever()
+
+    if __name__ == "__main__":
+        main()
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: real-events-collector
+  namespace: right-sizer
+  labels:
+    app: real-events-collector
+    component: events
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: real-events-collector
+  template:
+    metadata:
+      labels:
+        app: real-events-collector
+        component: events
+    spec:
+      serviceAccountName: right-sizer
+      containers:
+      - name: collector
+        image: python:3.9-slim
+        command: ["python", "/app/collector.py"]
+        ports:
+        - containerPort: 8083
+          name: http
+        env:
+        - name: PYTHONUNBUFFERED
+          value: "1"
+        volumeMounts:
+        - name: script
+          mountPath: /app
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 200m
+            memory: 256Mi
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8083
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8083
+          initialDelaySeconds: 5
+          periodSeconds: 5
+      volumes:
+      - name: script
+        configMap:
+          name: real-events-collector-script
+          defaultMode: 0755
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: optimization-events-server
+  namespace: right-sizer
+  labels:
+    app: real-events-collector
+    component: events
+spec:
+  type: ClusterIP
+  ports:
+  - port: 80
+    targetPort: 8083
+    protocol: TCP
+    name: http
+  selector:
+    app: real-events-collector
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: real-events-api
+  namespace: right-sizer
+  labels:
+    app: real-events-collector
+    component: events
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8083
+    targetPort: 8083
+    protocol: TCP
+    name: http
+  selector:
+    app: real-events-collector
