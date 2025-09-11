@@ -696,12 +696,10 @@ func (r *InPlaceRightSizer) applyInPlaceResize(ctx context.Context, pod *corev1.
 		}
 	}
 
-	// STEP 1: First, apply resize policy to all containers to enable in-place updates
-	logger.Info("📝 Step 1: Setting resize policy for pod %s/%s", pod.Namespace, pod.Name)
-	if err := r.applyResizePolicy(ctx, pod); err != nil {
-		logger.Warn("Failed to set resize policy for pod %s/%s: %v", pod.Namespace, pod.Name, err)
-		// Continue anyway as the resize policy might already be set
-	}
+	// STEP 1: Skip direct pod patching for resize policy
+	// Resize policies should only be set in parent resources (Deployments/StatefulSets/DaemonSets)
+	// not in pods directly. The parent resources should have already set the resize policy.
+	logger.Info("📝 Step 1: Skipping direct pod resize policy patch - relying on parent resource policies")
 
 	// Refresh pod state after resize policy update
 	time.Sleep(100 * time.Millisecond)
@@ -889,82 +887,13 @@ func (r *InPlaceRightSizer) applyInPlaceResize(ctx context.Context, pod *corev1.
 	return nil
 }
 
-// applyResizePolicy sets the resize policy for all containers in the pod
+// applyResizePolicy is deprecated - resize policies should only be set in parent resources
+// Direct pod patching for resize policy is not recommended
 func (r *InPlaceRightSizer) applyResizePolicy(ctx context.Context, pod *corev1.Pod) error {
-	// Check if UpdateResizePolicy feature flag is enabled
-	if r.Config == nil || !r.Config.UpdateResizePolicy {
-		logger.Info("📝 Skipping resize policy patch - UpdateResizePolicy feature flag is disabled")
-		return nil
-	}
-
-	containers := make([]ContainerResourcesPatch, 0, len(pod.Spec.Containers))
-
-	for _, container := range pod.Spec.Containers {
-		// Check if resize policy already exists and is correctly configured
-		hasCorrectPolicy := false
-		if container.ResizePolicy != nil {
-			cpuNotRequired := false
-			memNotRequired := false
-			for _, policy := range container.ResizePolicy {
-				if policy.ResourceName == corev1.ResourceCPU && policy.RestartPolicy == corev1.NotRequired {
-					cpuNotRequired = true
-				}
-				if policy.ResourceName == corev1.ResourceMemory && policy.RestartPolicy == corev1.NotRequired {
-					memNotRequired = true
-				}
-			}
-			hasCorrectPolicy = cpuNotRequired && memNotRequired
-		}
-
-		// Skip if already has correct policy
-		if hasCorrectPolicy {
-			continue
-		}
-
-		// Add resize policy set to NotRequired for both CPU and memory
-		resizePolicy := []corev1.ContainerResizePolicy{
-			{
-				ResourceName:  corev1.ResourceCPU,
-				RestartPolicy: corev1.NotRequired,
-			},
-			{
-				ResourceName:  corev1.ResourceMemory,
-				RestartPolicy: corev1.NotRequired,
-			},
-		}
-
-		containers = append(containers, ContainerResourcesPatch{
-			Name:         container.Name,
-			Resources:    container.Resources,
-			ResizePolicy: resizePolicy,
-		})
-	}
-
-	// Only apply if there are containers that need the policy
-	if len(containers) == 0 {
-		return nil
-	}
-
-	policyPatch := PodResizePatch{
-		Spec: PodSpecPatch{
-			Containers: containers,
-		},
-	}
-
-	patchData, err := json.Marshal(policyPatch)
-	if err != nil {
-		return fmt.Errorf("failed to marshal resize policy patch: %w", err)
-	}
-
-	_, err = r.ClientSet.CoreV1().Pods(pod.Namespace).Patch(
-		ctx,
-		pod.Name,
-		types.StrategicMergePatchType,
-		patchData,
-		metav1.PatchOptions{},
-	)
-
-	return err
+	// Resize policy should only be set in parent resources (Deployments/StatefulSets/DaemonSets)
+	// not in pods directly. Skipping direct pod patching.
+	logger.Info("📝 Skipping direct pod resize policy patch - policies should be set in parent resources only")
+	return nil
 }
 
 // shouldProcessNamespace checks if a namespace should be processed based on include/exclude lists

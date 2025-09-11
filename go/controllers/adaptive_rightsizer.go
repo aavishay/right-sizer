@@ -705,12 +705,9 @@ func (r *AdaptiveRightSizer) updatePodInPlace(ctx context.Context, update Resour
 		Value interface{} `json:"value"`
 	}
 
-	// STEP 1: Apply resize policy to the pod if needed
-	log.Printf("📝 Step 1: Setting resize policy for pod %s/%s container %s", update.Namespace, update.Name, update.ContainerName)
-	if err := r.applyResizePolicyForContainer(ctx, &pod, containerIndex); err != nil {
-		log.Printf("⚠️  Failed to set resize policy: %v", err)
-		// Continue anyway as it might already be set
-	}
+	// STEP 1: Skip direct pod patching for resize policy
+	// Resize policy should only be set in parent resources (Deployments/StatefulSets/DaemonSets)
+	log.Printf("📝 Step 1: Skipping direct pod resize policy patch - policies should be set in parent resources only")
 
 	// Refresh pod state after policy update
 	time.Sleep(100 * time.Millisecond)
@@ -916,93 +913,6 @@ func (r *AdaptiveRightSizer) updatePodInPlace(ctx context.Context, update Resour
 
 	log.Printf("🎯 %s in pod %s/%s", successMsg, update.Namespace, update.Name)
 	return successMsg, nil
-}
-
-// applyResizePolicyForContainer sets the resize policy for a specific container
-func (r *AdaptiveRightSizer) applyResizePolicyForContainer(ctx context.Context, pod *corev1.Pod, containerIndex int) error {
-	// Check if UpdateResizePolicy feature flag is enabled
-	if r.Config == nil || !r.Config.UpdateResizePolicy {
-		log.Printf("📝 Skipping resize policy patch for container - UpdateResizePolicy feature flag is disabled")
-		return nil
-	}
-
-	if containerIndex < 0 || containerIndex >= len(pod.Spec.Containers) {
-		return fmt.Errorf("invalid container index: %d", containerIndex)
-	}
-
-	container := &pod.Spec.Containers[containerIndex]
-
-	// Check if resize policy already exists and is correctly configured
-	hasCorrectPolicy := false
-	if container.ResizePolicy != nil {
-		cpuNotRequired := false
-		memNotRequired := false
-		for _, policy := range container.ResizePolicy {
-			if policy.ResourceName == corev1.ResourceCPU && policy.RestartPolicy == corev1.NotRequired {
-				cpuNotRequired = true
-			}
-			if policy.ResourceName == corev1.ResourceMemory && policy.RestartPolicy == corev1.NotRequired {
-				memNotRequired = true
-			}
-		}
-		hasCorrectPolicy = cpuNotRequired && memNotRequired
-	}
-
-	// Skip if already has correct policy
-	if hasCorrectPolicy {
-		return nil
-	}
-
-	// Create resize policy
-	resizePolicy := []corev1.ContainerResizePolicy{
-		{
-			ResourceName:  corev1.ResourceCPU,
-			RestartPolicy: corev1.NotRequired,
-		},
-		{
-			ResourceName:  corev1.ResourceMemory,
-			RestartPolicy: corev1.NotRequired,
-		},
-	}
-
-	// Determine if we need to add or replace
-	resizePolicyOp := "add"
-	if container.ResizePolicy != nil && len(container.ResizePolicy) > 0 {
-		resizePolicyOp = "replace"
-	}
-
-	// Create JSON patch
-	patchOps := []struct {
-		Op    string      `json:"op"`
-		Path  string      `json:"path"`
-		Value interface{} `json:"value"`
-	}{
-		{
-			Op:    resizePolicyOp,
-			Path:  fmt.Sprintf("/spec/containers/%d/resizePolicy", containerIndex),
-			Value: resizePolicy,
-		},
-	}
-
-	patchData, err := json.Marshal(patchOps)
-	if err != nil {
-		return fmt.Errorf("failed to marshal resize policy patch: %w", err)
-	}
-
-	// Apply the patch (note: not using resize subresource for policy update)
-	_, err = r.ClientSet.CoreV1().Pods(pod.Namespace).Patch(
-		ctx,
-		pod.Name,
-		types.JSONPatchType,
-		patchData,
-		metav1.PatchOptions{},
-	)
-
-	if err != nil {
-		return fmt.Errorf("failed to apply resize policy: %w", err)
-	}
-
-	return nil
 }
 
 // ensureParentHasResizePolicy updates the parent resource (Deployment/StatefulSet/DaemonSet) with resize policy
