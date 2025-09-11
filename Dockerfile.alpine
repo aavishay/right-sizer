@@ -68,8 +68,8 @@ WORKDIR /app
 EXPOSE 8081
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD ["/app/right-sizer", "--health-check"]
+# HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+#   CMD ["/app/right-sizer", "--health-check"]
 
 # Run the binary
 ENTRYPOINT ["/app/right-sizer"]
