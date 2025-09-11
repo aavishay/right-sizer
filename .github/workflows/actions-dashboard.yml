@@ -1,0 +1,490 @@
+name: GitHub Actions Dashboard
+
+on:
+  schedule:
+    # Run daily at 00:00 UTC to generate dashboard
+    - cron: "0 0 * * *"
+  workflow_dispatch:
+  workflow_run:
+    workflows: ["GitHub Actions Monitoring"]
+    types:
+      - completed
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+jobs:
+  generate-dashboard:
+    name: Generate Actions Dashboard
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 30  # Get some history for trends
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests matplotlib pandas plotly kaleido
+
+      - name: Generate dashboard
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python3 << 'EOF'
+          import requests
+          import json
+          import os
+          import pandas as pd
+          import matplotlib.pyplot as plt
+          import plotly.graph_objects as go
+          import plotly.express as px
+          from plotly.subplots import make_subplots
+          from datetime import datetime, timedelta
+          from dateutil import parser
+          import base64
+
+          # Configuration
+          REPO = "${{ github.repository }}"
+          TOKEN = os.environ["GH_TOKEN"]
+
+          headers = {
+              "Authorization": f"Bearer {TOKEN}",
+              "Accept": "application/vnd.github+json",
+              "X-GitHub-Api-Version": "2022-11-28"
+          }
+
+          def get_workflow_runs(days=30):
+              """Get workflow runs from the last N days"""
+              since = datetime.utcnow() - timedelta(days=days)
+              url = f"https://api.github.com/repos/{REPO}/actions/runs"
+
+              all_runs = []
+              page = 1
+
+              while len(all_runs) < 500 and page <= 10:  # Limit to prevent excessive API calls
+                  params = {
+                      "per_page": 100,
+                      "page": page,
+                      "created": f">={since.isoformat()}Z"
+                  }
+
+                  response = requests.get(url, headers=headers, params=params)
+                  response.raise_for_status()
+                  runs = response.json()["workflow_runs"]
+
+                  if not runs:
+                      break
+
+                  all_runs.extend(runs)
+                  page += 1
+
+              return all_runs
+
+          def create_plotly_charts(runs_df):
+              """Create interactive Plotly charts"""
+
+              # 1. Success Rate Over Time
+              daily_stats = runs_df.groupby(runs_df['created_date']).agg({
+                  'conclusion': ['count', lambda x: (x == 'success').sum()]
+              }).round(2)
+              daily_stats.columns = ['total_runs', 'successful_runs']
+              daily_stats['success_rate'] = (daily_stats['successful_runs'] / daily_stats['total_runs'] * 100).round(1)
+              daily_stats = daily_stats.reset_index()
+
+              fig1 = go.Figure()
+              fig1.add_trace(go.Scatter(
+                  x=daily_stats['created_date'],
+                  y=daily_stats['success_rate'],
+                  mode='lines+markers',
+                  name='Success Rate %',
+                  line=dict(color='#2E8B57', width=3),
+                  marker=dict(size=8)
+              ))
+              fig1.update_layout(
+                  title='Daily Success Rate Trend',
+                  xaxis_title='Date',
+                  yaxis_title='Success Rate (%)',
+                  yaxis=dict(range=[0, 100]),
+                  height=400,
+                  template='plotly_white'
+              )
+              fig1.write_html("success_rate_trend.html")
+
+              # 2. Workflow Performance
+              workflow_stats = runs_df.groupby('workflow_name').agg({
+                  'duration_minutes': ['mean', 'count'],
+                  'conclusion': lambda x: (x == 'success').sum() / len(x) * 100
+              }).round(2)
+              workflow_stats.columns = ['avg_duration', 'total_runs', 'success_rate']
+              workflow_stats = workflow_stats.reset_index()
+
+              fig2 = make_subplots(
+                  rows=1, cols=2,
+                  subplot_titles=('Average Duration (minutes)', 'Success Rate (%)'),
+                  specs=[[{"secondary_y": False}, {"secondary_y": False}]]
+              )
+
+              fig2.add_trace(
+                  go.Bar(x=workflow_stats['workflow_name'],
+                        y=workflow_stats['avg_duration'],
+                        name='Duration',
+                        marker_color='#4472C4'),
+                  row=1, col=1
+              )
+
+              fig2.add_trace(
+                  go.Bar(x=workflow_stats['workflow_name'],
+                        y=workflow_stats['success_rate'],
+                        name='Success Rate',
+                        marker_color='#70AD47'),
+                  row=1, col=2
+              )
+
+              fig2.update_layout(height=400, template='plotly_white', showlegend=False)
+              fig2.write_html("workflow_performance.html")
+
+              # 3. Duration Distribution
+              fig3 = px.box(runs_df, x='workflow_name', y='duration_minutes',
+                           title='Workflow Duration Distribution',
+                           color='workflow_name')
+              fig3.update_layout(height=400, template='plotly_white', showlegend=False)
+              fig3.update_xaxes(tickangle=45)
+              fig3.write_html("duration_distribution.html")
+
+              # 4. Runs Over Time
+              daily_runs = runs_df.groupby(['created_date', 'workflow_name']).size().reset_index(name='count')
+
+              fig4 = px.line(daily_runs, x='created_date', y='count', color='workflow_name',
+                            title='Daily Workflow Runs',
+                            markers=True)
+              fig4.update_layout(height=400, template='plotly_white')
+              fig4.write_html("runs_over_time.html")
+
+              return {
+                  'daily_stats': daily_stats,
+                  'workflow_stats': workflow_stats
+              }
+
+          def generate_html_dashboard(stats, runs_df):
+              """Generate complete HTML dashboard"""
+
+              current_time = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+              total_runs = len(runs_df)
+              success_rate = (runs_df['conclusion'] == 'success').sum() / total_runs * 100 if total_runs > 0 else 0
+              avg_duration = runs_df['duration_minutes'].mean()
+
+              # Read chart HTMLs
+              charts = {}
+              for chart_name in ['success_rate_trend', 'workflow_performance', 'duration_distribution', 'runs_over_time']:
+                  try:
+                      with open(f"{chart_name}.html", 'r') as f:
+                          content = f.read()
+                          # Extract just the chart div and script
+                          start = content.find('<div id="')
+                          end = content.find('</script>', content.find('Plotly.newPlot')) + 9
+                          charts[chart_name] = content[start:end] if start != -1 and end != -1 else f"<p>Chart {chart_name} failed to load</p>"
+                  except:
+                      charts[chart_name] = f"<p>Chart {chart_name} not available</p>"
+
+              html_template = f"""
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+              <meta charset="UTF-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1.0">
+              <title>GitHub Actions Dashboard - {REPO}</title>
+              <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+              <style>
+                  body {{
+                      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+                      margin: 0;
+                      padding: 20px;
+                      background-color: #f6f8fa;
+                      color: #24292f;
+                  }}
+                  .container {{
+                      max-width: 1200px;
+                      margin: 0 auto;
+                      background: white;
+                      border-radius: 6px;
+                      box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+                      padding: 30px;
+                  }}
+                  .header {{
+                      text-align: center;
+                      margin-bottom: 40px;
+                      border-bottom: 1px solid #e1e4e8;
+                      padding-bottom: 20px;
+                  }}
+                  .header h1 {{
+                      color: #24292f;
+                      margin: 0;
+                      font-size: 2em;
+                  }}
+                  .header p {{
+                      color: #656d76;
+                      margin: 10px 0 0 0;
+                  }}
+                  .metrics-grid {{
+                      display: grid;
+                      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                      gap: 20px;
+                      margin-bottom: 40px;
+                  }}
+                  .metric-card {{
+                      background: #f6f8fa;
+                      border: 1px solid #d0d7de;
+                      border-radius: 6px;
+                      padding: 20px;
+                      text-align: center;
+                  }}
+                  .metric-value {{
+                      font-size: 2em;
+                      font-weight: bold;
+                      margin-bottom: 5px;
+                  }}
+                  .metric-label {{
+                      color: #656d76;
+                      font-size: 0.9em;
+                  }}
+                  .success {{ color: #1f883d; }}
+                  .warning {{ color: #bf8700; }}
+                  .danger {{ color: #d1242f; }}
+                  .chart-container {{
+                      margin-bottom: 40px;
+                      border: 1px solid #d0d7de;
+                      border-radius: 6px;
+                      padding: 20px;
+                  }}
+                  .chart-title {{
+                      font-size: 1.2em;
+                      font-weight: bold;
+                      margin-bottom: 15px;
+                      color: #24292f;
+                  }}
+                  .footer {{
+                      text-align: center;
+                      margin-top: 40px;
+                      padding-top: 20px;
+                      border-top: 1px solid #e1e4e8;
+                      color: #656d76;
+                      font-size: 0.9em;
+                  }}
+                  .grid-2 {{
+                      display: grid;
+                      grid-template-columns: 1fr 1fr;
+                      gap: 20px;
+                  }}
+                  @media (max-width: 768px) {{
+                      .grid-2 {{
+                          grid-template-columns: 1fr;
+                      }}
+                  }}
+              </style>
+          </head>
+          <body>
+              <div class="container">
+                  <div class="header">
+                      <h1>🚀 GitHub Actions Dashboard</h1>
+                      <p>Repository: <strong>{REPO}</strong></p>
+                      <p>Last updated: {current_time}</p>
+                  </div>
+
+                  <div class="metrics-grid">
+                      <div class="metric-card">
+                          <div class="metric-value {'success' if success_rate >= 95 else 'warning' if success_rate >= 80 else 'danger'}">
+                              {success_rate:.1f}%
+                          </div>
+                          <div class="metric-label">Success Rate (30d)</div>
+                      </div>
+                      <div class="metric-card">
+                          <div class="metric-value">{total_runs}</div>
+                          <div class="metric-label">Total Runs (30d)</div>
+                      </div>
+                      <div class="metric-card">
+                          <div class="metric-value">{avg_duration:.1f}m</div>
+                          <div class="metric-label">Avg Duration</div>
+                      </div>
+                      <div class="metric-card">
+                          <div class="metric-value">{len(runs_df['workflow_name'].unique())}</div>
+                          <div class="metric-label">Active Workflows</div>
+                      </div>
+                  </div>
+
+                  <div class="chart-container">
+                      <div class="chart-title">📈 Success Rate Trend</div>
+                      {charts['success_rate_trend']}
+                  </div>
+
+                  <div class="grid-2">
+                      <div class="chart-container">
+                          <div class="chart-title">⚡ Workflow Performance</div>
+                          {charts['workflow_performance']}
+                      </div>
+                      <div class="chart-container">
+                          <div class="chart-title">⏱️ Duration Distribution</div>
+                          {charts['duration_distribution']}
+                      </div>
+                  </div>
+
+                  <div class="chart-container">
+                      <div class="chart-title">📊 Runs Over Time</div>
+                      {charts['runs_over_time']}
+                  </div>
+
+                  <div class="footer">
+                      <p>Generated automatically by GitHub Actions Dashboard workflow</p>
+                      <p>📊 <a href="https://github.com/{REPO}/actions">View Actions</a> |
+                         🔧 <a href="https://github.com/{REPO}/actions/workflows/actions-dashboard.yml">Workflow</a></p>
+                  </div>
+              </div>
+          </body>
+          </html>
+              """
+
+              with open("dashboard.html", "w") as f:
+                  f.write(html_template)
+
+              print("✅ Generated HTML dashboard")
+
+          # Main execution
+          try:
+              print("Fetching workflow runs...")
+              runs = get_workflow_runs(30)
+              print(f"Found {len(runs)} runs in the last 30 days")
+
+              if not runs:
+                  print("No runs found, creating empty dashboard")
+                  # Create minimal dashboard
+                  with open("dashboard.html", "w") as f:
+                      f.write(f"""
+                      <html><body style="font-family: Arial, sans-serif; text-align: center; padding: 50px;">
+                      <h1>GitHub Actions Dashboard</h1>
+                      <p>No workflow runs found in the last 30 days for {REPO}</p>
+                      <p>Generated: {datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")}</p>
+                      </body></html>
+                      """)
+                  exit(0)
+
+              # Process data
+              print("Processing data...")
+              df_data = []
+              for run in runs:
+                  if run['created_at'] and run['updated_at']:
+                      created = parser.parse(run['created_at'])
+                      updated = parser.parse(run['updated_at'])
+                      duration = (updated - created).total_seconds() / 60  # Convert to minutes
+
+                      df_data.append({
+                          'id': run['id'],
+                          'workflow_name': run['name'],
+                          'status': run['status'],
+                          'conclusion': run['conclusion'],
+                          'created_at': created,
+                          'created_date': created.date(),
+                          'duration_minutes': duration,
+                          'run_number': run['run_number'],
+                          'event': run['event'],
+                          'actor': run.get('actor', {}).get('login', 'unknown'),
+                          'head_branch': run.get('head_branch', 'unknown')
+                      })
+
+              runs_df = pd.DataFrame(df_data)
+
+              print("Creating charts...")
+              stats = create_plotly_charts(runs_df)
+
+              print("Generating dashboard...")
+              generate_html_dashboard(stats, runs_df)
+
+              print("✅ Dashboard generation completed")
+
+          except Exception as e:
+              print(f"❌ Error generating dashboard: {e}")
+              import traceback
+              traceback.print_exc()
+
+              # Create error dashboard
+              with open("dashboard.html", "w") as f:
+                  f.write(f"""
+                  <html><body style="font-family: Arial, sans-serif; text-align: center; padding: 50px;">
+                  <h1>GitHub Actions Dashboard</h1>
+                  <p>❌ Error generating dashboard: {e}</p>
+                  <p>Generated: {datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")}</p>
+                  </body></html>
+                  """)
+              exit(1)
+          EOF
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      - name: Upload dashboard artifact
+        uses: actions/upload-pages-artifact@v2
+        with:
+          path: dashboard.html
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v3
+
+      - name: Update README with dashboard link
+        run: |
+          # Add or update dashboard link in README
+          if [ -f README.md ]; then
+            # Create backup
+            cp README.md README.md.bak
+
+            # Check if dashboard link already exists
+            if grep -q "Actions Dashboard" README.md; then
+              # Update existing link
+              sed -i 's|!\[Actions Dashboard\].*|![Actions Dashboard](https://img.shields.io/badge/Actions-Dashboard-blue?style=flat\&logo=github) [View Dashboard](https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/dashboard.html)|' README.md
+            else
+              # Add new badge after existing badges
+              if grep -q "^\[!" README.md; then
+                # Find the last badge line and add after it
+                awk '/^\[!.*/ {badges=badges $0 "\n"; next} !found && badges {print badges "[![Actions Dashboard](https://img.shields.io/badge/Actions-Dashboard-blue?style=flat&logo=github)]](https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/dashboard.html)"; print; found=1; next} {print}' README.md > README.md.tmp && mv README.md.tmp README.md
+              else
+                # No badges found, add at the top
+                echo "[![Actions Dashboard](https://img.shields.io/badge/Actions-Dashboard-blue?style=flat&logo=github)](https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/dashboard.html)" > README.md.tmp
+                echo "" >> README.md.tmp
+                cat README.md >> README.md.tmp
+                mv README.md.tmp README.md
+              fi
+            fi
+
+            echo "✅ Updated README with dashboard link"
+          fi
+
+      - name: Commit dashboard updates
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add README.md
+          if git diff --staged --quiet; then
+            echo "No README changes to commit"
+          else
+            git commit -m "Update Actions Dashboard link in README [skip ci]"
+            git push
+            echo "✅ Committed README updates"
+          fi
+
+      - name: Output dashboard URL
+        run: |
+          echo "### 📊 Actions Dashboard Published" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Dashboard URL:** https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/dashboard.html" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "The dashboard will be updated automatically:" >> $GITHUB_STEP_SUMMARY
+          echo "- Daily at 00:00 UTC" >> $GITHUB_STEP_SUMMARY
+          echo "- After each monitoring workflow run" >> $GITHUB_STEP_SUMMARY
+          echo "- Manually via workflow dispatch" >> $GITHUB_STEP_SUMMARY
