@@ -1,6 +1,6 @@
 name: Release
 
-"on":
+on:
   push:
     tags:
       - "v*.*.*"
@@ -40,15 +40,11 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
           go-version: "1.25.0"
-          cache: true
-          cache-dependency-path: go/go.sum
 
       - name: Get version
         id: version
@@ -59,55 +55,28 @@ jobs:
             VERSION="${GITHUB_REF#refs/tags/}"
           fi
           echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
-          echo "VERSION_SHORT=${VERSION#v}" >> $GITHUB_OUTPUT
-          echo "Building version: ${VERSION}"
 
       - name: Build binary
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
-          CGO_ENABLED: 0
         run: |
           cd go
-          VERSION="${{ steps.version.outputs.VERSION }}"
-          BUILD_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-          GIT_COMMIT=${GITHUB_SHA::8}
-
-          BINARY_NAME="right-sizer-${GOOS}-${GOARCH}"
-          if [ "$GOOS" = "windows" ]; then
-            BINARY_NAME="${BINARY_NAME}.exe"
-          fi
-
-          go build -ldflags="-w -s -X main.Version=${VERSION} -X main.BuildTime=${BUILD_TIME} -X main.GitCommit=${GIT_COMMIT}" \
-            -o "../${BINARY_NAME}" \
-            main.go
-
+          go build -o "../right-sizer-${GOOS}-${GOARCH}" main.go
           cd ..
-          chmod +x "${BINARY_NAME}" || true
-
-          # Create archive
-          if [ "$GOOS" = "windows" ]; then
-            zip "right-sizer-${VERSION}-${GOOS}-${GOARCH}.zip" "${BINARY_NAME}" README.md LICENSE
-          else
-            tar czf "right-sizer-${VERSION}-${GOOS}-${GOARCH}.tar.gz" "${BINARY_NAME}" README.md LICENSE
-          fi
 
       - name: Upload binary artifact
         uses: actions/upload-artifact@v4
         with:
           name: binary-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: |
-            right-sizer-*.tar.gz
-            right-sizer-*.zip
-          retention-days: 1
+          path: right-sizer-${{ matrix.goos }}-${{ matrix.goarch }}
 
   build-docker:
     runs-on: ubuntu-latest
+    needs: [build-binaries]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -118,45 +87,19 @@ jobs:
       - name: Log in to Docker Hub
         uses: docker/login-action@v3
         with:
-          registry: docker.io
+          registry: ${{ env.REGISTRY }}
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Log in to Docker Hub (Secondary)
-        if: github.event_name != 'workflow_dispatch'
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Get version from VERSION file
+      - name: Get version
         id: version
         run: |
-          # Read version from VERSION file (source of truth)
-          if [ -f VERSION ]; then
-            VERSION=$(cat VERSION)
-            echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
-            echo "Version from VERSION file: ${VERSION}"
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            VERSION="${{ github.event.inputs.tag }}"
           else
-            echo "❌ VERSION file not found"
-            exit 1
+            VERSION="${GITHUB_REF#refs/tags/}"
           fi
-
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=raw,value=${{ steps.version.outputs.VERSION }}
-            type=raw,value=${{ steps.version.outputs.VERSION }}-${{ github.run_number }}
-            type=ref,event=branch
-            type=ref,event=pr
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest,enable={{is_default_branch}}
-            type=sha,prefix=sha-
+          echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
@@ -164,311 +107,35 @@ jobs:
           context: .
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.VERSION }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          build-args: |
-            VERSION=${{ steps.version.outputs.VERSION }}
-            BUILD_DATE=${{ github.event.repository.updated_at }}
-            GIT_COMMIT=${{ github.sha }}
-
-  build-helm-chart:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Get version from VERSION file
-        id: version
-        run: |
-          # Read version from VERSION file (source of truth)
-          if [ -f VERSION ]; then
-            VERSION=$(cat VERSION)
-            echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
-            echo "Version from VERSION file: ${VERSION}"
-          else
-            echo "❌ VERSION file not found"
-            exit 1
-          fi
-
-      - name: Update Helm chart version and documentation
-        run: |
-          VERSION="${{ steps.version.outputs.VERSION }}"
-
-          echo "🏷️ Updating Helm chart and documentation to version $VERSION"
-
-          # Update Helm chart version
-          sed -i "s/^version:.*/version: ${VERSION}/" helm/Chart.yaml
-          sed -i "s/^appVersion:.*/appVersion: \"${VERSION}\"/" helm/Chart.yaml
-
-          # Update all README files with new version
-          chmod +x scripts/update-versions.sh
-          ./scripts/update-versions.sh "$VERSION" || {
-            echo "⚠️ Version update script failed, but continuing with release"
-            echo "Manual version updates may be needed in documentation"
-          }
-
-          # Show what was updated
-          echo "📊 Updated files:"
-          git status --porcelain | sed 's/^/  /' || echo "  No additional changes from version script"
-
-          echo "✅ Chart version updated to: $(grep '^version:' helm/Chart.yaml | sed 's/version: *//')"
-          echo "✅ App version updated to: $(grep '^appVersion:' helm/Chart.yaml | sed 's/appVersion: *//' | tr -d '"')"
-
-      - name: Log in to Docker Hub for OCI
-        uses: docker/login-action@v3
-        with:
-          registry: registry-1.docker.io
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Log in to Helm registry
-        run: |
-          echo "${{ secrets.DOCKERHUB_TOKEN }}" | helm registry login registry-1.docker.io -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
-
-      - name: Package Helm chart
-        run: |
-          VERSION="${{ steps.version.outputs.VERSION }}"
-          CHART_NAME="right-sizer"
-
-          # Try helm package first, but use tar as fallback
-          echo "Attempting to package Helm chart..."
-          if helm package helm/ 2>/dev/null; then
-            echo "✅ Helm package succeeded"
-          else
-            echo "⚠️ Helm package failed, using tar as fallback..."
-            # Package using tar as a workaround
-            tar -czf "${CHART_NAME}-${VERSION}.tgz" -C . helm
-            echo "✅ Created package using tar"
-          fi
-
-          # Create a copy for the GitHub release artifact with descriptive name
-          cp ${CHART_NAME}-${VERSION}.tgz right-sizer-helm-${VERSION}.tgz
-
-          echo "Packaged charts:"
-          ls -la *.tgz
-
-      - name: Push Helm chart to OCI registry
-        run: |
-          VERSION="${{ steps.version.outputs.VERSION }}"
-
-          echo "🚀 Publishing Helm chart to OCI registry..."
-          echo "Chart version: $VERSION"
-
-          # Use the original chart file name for OCI publishing
-          CHART_FILE="right-sizer-${VERSION}.tgz"
-
-          echo "Looking for chart file: $CHART_FILE"
-          ls -la *.tgz
-
-          if [[ -f "$CHART_FILE" ]]; then
-            echo "Publishing $CHART_FILE to OCI registry..."
-
-            # Verify chart file and add debugging
-            echo "Chart file details:"
-            file "$CHART_FILE"
-            echo "Chart file size: $(ls -lh "$CHART_FILE" | awk '{print $5}')"
-
-            # Push to Docker Hub OCI registry with enhanced debugging
-            echo "Pushing to OCI registry: oci://registry-1.docker.io/aavishay"
-            helm push "$CHART_FILE" oci://registry-1.docker.io/aavishay --debug
-
-            echo "✅ Successfully pushed to OCI registry"
-          else
-            echo "❌ Chart file not found. Available files:"
-            ls -la *.tgz || echo "No .tgz files found"
-            exit 1
-          fi
-
-          echo "✅ Helm chart packaged successfully for release artifact"
-
-      - name: Upload Helm chart artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: helm-chart
-          path: right-sizer-helm-*.tgz
-          retention-days: 1
 
   create-release:
-    needs: [build-binaries, build-docker, build-helm-chart]
     runs-on: ubuntu-latest
+    needs: [build-docker]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      - name: Get version from VERSION file
+      - name: Get version
         id: version
         run: |
-          # Read version from VERSION file (source of truth)
-          if [ -f VERSION ]; then
-            VERSION=$(cat VERSION)
-            echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
-            echo "Version from VERSION file: ${VERSION}"
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            VERSION="${{ github.event.inputs.tag }}"
           else
-            echo "❌ VERSION file not found"
-            exit 1
+            VERSION="${GITHUB_REF#refs/tags/}"
           fi
+          echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
 
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
           path: artifacts/
 
-      - name: Move artifacts to release directory
-        run: |
-          mkdir -p release
-          find artifacts -type f \( -name "*.tar.gz" -o -name "*.zip" -o -name "*.tgz" \) -exec mv {} release/ \;
-          ls -la release/
-
-      - name: Generate changelog
-        id: changelog
-        run: |
-          # Get the previous tag
-          PREV_TAG=$(git describe --tags --abbrev=0 ${{ steps.version.outputs.VERSION }}^ 2>/dev/null || echo "")
-
-          if [ -z "$PREV_TAG" ]; then
-            echo "This is the first release!" > changelog.md
-          else
-            echo "## What's Changed" > changelog.md
-            echo "" >> changelog.md
-
-            # Get commit messages between tags
-            git log --pretty=format:"* %s (%an)" ${PREV_TAG}..${{ steps.version.outputs.VERSION }} >> changelog.md
-          fi
-
-          echo "" >> changelog.md
-          echo "### Docker Images" >> changelog.md
-          echo "" >> changelog.md
-          echo "### Docker Hub" >> changelog.md
-          echo '```bash' >> changelog.md
-          echo "# Latest version" >> changelog.md
-          echo "docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.VERSION }}" >> changelog.md
-          echo "" >> changelog.md
-          echo "# With build ID" >> changelog.md
-          echo "docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.VERSION }}-${{ github.run_number }}" >> changelog.md
-          echo "" >> changelog.md
-          echo "# By build number" >> changelog.md
-          echo "docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:v${{ github.run_number }}" >> changelog.md
-          echo '```' >> changelog.md
-          echo "" >> changelog.md
-          echo "## Helm Installation" >> changelog.md
-          echo '```bash' >> changelog.md
-          echo "helm install right-sizer right-sizer-helm-${{ steps.version.outputs.VERSION }}.tgz" >> changelog.md
-          echo '```' >> changelog.md
-          echo "" >> changelog.md
-          echo "## Checksums" >> changelog.md
-          echo '```' >> changelog.md
-          cd release && sha256sum * >> ../changelog.md
-          cd ..
-          echo '```' >> changelog.md
-
-          cat changelog.md
-
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.VERSION }}
           name: Release ${{ steps.version.outputs.VERSION }}
-          body_path: changelog.md
-          draft: false
-          prerelease: ${{ contains(steps.version.outputs.VERSION, '-rc') || contains(steps.version.outputs.VERSION, '-beta') || contains(steps.version.outputs.VERSION, '-alpha') }}
-          files: release/*
-          generate_release_notes: true
-
-      - name: Update Release Summary
-        run: |
-          echo "## 🎉 Release ${{ steps.version.outputs.VERSION }} Published!" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### 📦 Artifacts" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "The following artifacts were published:" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          ls -1 release/ | while read file; do
-            echo "- \`$file\`" >> $GITHUB_STEP_SUMMARY
-          done
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### 🐳 Docker Images" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.VERSION }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "- \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.VERSION }}-${{ github.run_number }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "- \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:v${{ github.run_number }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### 📝 Release Page" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "[View Release](https://github.com/${{ github.repository }}/releases/tag/${{ steps.version.outputs.VERSION }})" >> $GITHUB_STEP_SUMMARY
-
-  publish-helm-chart:
-    needs: create-release
-    runs-on: ubuntu-latest
-    if: github.event_name != 'workflow_dispatch'
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Configure Git
-        run: |
-          git config user.name "${{ github.actor }}"
-          git config user.email "${{ github.actor }}@users.noreply.github.com"
-
-      - name: Install Helm
-        uses: azure/setup-helm@v4
-
-      - name: Package Helm chart
-        run: |
-          # Get version from Chart.yaml
-          VERSION=$(grep '^version:' helm/Chart.yaml | awk '{print $2}')
-          CHART_NAME="right-sizer"
-
-          # Create temp directory for charts
-          mkdir -p /tmp/helm-charts/
-
-          # Try helm package first, but use tar as fallback
-          echo "Attempting to package Helm chart..."
-          if helm package helm/ -d /tmp/helm-charts/ 2>/dev/null; then
-            echo "✅ Helm package succeeded"
-          else
-            echo "⚠️ Helm package failed, using tar as fallback..."
-            # Package using tar as a workaround
-            tar -czf "/tmp/helm-charts/${CHART_NAME}-${VERSION}.tgz" -C . helm
-            echo "✅ Created package using tar"
-          fi
-
-          ls -la /tmp/helm-charts/
-
-      - name: Create or update gh-pages branch
-        run: |
-          # Check if gh-pages branch exists
-          if git ls-remote --heads origin gh-pages | grep gh-pages; then
-            echo "gh-pages branch exists, checking out..."
-            git fetch origin gh-pages
-            git checkout gh-pages
-          else
-            echo "Creating new gh-pages branch..."
-            git checkout --orphan gh-pages
-            git rm -rf . || true
-          fi
-
-          # Ensure charts directory exists
-          mkdir -p charts
-
-          # Copy the packaged chart from temp directory
-          cp /tmp/helm-charts/*.tgz charts/
-
-          # Generate or update the Helm repository index
-          helm repo index charts/ --url https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/charts
-
-          # Add and commit changes
-          git add charts/
-          if git diff --staged --quiet; then
-            echo "No changes to commit"
-          else
-            git commit -m "Update Helm chart for version ${{ github.ref_name }}"
-            git push origin gh-pages || git push --set-upstream origin gh-pages
-          fi
+          files: artifacts/*/*

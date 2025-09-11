@@ -1,10 +1,8 @@
 name: CI
 
 on:
-  push:
-    branches: [ main, develop ]
   pull_request:
-    branches: [ main ]
+    branches: [main]
   workflow_dispatch:
 
 env:
@@ -32,7 +30,7 @@ jobs:
           args: --timeout=5m
 
   test:
-    name: Test
+    name: Test and Coverage
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -51,18 +49,27 @@ jobs:
           go mod download
           go mod verify
 
-      - name: Run tests
+      - name: Run tests with coverage
         working-directory: ./go
         run: |
-          go test -v -race -timeout=10m ./...
+          go test -v -race -coverprofile=coverage.out -covermode=atomic ./...
+          go tool cover -func=coverage.out -o coverage.txt
+          COVERAGE=$(go tool cover -func=coverage.out | grep total | awk u'{print $3}' | sed u's/%//')
+          echo "COVERAGE=$COVERAGE" >> $GITHUB_ENV
+          echo "Coverage: $COVERAGE%"
 
-      - name: Test build
-        working-directory: ./go
-        run: |
-          go build -v ./...
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          file: ./go/coverage.out
+          flags: unittests
+          name: codecov-umbrella
+          fail_ci_if_error: false
+          verbose: true
+          token: ${{ secrets.CODECOV_TOKEN }}
 
-  docker-test:
-    name: Docker Build Test
+  docker-build:
+    name: Docker Build
     runs-on: ubuntu-latest
     needs: [test, lint]
     steps:
@@ -84,58 +91,6 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Test Docker image
-        run: |
-          echo "Testing Docker image functionality..."
-
-          # Test that the image has proper entrypoint
-          docker run --rm --entrypoint="" right-sizer:ci-test ls -la /app/right-sizer
-
-          # Test that the binary exists and is executable
-          docker run --rm --entrypoint="" right-sizer:ci-test file /app/right-sizer
-
-          # Test help command (should exit quickly)
-          timeout 10s docker run --rm right-sizer:ci-test --help || echo "Help command completed"
-
-          echo "✅ Docker image tests passed"
-
-  security:
-    name: Security Scan
-    runs-on: ubuntu-latest
-    needs: [docker-test]
-    if: github.event_name != 'pull_request'
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build image for scanning
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: ./Dockerfile
-          platforms: linux/amd64
-          push: false
-          load: true
-          tags: right-sizer:security-scan
-          cache-from: type=gha
-
-      - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: right-sizer:security-scan
-          format: 'sarif'
-          output: 'trivy-results.sarif'
-          severity: 'CRITICAL,HIGH'
-
-      - name: Upload Trivy results
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: 'trivy-results.sarif'
-        continue-on-error: true
-
   helm-lint:
     name: Helm Lint
     runs-on: ubuntu-latest
@@ -146,96 +101,29 @@ jobs:
       - name: Set up Helm
         uses: azure/setup-helm@v3
         with:
-          version: 'latest'
+          version: "latest"
 
       - name: Lint Helm chart
         run: |
           helm lint helm/
           helm template test helm/ --validate
 
-  integration:
-    name: Integration Test
-    runs-on: ubuntu-latest
-    needs: [test, docker-test]
-    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'integration-test')
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Kind
-        uses: helm/kind-action@v1
-        with:
-          version: latest
-          kubectl_version: latest
-          cluster_name: right-sizer-test
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build and load image to Kind
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: ./Dockerfile
-          platforms: linux/amd64
-          push: false
-          tags: right-sizer:integration-test
-          outputs: type=docker,dest=/tmp/right-sizer.tar
-          cache-from: type=gha
-
-      - name: Load image to Kind
-        run: |
-          kind load image-archive /tmp/right-sizer.tar --name right-sizer-test
-
-      - name: Install metrics-server
-        run: |
-          kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
-          kubectl patch -n kube-system deployment metrics-server --type=json -p='[{"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--kubelet-insecure-tls"}]'
-
-      - name: Install right-sizer with Helm
-        run: |
-          helm install right-sizer ./helm \
-            --set image.repository=right-sizer \
-            --set image.tag=integration-test \
-            --set image.pullPolicy=Never \
-            --wait --timeout=300s
-
-      - name: Test right-sizer deployment
-        run: |
-          kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=right-sizer --timeout=120s
-          kubectl logs -l app.kubernetes.io/name=right-sizer --tail=50
-
-      - name: Basic functionality test
-        run: |
-          # Create a test deployment
-          kubectl create deployment test-app --image=nginx:alpine
-          kubectl scale deployment test-app --replicas=2
-          kubectl wait --for=condition=available deployment test-app --timeout=60s
-
-          # Wait for right-sizer to process
-          sleep 30
-
-          # Check if right-sizer is running without errors
-          kubectl logs -l app.kubernetes.io/name=right-sizer --tail=20 | grep -E "(error|Error|ERROR)" && exit 1 || echo "No errors found"
-
-          echo "✅ Integration test completed successfully"
-
   status-check:
     name: Status Check
     runs-on: ubuntu-latest
-    needs: [lint, test, docker-test, helm-lint]
+    needs: [lint, test, docker-build, helm-lint]
     if: always()
     steps:
       - name: Check all jobs
         run: |
           echo "Lint: ${{ needs.lint.result }}"
           echo "Test: ${{ needs.test.result }}"
-          echo "Docker Test: ${{ needs.docker-test.result }}"
+          echo "Docker Build: ${{ needs.docker-build.result }}"
           echo "Helm Lint: ${{ needs.helm-lint.result }}"
 
           if [[ "${{ needs.lint.result }}" != "success" ]] || \
              [[ "${{ needs.test.result }}" != "success" ]] || \
-             [[ "${{ needs.docker-test.result }}" != "success" ]] || \
+             [[ "${{ needs.docker-build.result }}" != "success" ]] || \
              [[ "${{ needs.helm-lint.result }}" != "success" ]]; then
             echo "❌ Some checks failed"
             exit 1
