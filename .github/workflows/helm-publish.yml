@@ -32,17 +32,6 @@ jobs:
         with:
           version: v3.12.0
 
-      - name: Log in to Docker Hub for OCI
-        uses: docker/login-action@v3
-        with:
-          registry: registry-1.docker.io
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Log in to Helm registry
-        run: |
-          echo ${{ secrets.DOCKERHUB_TOKEN }} | helm registry login -u ${{ secrets.DOCKERHUB_USERNAME }} --password-stdin registry-1.docker.io
-
       - name: Get chart version from VERSION file
         id: chart_version
         run: |
@@ -102,49 +91,19 @@ jobs:
           VERSION=$(grep '^version:' helm/Chart.yaml | awk '{print $2}')
           CHART_NAME="right-sizer"
 
-          # Try to package the chart with helm, but use tar as fallback
-          echo "Attempting to package Helm chart..."
+          # Package the chart for GitHub Pages only
+          echo "Packaging Helm chart for GitHub Pages..."
           if helm package helm/ --destination gh-pages-branch/charts/ 2>/dev/null; then
             echo "✅ Helm package succeeded"
-            # Also package for OCI publishing
-            helm package helm/ 2>/dev/null || true
           else
             echo "⚠️ Helm package failed, using tar as fallback..."
             # Package using tar as a workaround
             tar -czf "gh-pages-branch/charts/${CHART_NAME}-${VERSION}.tgz" -C . helm
-            # Also create local package for OCI publishing
-            tar -czf "${CHART_NAME}-${VERSION}.tgz" -C . helm
             echo "✅ Created package using tar"
           fi
 
           echo "Packaged Helm chart:"
           ls -la gh-pages-branch/charts/
-          echo "Local package for OCI:"
-          ls -la right-sizer-*.tgz
-
-      - name: Push Helm chart to OCI registry
-        run: |
-          VERSION="${{ steps.chart_version.outputs.VERSION }}"
-
-          echo "🚀 Publishing Helm chart to OCI registry..."
-          echo "Chart version: $VERSION"
-
-          # Find the packaged chart
-          CHART_FILE=$(ls right-sizer-${VERSION}.tgz)
-
-          if [[ -f "$CHART_FILE" ]]; then
-            echo "Publishing $CHART_FILE to OCI registry..."
-
-            # Push to Docker Hub OCI registry
-            helm push "$CHART_FILE" oci://registry-1.docker.io/aavishay
-
-            echo "✅ Helm chart published to oci://registry-1.docker.io/aavishay/right-sizer:${VERSION}"
-          else
-            echo "❌ Chart file not found: right-sizer-${VERSION}.tgz"
-            echo "Available files:"
-            ls -la right-sizer-*.tgz || echo "No chart files found"
-            exit 1
-          fi
 
       - name: Create/Update Helm repository index
         run: |
@@ -408,7 +367,7 @@ jobs:
           echo "helm install right-sizer right-sizer/right-sizer" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**OCI Registry (Recommended):**" >> $GITHUB_STEP_SUMMARY
+          echo "**Direct from GitHub Pages:**" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
-          echo "helm install right-sizer oci://registry-1.docker.io/aavishay/right-sizer --version ${{ steps.chart_version.outputs.VERSION }}" >> $GITHUB_STEP_SUMMARY
+          echo "helm install right-sizer https://github.com/${{ github.repository }}/releases/download/v${{ steps.chart_version.outputs.VERSION }}/right-sizer-${{ steps.chart_version.outputs.VERSION }}.tgz" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY

@@ -283,15 +283,7 @@ jobs:
             exit 1
           fi
 
-          # Also try pushing to GitHub Container Registry as backup
-          echo "📦 Also pushing to GitHub Container Registry..."
-          echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u ${{ github.actor }} --password-stdin
-
-          helm push "$CHART_FILE" oci://ghcr.io/${{ github.repository_owner }}/right-sizer --debug || echo "GHCR push failed"
-
-          echo "✅ Helm chart published to multiple OCI registries:"
-          echo "  - oci://registry-1.docker.io/aavishay/right-sizer:${VERSION}"
-          echo "  - oci://ghcr.io/${{ github.repository_owner }}/right-sizer:${VERSION}"
+          echo "✅ Helm chart packaged successfully for release artifact"
 
       - name: Upload Helm chart artifact
         uses: actions/upload-artifact@v4
