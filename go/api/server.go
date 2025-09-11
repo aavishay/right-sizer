@@ -543,7 +543,7 @@ func (s *Server) getOptimizationEvents(ctx context.Context) []map[string]interfa
 	events = append(events, s.getEventsFromK8s(ctx)...)
 
 	// Sort and limit events
-	s.sortAndLimitEvents(events, defaultEventLimit)
+	s.sortAndLimitEvents(&events, defaultEventLimit)
 
 	return events
 }
@@ -673,17 +673,17 @@ func (s *Server) getEventsFromK8s(ctx context.Context) []map[string]interface{} 
 }
 
 // sortAndLimitEvents sorts events by timestamp and limits the count
-func (s *Server) sortAndLimitEvents(events []map[string]interface{}, limit int) {
-	if len(events) == 0 {
+func (s *Server) sortAndLimitEvents(events *[]map[string]interface{}, limit int) {
+	if len(*events) == 0 {
 		return
 	}
 
 	// Sort by timestamp descending
-	for i := range len(events) - 1 {
-		for j := i + 1; j < len(events); j++ {
+	for i := range len(*events) - 1 {
+		for j := i + 1; j < len(*events); j++ {
 			var timestamp1, timestamp2 float64
 
-			switch ts1 := events[i]["timestamp"].(type) {
+			switch ts1 := (*events)[i]["timestamp"].(type) {
 			case string:
 				if t, err := time.Parse(time.RFC3339, ts1); err == nil {
 					timestamp1 = float64(t.Unix())
@@ -692,7 +692,7 @@ func (s *Server) sortAndLimitEvents(events []map[string]interface{}, limit int) 
 				timestamp1 = ts1
 			}
 
-			switch ts2 := events[j]["timestamp"].(type) {
+			switch ts2 := (*events)[j]["timestamp"].(type) {
 			case string:
 				if t, err := time.Parse(time.RFC3339, ts2); err == nil {
 					timestamp2 = float64(t.Unix())
@@ -702,14 +702,14 @@ func (s *Server) sortAndLimitEvents(events []map[string]interface{}, limit int) 
 			}
 
 			if timestamp2 > timestamp1 {
-				events[i], events[j] = events[j], events[i]
+				(*events)[i], (*events)[j] = (*events)[j], (*events)[i]
 			}
 		}
 	}
 
 	// Limit events
-	if len(events) > limit {
-		events = events[:limit]
+	if len(*events) > limit {
+		*events = (*events)[:limit]
 	}
 }
 

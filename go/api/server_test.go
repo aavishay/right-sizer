@@ -374,7 +374,7 @@ func TestServer_SortAndLimitEvents(t *testing.T) {
 		},
 	}
 
-	server.sortAndLimitEvents(events, 2)
+	server.sortAndLimitEvents(&events, 2)
 
 	assert.Len(t, events, 2)
 	assert.Equal(t, float64(2000), events[0]["timestamp"])
@@ -815,10 +815,10 @@ func TestServer_ConvertPodsToV1API(t *testing.T) {
 	assert.Equal(t, "PodList", response["kind"])
 	assert.Equal(t, "v1", response["apiVersion"])
 
-	items := response["items"].([]interface{})
+	items := response["items"].([]map[string]interface{})
 	assert.Len(t, items, 1)
 
-	item := items[0].(map[string]interface{})
+	item := items[0]
 	metadata := item["metadata"].(map[string]interface{})
 	assert.Equal(t, "test-pod", metadata["name"])
 	assert.Equal(t, "default", metadata["namespace"])
@@ -826,10 +826,10 @@ func TestServer_ConvertPodsToV1API(t *testing.T) {
 	spec := item["spec"].(map[string]interface{})
 	assert.Equal(t, "test-node", spec["nodeName"])
 
-	containers := spec["containers"].([]interface{})
+	containers := spec["containers"].([]map[string]interface{})
 	assert.Len(t, containers, 1)
 
-	container := containers[0].(map[string]interface{})
+	container := containers[0]
 	assert.Equal(t, "test-container", container["name"])
 
 	resources := container["resources"].(map[string]interface{})
