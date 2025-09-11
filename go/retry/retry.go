@@ -501,6 +501,13 @@ func (cr *CustomRetryer) ExecuteWithContext(ctx context.Context, operation strin
 	var lastErr error
 
 	for attempt := 0; attempt <= cr.maxRetries; attempt++ {
+		// Check if context is already cancelled before attempting
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
 		if cr.metrics != nil {
 			cr.metrics.RecordRetryAttempt(operation, attempt+1)
 		}

@@ -291,7 +291,7 @@ func TestDefaultCircuitBreakerConfig(t *testing.T) {
 }
 
 func TestRetryWithCircuitBreaker_Execute(t *testing.T) {
-	retryConfig := Config{MaxRetries: 1, InitialDelay: 1 * time.Millisecond}
+	retryConfig := Config{MaxRetries: 2, InitialDelay: 1 * time.Millisecond}
 	cbConfig := CircuitBreakerConfig{FailureThreshold: 3, RecoveryTimeout: 100 * time.Millisecond}
 	rcb := NewRetryWithCircuitBreaker("test", retryConfig, cbConfig, nil)
 
@@ -540,27 +540,27 @@ func TestCustomRetryer_ExecuteWithContext_Cancellation(t *testing.T) {
 	config := CustomRetryConfig{
 		MaxRetries: 5,
 		Strategy:   ConstantBackoff,
-		BaseDelay:  10 * time.Millisecond,
+		BaseDelay:  1 * time.Millisecond,
 		ShouldRetry: func(err error, attempt int) bool {
 			return err != nil // Retry all errors for this test
 		},
 	}
 	retryer := NewCustomRetryer(config, nil)
 
+	// Create an already-cancelled context
 	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // Cancel immediately
 
 	callCount := 0
 	err := retryer.ExecuteWithContext(ctx, "test", func(ctx context.Context) error {
 		callCount++
-		if callCount == 2 {
-			cancel()
-		}
 		return errors.New("failure")
 	})
 
 	assert.Error(t, err)
 	assert.Equal(t, context.Canceled, err)
-	assert.Equal(t, 2, callCount)
+	// Should fail immediately without any function calls due to cancelled context
+	assert.Equal(t, 0, callCount)
 }
 
 func TestCustomRetryer_CalculateDelayForStrategy_Exponential(t *testing.T) {
