@@ -49,6 +49,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/metrics/server"
 )
 
+// Build-time variables set via ldflags
+var (
+	Version   = "dev"
+	BuildDate = "unknown"
+	GitCommit = "unknown"
+)
+
 // Health server is handled by the controller-runtime manager
 // which provides /healthz and /readyz endpoints automatically
 
@@ -56,6 +63,10 @@ func main() {
 	// Print startup banner
 	fmt.Println("========================================")
 	fmt.Println("🚀 Right-Sizer Operator Starting...")
+	fmt.Printf("Version: %s\n", Version)
+	fmt.Printf("Build Date: %s\n", BuildDate)
+	fmt.Printf("Git Commit: %s\n", GitCommit)
+	fmt.Printf("Go Version: %s\n", runtime.Version())
 	fmt.Println("========================================")
 
 	// Initialize configuration with defaults
