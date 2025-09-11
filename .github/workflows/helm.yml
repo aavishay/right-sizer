@@ -1,0 +1,97 @@
+name: Helm
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+jobs:
+  helm-lint:
+    name: Helm Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: \'latest\'
+
+      - name: Lint Helm chart
+        run: |
+          helm lint helm/
+          helm template test helm/ --validate
+
+  helm-publish:
+    name: Publish Helm Chart
+    runs-on: ubuntu-latest
+    needs: [helm-lint]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure Git
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.12.0
+
+      - name: Get chart version from VERSION file
+        id: chart_version
+        run: |
+          VERSION=$(cat VERSION)
+          echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Update Chart versions
+        run: |
+          VERSION="${{ steps.chart_version.outputs.VERSION }}"
+          sed -i "s/^version:.*/version: ${VERSION}/" helm/Chart.yaml
+          sed -i "s/^appVersion:.*/appVersion: \"${VERSION}\"/" helm/Chart.yaml
+
+      - name: Checkout gh-pages branch
+        run: |
+          if git ls-remote --heads origin gh-pages | grep gh-pages; then
+            git fetch origin gh-pages
+            git worktree add gh-pages-branch gh-pages
+          else
+            git worktree add gh-pages-branch --detach
+            cd gh-pages-branch
+            git checkout --orphan gh-pages
+            git rm -rf . 2>/dev/null || true
+            cd ..
+          fi
+
+      - name: Package Helm chart
+        run: |
+          mkdir -p gh-pages-branch/charts
+          helm package helm/ --destination gh-pages-branch/charts/
+
+      - name: Create/Update Helm repository index
+        run: |
+          cd gh-pages-branch
+          helm repo index charts/ --url https://${{ github.repository_owner }}.github.io/$(basename ${{ github.repository }})/charts
+          cd ..
+
+      - name: Commit and push to gh-pages
+        run: |
+          cd gh-pages-branch
+          git add .
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Update Helm chart version ${{ steps.chart_version.outputs.VERSION }} from main branch"
+            git push origin gh-pages
+          fi
+          cd ..
