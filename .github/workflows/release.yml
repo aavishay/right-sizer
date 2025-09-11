@@ -107,9 +107,20 @@ jobs:
           context: .
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.VERSION }}
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.VERSION }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          build-args: |
+            VERSION=${{ steps.version.outputs.VERSION }}
+            BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+            GIT_COMMIT=${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Verify multi-platform image
+        run: |
+          echo "Verifying multi-platform image build..."
+          docker buildx imagetools inspect ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.VERSION }}
 
   helm-publish:
     runs-on: ubuntu-latest
@@ -144,7 +155,7 @@ jobs:
         run: |
           VERSION="${{ steps.version.outputs.VERSION }}"
           sed -i "s/^version:.*/version: ${VERSION}/" helm/Chart.yaml
-          sed -i "s/^appVersion:.*/appVersion: \"${VERSION}\""/" helm/Chart.yaml
+          sed -i "s/^appVersion:.*/appVersion: \"${VERSION}\"/" helm/Chart.yaml
 
       - name: Package Helm chart
         run: |
