@@ -161,7 +161,7 @@ spec:
 
   # Feature gates - Conservative feature set
   featureGates:
-    UpdateResizePolicy: true # Update resize policy for in-place resizing
+    UpdateResizePolicy: false # Update resize policy for in-place resizing (disabled by default)
     EnablePredictiveScaling: false # Disable predictive features
     EnableCostOptimization: false # Disable cost optimization
     EnableMultiCluster: false # Single cluster only

@@ -316,25 +316,9 @@ func TestResizePolicy(t *testing.T) {
 	// Create fake clientset
 	fakeClient := fake.NewSimpleClientset(pod)
 
-	var patchedContainers []string
+	var patchCalled bool
 	fakeClient.PrependReactor("patch", "pods", func(action clienttesting.Action) (handled bool, ret runtime.Object, err error) {
-		patchAction := action.(clienttesting.PatchAction)
-
-		// Parse the patch to see which containers are being updated
-		var patchData []map[string]interface{}
-		if err := json.Unmarshal(patchAction.GetPatch(), &patchData); err == nil {
-			for _, patch := range patchData {
-				if path, ok := patch["path"].(string); ok {
-					if contains(path, "/spec/containers/0/resizePolicy") {
-						patchedContainers = append(patchedContainers, "container1")
-					}
-					if contains(path, "/spec/containers/1/resizePolicy") {
-						patchedContainers = append(patchedContainers, "container2")
-					}
-				}
-			}
-		}
-
+		patchCalled = true
 		return true, pod, nil
 	})
 
@@ -362,12 +346,10 @@ func TestResizePolicy(t *testing.T) {
 		t.Errorf("unexpected error applying resize policy: %v", err)
 	}
 
-	// Verify that only container1 was patched (container2 already had the policy)
-	if len(patchedContainers) != 1 {
-		t.Errorf("expected 1 container to be patched, got %d", len(patchedContainers))
-	}
-	if len(patchedContainers) > 0 && patchedContainers[0] != "container1" {
-		t.Errorf("expected container1 to be patched, got %s", patchedContainers[0])
+	// InPlaceRightSizer.applyResizePolicy should skip direct pod patching
+	// (resize policies should be set in parent resources only)
+	if patchCalled {
+		t.Error("expected no patch to be called for direct pod resize policy update")
 	}
 }
 

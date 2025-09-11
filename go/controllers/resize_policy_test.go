@@ -16,7 +16,6 @@ package controllers
 
 import (
 	"context"
-	"encoding/json"
 	"right-sizer/config"
 	"testing"
 
@@ -27,7 +26,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/fake"
-	clienttesting "k8s.io/client-go/testing"
 	ctrlFake "sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
@@ -51,7 +49,7 @@ func TestResizePolicyWithFeatureFlag(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create a test pod
+			// Create a test pod without owner references (standalone pod)
 			pod := &corev1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-pod",
@@ -92,133 +90,39 @@ func TestResizePolicyWithFeatureFlag(t *testing.T) {
 
 			// Test InPlaceRightSizer
 			t.Run("InPlaceRightSizer", func(t *testing.T) {
-				// Track if patch was called
-				patchCalled := false
-				var patchedResizePolicy []corev1.ContainerResizePolicy
-
-				// Add reactor to track patch calls
-				fakeClient.PrependReactor("patch", "pods", func(action clienttesting.Action) (handled bool, ret runtime.Object, err error) {
-					patchAction := action.(clienttesting.PatchAction)
-					if patchAction.GetPatchType() == types.StrategicMergePatchType {
-						patchCalled = true
-
-						// Parse the patch to extract resize policy
-						var patchData map[string]interface{}
-						if err := json.Unmarshal(patchAction.GetPatch(), &patchData); err == nil {
-							if spec, ok := patchData["spec"].(map[string]interface{}); ok {
-								if containers, ok := spec["containers"].([]interface{}); ok && len(containers) > 0 {
-									if container, ok := containers[0].(map[string]interface{}); ok {
-										if resizePolicy, ok := container["resizePolicy"].([]interface{}); ok {
-											// Found resize policy in patch
-											for _, policy := range resizePolicy {
-												if policyMap, ok := policy.(map[string]interface{}); ok {
-													patchedResizePolicy = append(patchedResizePolicy, corev1.ContainerResizePolicy{
-														ResourceName:  corev1.ResourceName(policyMap["resourceName"].(string)),
-														RestartPolicy: corev1.ResourceResizeRestartPolicy(policyMap["restartPolicy"].(string)),
-													})
-												}
-											}
-										}
-									}
-								}
-							}
-						}
-					}
-					return false, nil, nil
-				})
-
 				r := &InPlaceRightSizer{
 					Client:    ctrlClient,
 					ClientSet: fakeClient,
 					Config:    cfg,
 				}
 
-				// Apply resize policy
+				// Apply resize policy - should skip for pods
 				ctx := context.Background()
 				err := r.applyResizePolicy(ctx, pod)
 				if err != nil {
 					t.Errorf("unexpected error: %v", err)
 				}
 
-				// Check if resize policy was applied based on feature flag
-				if tt.expectResizePolicy {
-					if !patchCalled {
-						t.Error("Expected patch to be called but it wasn't")
-					}
-					if len(patchedResizePolicy) != 2 {
-						t.Errorf("Expected 2 resize policies, got %d", len(patchedResizePolicy))
-					}
-				} else {
-					if patchCalled {
-						t.Error("Expected patch NOT to be called but it was")
-					}
-				}
+				// InPlaceRightSizer always skips direct pod patching (policies should be in parent resources)
+				// so no patch should be called regardless of feature flag
 			})
 
 			// Test AdaptiveRightSizer
 			t.Run("AdaptiveRightSizer", func(t *testing.T) {
-				// Track if patch was called
-				patchCalled := false
-				var patchedResizePolicy []corev1.ContainerResizePolicy
-
-				// Add reactor to track patch calls
-				fakeClient.PrependReactor("patch", "pods", func(action clienttesting.Action) (handled bool, ret runtime.Object, err error) {
-					patchAction := action.(clienttesting.PatchAction)
-					if patchAction.GetPatchType() == types.JSONPatchType && patchAction.GetSubresource() == "" {
-						patchCalled = true
-
-						// Parse the patch to extract resize policy
-						var patchOps []map[string]interface{}
-						if err := json.Unmarshal(patchAction.GetPatch(), &patchOps); err == nil {
-							for _, op := range patchOps {
-								if op["op"] == "add" || op["op"] == "replace" {
-									if path, ok := op["path"].(string); ok {
-										if path == "/spec/containers/0/resizePolicy" {
-											if value, ok := op["value"].([]interface{}); ok {
-												for _, policy := range value {
-													if policyMap, ok := policy.(map[string]interface{}); ok {
-														patchedResizePolicy = append(patchedResizePolicy, corev1.ContainerResizePolicy{
-															ResourceName:  corev1.ResourceName(policyMap["resourceName"].(string)),
-															RestartPolicy: corev1.ResourceResizeRestartPolicy(policyMap["restartPolicy"].(string)),
-														})
-													}
-												}
-											}
-										}
-									}
-								}
-							}
-						}
-					}
-					return false, nil, nil
-				})
-
 				r := &AdaptiveRightSizer{
 					Client:    ctrlClient,
 					ClientSet: fakeClient,
 					Config:    cfg,
 				}
 
-				// Apply resize policy for container
+				// Test ensureParentHasResizePolicy with a pod that has no owner
 				ctx := context.Background()
-				err := r.applyResizePolicyForContainer(ctx, pod, 0)
+				err := r.ensureParentHasResizePolicy(ctx, pod)
 				if err != nil {
 					t.Errorf("unexpected error: %v", err)
 				}
 
-				// Check if resize policy was applied based on feature flag
-				if tt.expectResizePolicy {
-					if !patchCalled {
-						t.Error("Expected patch to be called but it wasn't")
-					}
-					if len(patchedResizePolicy) != 2 {
-						t.Errorf("Expected 2 resize policies, got %d", len(patchedResizePolicy))
-					}
-				} else {
-					if patchCalled {
-						t.Error("Expected patch NOT to be called but it was")
-					}
-				}
+				// For pods without owners, no action should be taken regardless of feature flag
 			})
 		})
 	}

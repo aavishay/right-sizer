@@ -32,6 +32,8 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -80,9 +82,20 @@ func (r *RightSizerConfigReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	if rsc.Status.Phase == "" {
 		rsc.Status.Phase = "Active"
 		rsc.Status.OperatorVersion = "v1.0.0" // You may want to get this from build info
-		if err := r.Status().Update(ctx, rsc); err != nil {
-			log.Error("Failed to update initial status: %v", err)
-			return ctrl.Result{}, err
+		// Use retry logic for initial status update
+		retryErr := retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+			// Get the latest version
+			latestRsc := &v1alpha1.RightSizerConfig{}
+			if err := r.Get(ctx, req.NamespacedName, latestRsc); err != nil {
+				return err
+			}
+			latestRsc.Status.Phase = "Active"
+			latestRsc.Status.OperatorVersion = "v1.0.0"
+			return r.Status().Update(ctx, latestRsc)
+		})
+		if retryErr != nil {
+			log.Error("Failed to update initial status after retries: %v", retryErr)
+			return ctrl.Result{}, retryErr
 		}
 	}
 
@@ -109,18 +122,28 @@ func (r *RightSizerConfigReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		log.Warn("Failed to update system metrics: %v", err)
 	}
 
-	// Update status to Active
-	rsc.Status.Phase = "Active"
-	rsc.Status.LastAppliedTime = &metav1.Time{Time: time.Now()}
-	rsc.Status.ObservedGeneration = rsc.Generation
-	rsc.Status.Message = "Configuration successfully applied"
+	// Update status to Active with retry logic
+	retryErr := retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+		// Get the latest version
+		latestRsc := &v1alpha1.RightSizerConfig{}
+		if err := r.Get(ctx, req.NamespacedName, latestRsc); err != nil {
+			return err
+		}
 
-	// Update system health status
-	rsc.Status.SystemHealth = r.getSystemHealth(ctx)
+		latestRsc.Status.Phase = "Active"
+		latestRsc.Status.LastAppliedTime = &metav1.Time{Time: time.Now()}
+		latestRsc.Status.ObservedGeneration = latestRsc.Generation
+		latestRsc.Status.Message = "Configuration successfully applied"
 
-	if err := r.Status().Update(ctx, rsc); err != nil {
-		log.Error("Failed to update status: %v", err)
-		return ctrl.Result{}, err
+		// Update system health status
+		latestRsc.Status.SystemHealth = r.getSystemHealth(ctx)
+
+		return r.Status().Update(ctx, latestRsc)
+	})
+
+	if retryErr != nil {
+		log.Error("Failed to update status after retries: %v", retryErr)
+		return ctrl.Result{}, retryErr
 	}
 
 	// Requeue after the configured resize interval to refresh status
@@ -238,10 +261,14 @@ func (r *RightSizerConfigReconciler) applyConfiguration(ctx context.Context, rsc
 		prometheusURL = rsc.Spec.MetricsConfig.PrometheusEndpoint
 	}
 
-	// Extract feature flags
+	// Extract feature flags with proper defaults
 	updateResizePolicy := false
 	if rsc.Spec.FeatureGates != nil {
-		updateResizePolicy = rsc.Spec.FeatureGates["UpdateResizePolicy"]
+		// Explicitly check if the key exists and use its value
+		if val, exists := rsc.Spec.FeatureGates["UpdateResizePolicy"]; exists {
+			updateResizePolicy = val
+		}
+		// Default remains false if not explicitly set
 	}
 
 	// Extract new fields
@@ -604,21 +631,32 @@ func (r *RightSizerConfigReconciler) resetToDefaultConfig() {
 
 // updateConfigStatus updates the status of the RightSizerConfig
 func (r *RightSizerConfigReconciler) updateConfigStatus(ctx context.Context, rsc *v1alpha1.RightSizerConfig, phase string, message string) (ctrl.Result, error) {
-	rsc.Status.Phase = phase
-	rsc.Status.Message = message
-	rsc.Status.ObservedGeneration = rsc.Generation
-
-	if phase == "Failed" {
-		// Add to errors in system health
-		if rsc.Status.SystemHealth == nil {
-			rsc.Status.SystemHealth = &v1alpha1.SystemHealthStatus{}
+	// Use retry logic to handle update conflicts
+	retryErr := retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+		// Get the latest version
+		latestRsc := &v1alpha1.RightSizerConfig{}
+		if err := r.Get(ctx, types.NamespacedName{Name: rsc.Name, Namespace: rsc.Namespace}, latestRsc); err != nil {
+			return err
 		}
-		rsc.Status.SystemHealth.Errors++
-	}
 
-	if err := r.Status().Update(ctx, rsc); err != nil {
-		logger.Error("Failed to update status: %v", err)
-		return ctrl.Result{}, err
+		latestRsc.Status.Phase = phase
+		latestRsc.Status.Message = message
+		latestRsc.Status.ObservedGeneration = latestRsc.Generation
+
+		if phase == "Failed" {
+			// Add to errors in system health
+			if latestRsc.Status.SystemHealth == nil {
+				latestRsc.Status.SystemHealth = &v1alpha1.SystemHealthStatus{}
+			}
+			latestRsc.Status.SystemHealth.Errors++
+		}
+
+		return r.Status().Update(ctx, latestRsc)
+	})
+
+	if retryErr != nil {
+		logger.Error("Failed to update status after retries: %v", retryErr)
+		return ctrl.Result{}, retryErr
 	}
 
 	// Requeue after a delay for failed states
