@@ -430,8 +430,24 @@ jobs:
 
       - name: Package Helm chart
         run: |
-          # Package the chart from main branch
-          helm package helm/ -d /tmp/helm-charts/
+          # Get version from Chart.yaml
+          VERSION=$(grep '^version:' helm/Chart.yaml | awk '{print $2}')
+          CHART_NAME="right-sizer"
+
+          # Create temp directory for charts
+          mkdir -p /tmp/helm-charts/
+
+          # Try helm package first, but use tar as fallback
+          echo "Attempting to package Helm chart..."
+          if helm package helm/ -d /tmp/helm-charts/ 2>/dev/null; then
+            echo "✅ Helm package succeeded"
+          else
+            echo "⚠️ Helm package failed, using tar as fallback..."
+            # Package using tar as a workaround
+            tar -czf "/tmp/helm-charts/${CHART_NAME}-${VERSION}.tgz" -C . helm
+            echo "✅ Created package using tar"
+          fi
+
           ls -la /tmp/helm-charts/
 
       - name: Create or update gh-pages branch

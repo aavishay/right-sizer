@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -15,7 +16,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/kubernetes/fake"
+	k8sfake "k8s.io/client-go/kubernetes/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"right-sizer/config"
@@ -25,7 +26,7 @@ import (
 
 func TestNewWebhookServer(t *testing.T) {
 	client := fake.NewClientBuilder().WithScheme(runtime.NewScheme()).Build()
-	clientset := fake.NewSimpleClientset()
+	clientset := k8sfake.NewSimpleClientset()
 	cfg := config.GetDefaults()
 	validator := validation.NewResourceValidator(client, clientset, cfg, nil)
 	metrics := metrics.NewOperatorMetrics()
@@ -46,7 +47,7 @@ func TestNewWebhookServer(t *testing.T) {
 
 func TestWebhookServer_HealthEndpoint(t *testing.T) {
 	client := fake.NewClientBuilder().WithScheme(runtime.NewScheme()).Build()
-	clientset := fake.NewSimpleClientset()
+	clientset := k8sfake.NewSimpleClientset()
 	cfg := config.GetDefaults()
 	validator := validation.NewResourceValidator(client, clientset, cfg, nil)
 	metrics := metrics.NewOperatorMetrics()
@@ -73,7 +74,7 @@ func TestWebhookServer_HealthEndpoint(t *testing.T) {
 
 func TestWebhookServer_ShouldSkipValidation(t *testing.T) {
 	client := fake.NewClientBuilder().WithScheme(runtime.NewScheme()).Build()
-	clientset := fake.NewSimpleClientset()
+	clientset := k8sfake.NewSimpleClientset()
 	cfg := config.GetDefaults()
 	validator := validation.NewResourceValidator(client, clientset, cfg, nil)
 	metrics := metrics.NewOperatorMetrics()
@@ -141,7 +142,7 @@ func TestWebhookServer_ShouldSkipValidation(t *testing.T) {
 
 func TestWebhookServer_ShouldSkipMutation(t *testing.T) {
 	client := fake.NewClientBuilder().WithScheme(runtime.NewScheme()).Build()
-	clientset := fake.NewSimpleClientset()
+	clientset := k8sfake.NewSimpleClientset()
 	cfg := config.GetDefaults()
 	validator := validation.NewResourceValidator(client, clientset, cfg, nil)
 	metrics := metrics.NewOperatorMetrics()
@@ -198,7 +199,7 @@ func TestWebhookServer_ShouldSkipMutation(t *testing.T) {
 
 func TestWebhookServer_AreResourcesEqual(t *testing.T) {
 	client := fake.NewClientBuilder().WithScheme(runtime.NewScheme()).Build()
-	clientset := fake.NewSimpleClientset()
+	clientset := k8sfake.NewSimpleClientset()
 	cfg := config.GetDefaults()
 	validator := validation.NewResourceValidator(client, clientset, cfg, nil)
 	metrics := metrics.NewOperatorMetrics()
@@ -279,7 +280,7 @@ func TestWebhookServer_AreResourcesEqual(t *testing.T) {
 
 func TestWebhookServer_GetQoSClass(t *testing.T) {
 	client := fake.NewClientBuilder().WithScheme(runtime.NewScheme()).Build()
-	clientset := fake.NewSimpleClientset()
+	clientset := k8sfake.NewSimpleClientset()
 	cfg := config.GetDefaults()
 	validator := validation.NewResourceValidator(client, clientset, cfg, nil)
 	metrics := metrics.NewOperatorMetrics()
@@ -415,7 +416,7 @@ func TestWebhookServer_GetQoSClass(t *testing.T) {
 
 func TestWebhookServer_GenerateResourcePatches(t *testing.T) {
 	client := fake.NewClientBuilder().WithScheme(runtime.NewScheme()).Build()
-	clientset := fake.NewSimpleClientset()
+	clientset := k8sfake.NewSimpleClientset()
 	cfg := config.GetDefaults()
 	validator := validation.NewResourceValidator(client, clientset, cfg, nil)
 	metrics := metrics.NewOperatorMetrics()
@@ -496,9 +497,103 @@ func TestWebhookServer_GenerateResourcePatches(t *testing.T) {
 	}
 }
 
+func TestWebhookServer_GenerateResourcePatches_ResizePolicyFeatureFlag(t *testing.T) {
+	client := fake.NewClientBuilder().WithScheme(runtime.NewScheme()).Build()
+	clientset := k8sfake.NewSimpleClientset()
+	metrics := metrics.NewOperatorMetrics()
+	webhookConfig := WebhookConfig{}
+
+	tests := []struct {
+		name                    string
+		updateResizePolicy      bool
+		pod                     *corev1.Pod
+		expectResizePolicyPatch bool
+	}{
+		{
+			name:               "Should add resize policy when feature flag is enabled",
+			updateResizePolicy: true,
+			pod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-pod",
+					Namespace: "default",
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Name:  "test-container",
+							Image: "test:latest",
+							Resources: corev1.ResourceRequirements{
+								Requests: corev1.ResourceList{
+									corev1.ResourceCPU:    resource.MustParse("100m"),
+									corev1.ResourceMemory: resource.MustParse("128Mi"),
+								},
+							},
+						},
+					},
+				},
+			},
+			expectResizePolicyPatch: true,
+		},
+		{
+			name:               "Should NOT add resize policy when feature flag is disabled",
+			updateResizePolicy: false,
+			pod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-pod",
+					Namespace: "default",
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Name:  "test-container",
+							Image: "test:latest",
+							Resources: corev1.ResourceRequirements{
+								Requests: corev1.ResourceList{
+									corev1.ResourceCPU:    resource.MustParse("100m"),
+									corev1.ResourceMemory: resource.MustParse("128Mi"),
+								},
+							},
+						},
+					},
+				},
+			},
+			expectResizePolicyPatch: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create config with specific UpdateResizePolicy setting
+			cfg := config.GetDefaults()
+			cfg.UpdateResizePolicy = tt.updateResizePolicy
+
+			validator := validation.NewResourceValidator(client, clientset, cfg, nil)
+			server, err := NewWebhookServer(client, clientset, validator, cfg, metrics, webhookConfig)
+			require.NoError(t, err)
+
+			patches := server.generateResourcePatches(tt.pod)
+
+			// Check if resize policy patch is present
+			hasResizePolicyPatch := false
+			for _, patch := range patches {
+				if strings.Contains(patch.Path, "resizePolicy") {
+					hasResizePolicyPatch = true
+					break
+				}
+			}
+
+			if tt.expectResizePolicyPatch {
+				assert.True(t, hasResizePolicyPatch, "Expected resize policy patch when feature flag is enabled")
+			} else {
+				assert.False(t, hasResizePolicyPatch, "Expected no resize policy patch when feature flag is disabled")
+			}
+		})
+	}
+}
+
 func TestWebhookServer_ReadRequestBody(t *testing.T) {
 	client := fake.NewClientBuilder().WithScheme(runtime.NewScheme()).Build()
-	clientset := fake.NewSimpleClientset()
+	clientset := k8sfake.NewSimpleClientset()
 	cfg := config.GetDefaults()
 	validator := validation.NewResourceValidator(client, clientset, cfg, nil)
 	metrics := metrics.NewOperatorMetrics()
@@ -553,7 +648,7 @@ func TestWebhookServer_ReadRequestBody(t *testing.T) {
 
 func TestWebhookServer_ValidatePodResourceChange(t *testing.T) {
 	client := fake.NewClientBuilder().WithScheme(runtime.NewScheme()).Build()
-	clientset := fake.NewSimpleClientset()
+	clientset := k8sfake.NewSimpleClientset()
 	cfg := config.GetDefaults()
 	validator := validation.NewResourceValidator(client, clientset, cfg, nil)
 	metrics := metrics.NewOperatorMetrics()
@@ -611,7 +706,7 @@ func TestWebhookServer_ValidatePodResourceChange(t *testing.T) {
 
 func TestWebhookServer_MutatePodResources(t *testing.T) {
 	client := fake.NewClientBuilder().WithScheme(runtime.NewScheme()).Build()
-	clientset := fake.NewSimpleClientset()
+	clientset := k8sfake.NewSimpleClientset()
 	cfg := config.GetDefaults()
 	validator := validation.NewResourceValidator(client, clientset, cfg, nil)
 	metrics := metrics.NewOperatorMetrics()
@@ -667,7 +762,7 @@ func TestWebhookServer_MutatePodResources(t *testing.T) {
 
 func TestWebhookManager_NewWebhookManager(t *testing.T) {
 	client := fake.NewClientBuilder().WithScheme(runtime.NewScheme()).Build()
-	clientset := fake.NewSimpleClientset()
+	clientset := k8sfake.NewSimpleClientset()
 	cfg := config.GetDefaults()
 	validator := validation.NewResourceValidator(client, clientset, cfg, nil)
 	metrics := metrics.NewOperatorMetrics()
@@ -687,7 +782,7 @@ func TestWebhookManager_NewWebhookManager(t *testing.T) {
 
 func TestWebhookManager_StartStop(t *testing.T) {
 	client := fake.NewClientBuilder().WithScheme(runtime.NewScheme()).Build()
-	clientset := fake.NewSimpleClientset()
+	clientset := k8sfake.NewSimpleClientset()
 	cfg := config.GetDefaults()
 	validator := validation.NewResourceValidator(client, clientset, cfg, nil)
 	metrics := metrics.NewOperatorMetrics()

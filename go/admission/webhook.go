@@ -472,32 +472,35 @@ func (ws *WebhookServer) generateResourcePatches(pod *corev1.Pod) []JSONPatch {
 			})
 		}
 
-		// Add resize policy to enable in-place updates without container restart per K8s 1.33
-		// Check if container already has a resize policy
-		hasResizePolicy := container.ResizePolicy != nil && len(container.ResizePolicy) > 0
+		// Add resize policy only if the UpdateResizePolicy feature flag is enabled
+		// This enables in-place updates without container restart (K8s 1.27+)
+		if ws.config != nil && ws.config.UpdateResizePolicy {
+			// Check if container already has a resize policy
+			hasResizePolicy := container.ResizePolicy != nil && len(container.ResizePolicy) > 0
 
-		resizePolicy := []corev1.ContainerResizePolicy{
-			{
-				ResourceName:  corev1.ResourceCPU,
-				RestartPolicy: corev1.NotRequired,
-			},
-			{
-				ResourceName:  corev1.ResourceMemory,
-				RestartPolicy: corev1.NotRequired,
-			},
+			resizePolicy := []corev1.ContainerResizePolicy{
+				{
+					ResourceName:  corev1.ResourceCPU,
+					RestartPolicy: corev1.NotRequired,
+				},
+				{
+					ResourceName:  corev1.ResourceMemory,
+					RestartPolicy: corev1.NotRequired,
+				},
+			}
+
+			// Use "add" if no resize policy exists, "replace" if it does
+			resizePolicyOp := "add"
+			if hasResizePolicy {
+				resizePolicyOp = "replace"
+			}
+
+			patches = append(patches, JSONPatch{
+				Op:    resizePolicyOp,
+				Path:  fmt.Sprintf("/spec/containers/%d/resizePolicy", i),
+				Value: resizePolicy,
+			})
 		}
-
-		// Use "add" if no resize policy exists, "replace" if it does
-		resizePolicyOp := "add"
-		if hasResizePolicy {
-			resizePolicyOp = "replace"
-		}
-
-		patches = append(patches, JSONPatch{
-			Op:    resizePolicyOp,
-			Path:  fmt.Sprintf("/spec/containers/%d/resizePolicy", i),
-			Value: resizePolicy,
-		})
 	}
 
 	// Add labels for tracking
