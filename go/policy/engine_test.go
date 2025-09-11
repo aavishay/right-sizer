@@ -11,7 +11,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/kubernetes/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"right-sizer/config"
@@ -146,7 +145,7 @@ func TestPolicyEngine_EvaluatePolicy_WithMatchingRule(t *testing.T) {
 	}
 
 	currentUsage := map[string]*resource.Quantity{
-		"cpu": resource.MustParse("100m"),
+		"cpu": func() *resource.Quantity { q := resource.MustParse("100m"); return &q }(),
 	}
 
 	result := engine.EvaluatePolicy(context.Background(), pod, "test-container", currentUsage)
@@ -814,20 +813,11 @@ func TestPolicyEngine_ApplyRuleActions(t *testing.T) {
 	}
 
 	currentUsage := map[string]*resource.Quantity{
-		"cpu":    resource.MustParse("100m"),
-		"memory": resource.MustParse("128Mi"),
+		"cpu":    func() *resource.Quantity { q := resource.MustParse("100m"); return &q }(),
+		"memory": func() *resource.Quantity { q := resource.MustParse("128Mi"); return &q }(),
 	}
 
 	result := &PolicyEvaluationResult{}
-
-	actions := RuleActions{
-		CPUMultiplier:    floatPtr(1.5),
-		MemoryMultiplier: floatPtr(2.0),
-		MinCPU:           stringPtr("50m"),
-		MaxCPU:           stringPtr("200m"),
-		MinMemory:        stringPtr("64Mi"),
-		MaxMemory:        stringPtr("512Mi"),
-	}
 
 	engine.applyRuleActions(Rule{Name: "test-rule"}, pod, "test-container", currentUsage, result)
 
@@ -881,7 +871,6 @@ func TestPolicyEngine_IsRuleScheduleActive(t *testing.T) {
 
 	// Test with time range
 	now := time.Now()
-	currentHour := now.Format("15:04")
 	startHour := now.Add(-time.Hour).Format("15:04")
 	endHour := now.Add(time.Hour).Format("15:04")
 
@@ -898,15 +887,7 @@ func TestPolicyEngine_IsRuleScheduleActive(t *testing.T) {
 	assert.True(t, active)
 }
 
-// Helper functions for tests
-func floatPtr(f float64) *float64 {
-	return &f
-}
-
-func stringPtr(s string) *string {
-	return &s
-}
-
+// Helper function for tests
 func resourcePtr(r resource.Quantity) *resource.Quantity {
 	return &r
 }

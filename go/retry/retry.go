@@ -402,7 +402,6 @@ func contains(s, substr string) bool {
 func containsSubstring(s, substr string) bool {
 	// This function is now redundant but kept for compatibility
 	return contains(s, substr)
-	return false
 }
 
 // WrapKubernetesError wraps a Kubernetes error as retryable or non-retryable

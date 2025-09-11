@@ -117,7 +117,6 @@ func TestServer_WriteJSONResponse(t *testing.T) {
 		"count": 42,
 	}
 
-	req := httptest.NewRequest("GET", "/test", nil)
 	w := httptest.NewRecorder()
 
 	server.writeJSONResponse(w, data)

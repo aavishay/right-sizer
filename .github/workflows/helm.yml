@@ -25,9 +25,8 @@ jobs:
 
       - name: Lint Helm chart
         run: |
-          cd helm
-          helm lint .
-          helm template test . --validate
+          helm lint helm/
+          helm template test helm/ --validate
 
   helm-publish:
     name: Publish Helm Chart

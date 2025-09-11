@@ -21,12 +21,13 @@ import (
 	"fmt"
 	"strings"
 
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
-	"k8s.io/client-go/kubernetes"
 	"right-sizer/config"
 	"right-sizer/logger"
 	"right-sizer/metrics"
+
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
+	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -84,7 +85,7 @@ func (vr *ValidationResult) String() string {
 // ResourceValidator validates resource requests and limits
 type ResourceValidator struct {
 	client      client.Client
-	clientset   *kubernetes.Clientset
+	clientset   kubernetes.Interface
 	config      *config.Config
 	metrics     *metrics.OperatorMetrics
 	nodeCache   map[string]*corev1.Node
@@ -93,7 +94,7 @@ type ResourceValidator struct {
 }
 
 // NewResourceValidator creates a new resource validator
-func NewResourceValidator(client client.Client, clientset *kubernetes.Clientset, cfg *config.Config, metrics *metrics.OperatorMetrics) *ResourceValidator {
+func NewResourceValidator(client client.Client, clientset kubernetes.Interface, cfg *config.Config, metrics *metrics.OperatorMetrics) *ResourceValidator {
 	return &ResourceValidator{
 		client:      client,
 		clientset:   clientset,

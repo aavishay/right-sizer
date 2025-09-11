@@ -70,8 +70,8 @@ const (
 
 // Server represents the API server
 type Server struct {
-	clientset       *kubernetes.Clientset
-	metricsClient   *metricsclient.Clientset
+	clientset       kubernetes.Interface
+	metricsClient   metricsclient.Interface
 	operatorMetrics *metrics.OperatorMetrics
 	optimizationOps atomic.Uint64 // counts optimization actions applied
 }
@@ -145,7 +145,7 @@ func filterMetricsHistory(rangeParam string) []MetricSample {
 }
 
 // NewServer creates a new API server instance
-func NewServer(clientset *kubernetes.Clientset, metricsClient *metricsclient.Clientset, optMetrics ...*metrics.OperatorMetrics) *Server {
+func NewServer(clientset kubernetes.Interface, metricsClient metricsclient.Interface, optMetrics ...*metrics.OperatorMetrics) *Server {
 	var m *metrics.OperatorMetrics
 	if len(optMetrics) > 0 {
 		m = optMetrics[0]

@@ -332,7 +332,7 @@ func TestLogger_LevelFiltering(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		t.Run(fmt.Sprintf("logger_%s_log_%s", tt.loggerLevel, tt.logLevel), func(t *testing.T) {
+		t.Run(fmt.Sprintf("logger_%d_log_%d", tt.loggerLevel, tt.logLevel), func(t *testing.T) {
 			var buf bytes.Buffer
 			logger := &Logger{
 				level:  tt.loggerLevel,

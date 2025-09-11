@@ -50,7 +50,7 @@ const (
 type WebhookServer struct {
 	server       *http.Server
 	client       client.Client
-	clientset    *kubernetes.Clientset
+	clientset    kubernetes.Interface
 	validator    *validation.ResourceValidator
 	config       *config.Config
 	metrics      *metrics.OperatorMetrics
@@ -72,7 +72,7 @@ type WebhookConfig struct {
 // NewWebhookServer creates a new admission webhook server
 func NewWebhookServer(
 	client client.Client,
-	clientset *kubernetes.Clientset,
+	clientset kubernetes.Interface,
 	validator *validation.ResourceValidator,
 	cfg *config.Config,
 	metrics *metrics.OperatorMetrics,
@@ -657,7 +657,7 @@ type WebhookManager struct {
 // NewWebhookManager creates a new webhook manager
 func NewWebhookManager(
 	client client.Client,
-	clientset *kubernetes.Clientset,
+	clientset kubernetes.Interface,
 	validator *validation.ResourceValidator,
 	cfg *config.Config,
 	metrics *metrics.OperatorMetrics,
