@@ -52,6 +52,7 @@ desktop.ini
 *.orig
 *.pid
 temp/
+temp-chart/
 build-temp/
 *-temp/
 
