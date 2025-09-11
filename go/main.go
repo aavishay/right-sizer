@@ -123,6 +123,17 @@ func main() {
 			logger.Info("   Server Platform: %s", serverVersion.Platform)
 			logger.Info("   Server Go Version: %s", serverVersion.GoVersion)
 
+			// Runtime Kubernetes version requirement check (minimum recommended: 1.33)
+			var majorInt, minorInt int
+			fmt.Sscanf(serverVersion.Major, "%d", &majorInt)
+			fmt.Sscanf(serverVersion.Minor, "%d", &minorInt)
+			if majorInt == 1 && minorInt < 33 {
+				logger.Warn("   ⚠️  Detected Kubernetes %s (<1.33). In-place resize features may be limited or disabled.", serverVersion.GitVersion)
+				logger.Warn("      Some features (e.g., reliable in-place CPU/memory adjustments) require 1.33+.")
+			} else {
+				logger.Info("   ✅ Kubernetes version satisfies recommended minimum (1.33+)")
+			}
+
 			// Parse version for feature detection
 			versionInfo := version.Info{
 				Major:      serverVersion.Major,
