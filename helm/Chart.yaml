@@ -5,7 +5,7 @@ type: application
 icon: https://raw.githubusercontent.com/aavishay/right-sizer/main/docs/assets/icon.svg
 version: 0.1.18
 appVersion: "0.1.18"
-kubeVersion: ">=1.33.0"
+kubeVersion: ">=1.33.0-0" # Accept vendor/pre-release variants like v1.33.4-eks-*
 keywords:
   - kubernetes
   - operator
