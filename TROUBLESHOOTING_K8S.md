@@ -177,7 +177,7 @@ kubectl logs -n right-sizer deployment/right-sizer | grep -i error
 ### Issue 8: In-Place Resizing Not Working
 
 **Requirements:**
-- Kubernetes 1.27+
+- Kubernetes 1.33+
 - Feature flag enabled
 - Proper restart policies
 

@@ -115,7 +115,7 @@ type Config struct {
 	IncludeCustomMetrics bool   // Enable custom metrics
 
 	// Feature flags
-	UpdateResizePolicy bool // Update resize policy for in-place pod resizing (Kubernetes 1.27+)
+	UpdateResizePolicy bool // Update resize policy for in-place pod resizing (Kubernetes 1.33+)
 	PatchResizePolicy  bool // Automatically patch parent resources with resize policy
 
 	// QoS preservation settings

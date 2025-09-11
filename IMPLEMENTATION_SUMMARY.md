@@ -109,7 +109,7 @@ Created shell script for end-to-end testing:
 ## Impact
 
 ### Positive Outcomes
-- ✅ Operators can safely run in Kubernetes versions < 1.27 without resize policy support
+- ✅ Operators can safely run in Kubernetes versions < 1.33 without resize policy support
 - ✅ Users can opt-in to resize policy features when their cluster supports it
 - ✅ Health monitoring is reliable and doesn't cause false pod restarts
 - ✅ Logs are cleaner and easier to parse for troubleshooting

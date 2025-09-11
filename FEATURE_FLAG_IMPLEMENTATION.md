@@ -141,7 +141,7 @@ For existing deployments:
 1. The feature is disabled by default, maintaining current behavior for safety
 2. To enable in-place resizing, explicitly set `UpdateResizePolicy: true` in the CRD
 3. Monitor pods after enabling to ensure resize operations work as expected
-4. The feature requires Kubernetes 1.27+ for full in-place resize support
+4. The feature requires Kubernetes 1.33+ for full in-place resize support
 
 ## Related Files
 

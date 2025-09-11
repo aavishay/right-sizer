@@ -2,7 +2,7 @@
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
 [![Version](https://img.shields.io/badge/Version-0.1.18-green.svg)](https://github.com/aavishay/right-sizer/releases)
-[![Kubernetes](https://img.shields.io/badge/Kubernetes-1.24%2B-326ce5)](https://kubernetes.io)
+[![Kubernetes](https://img.shields.io/badge/Kubernetes-1.33%2B-326ce5)](https://kubernetes.io)
 [![Helm](https://img.shields.io/badge/Helm-3.8%2B-0F1689)](https://helm.sh)
 [![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/right-sizer)](https://artifacthub.io/packages/search?repo=right-sizer)
 
@@ -28,7 +28,7 @@ helm install right-sizer right-sizer/right-sizer \
 
 ## 📋 Prerequisites
 
-- **Kubernetes** 1.24+ (1.27+ for in-place pod resizing)
+- **Kubernetes** 1.33+ (required for in-place pod resizing)
 - **Helm** 3.8 or higher
 - **Metrics Server** or **Prometheus** for resource metrics
 - **Cluster admin permissions** for CRD installation
@@ -82,7 +82,7 @@ helm install right-sizer right-sizer/right-sizer \
 | `rightsizerConfig.enabled` | Enable/disable right-sizing | `true` |
 | `rightsizerConfig.mode` | Operating mode: adaptive, aggressive, balanced, conservative, custom | `balanced` |
 | `rightsizerConfig.dryRun` | Preview changes without applying | `false` |
-| `rightsizerConfig.featureGates.updateResizePolicy` | Enable in-place resizing (K8s 1.27+) | `false` |
+| `rightsizerConfig.featureGates.updateResizePolicy` | Enable in-place resizing (K8s 1.33+) | `false` |
 | `rightsizerConfig.namespaceConfig.excludeNamespaces` | Namespaces to exclude | `[kube-system, kube-public, kube-node-lease]` |
 | `rightsizerConfig.resourceDefaults.cpu.minRequest` | Minimum CPU request | `10m` |
 | `rightsizerConfig.resourceDefaults.cpu.maxLimit` | Maximum CPU limit | `4000m` |
@@ -179,7 +179,7 @@ rightsizerConfig:
 
 | Feature | Default | K8s Version | Description |
 |---------|---------|-------------|-------------|
-| `updateResizePolicy` | `false` | 1.27+ | Enable in-place pod resizing without restarts |
+| `updateResizePolicy` | `false` | 1.33+ | Enable in-place pod resizing without restarts |
 | `enablePredictiveScaling` | `false` | All | ML-based predictive scaling (experimental) |
 | `enableCostOptimization` | `false` | All | Cost-aware resource optimization |
 | `enableMultiCluster` | `false` | All | Multi-cluster support (experimental) |
@@ -225,7 +225,7 @@ helm install right-sizer right-sizer/right-sizer \
   --set rightsizerConfig.logging.level=debug
 ```
 
-### Enable In-Place Resizing (K8s 1.27+)
+### Enable In-Place Resizing (K8s 1.33+)
 ```bash
 helm install right-sizer right-sizer/right-sizer \
   --set rightsizerConfig.featureGates.updateResizePolicy=true

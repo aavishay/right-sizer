@@ -473,7 +473,7 @@ func (ws *WebhookServer) generateResourcePatches(pod *corev1.Pod) []JSONPatch {
 		}
 
 		// Add resize policy only if the UpdateResizePolicy feature flag is enabled
-		// This enables in-place updates without container restart (K8s 1.27+)
+		// This enables in-place updates without container restart (K8s 1.33+)
 		if ws.config != nil && ws.config.UpdateResizePolicy {
 			// Check if container already has a resize policy
 			hasResizePolicy := container.ResizePolicy != nil && len(container.ResizePolicy) > 0

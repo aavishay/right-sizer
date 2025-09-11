@@ -188,7 +188,7 @@ func (r *AdaptiveRightSizer) Start(ctx context.Context) error {
 // testInPlaceCapability checks if in-place resize is supported
 func (r *AdaptiveRightSizer) testInPlaceCapability(ctx context.Context) bool {
 	// Check if the resize subresource is available by checking server version
-	// In-place pod resize is available in Kubernetes 1.27+ (alpha), 1.29+ (beta), 1.31+ (stable)
+	// In-place pod resize is available in Kubernetes 1.33+ (stable)
 
 	if r.ClientSet == nil {
 		logger.Warn("ClientSet not available, cannot test for in-place resize capability")
@@ -210,8 +210,8 @@ func (r *AdaptiveRightSizer) testInPlaceCapability(ctx context.Context) bool {
 	minorNum := 0
 	fmt.Sscanf(minor, "%d", &minorNum)
 
-	// Check if version supports in-place resize (K8s 1.27+)
-	if major == "1" && minorNum >= 27 {
+	// Check if version supports in-place resize (K8s 1.33+)
+	if major == "1" && minorNum >= 33 {
 		logger.Info("Kubernetes version %s.%s supports in-place pod resizing", major, minor)
 
 		// Additional check: try to access the resize subresource
@@ -232,7 +232,7 @@ func (r *AdaptiveRightSizer) testInPlaceCapability(ctx context.Context) bool {
 		return true
 	}
 
-	logger.Info("Kubernetes version %s.%s does not support in-place pod resizing (requires 1.27+)", major, minor)
+	logger.Info("Kubernetes version %s.%s does not support in-place pod resizing (requires 1.33+)", major, minor)
 	return false
 }
 

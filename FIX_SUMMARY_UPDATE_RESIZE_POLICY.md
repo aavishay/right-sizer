@@ -44,5 +44,5 @@ All tests pass successfully:
 ## Impact
 This fix ensures that:
 1. The right-sizer operator doesn't attempt unsupported pod modifications
-2. Users can opt-in to the resize policy feature when their Kubernetes version supports it (1.27+)
+2. Users can opt-in to the resize policy feature when their Kubernetes version supports it (1.33+)
 3. The default behavior is safe and compatible with all Kubernetes versions

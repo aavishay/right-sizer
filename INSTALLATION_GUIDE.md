@@ -14,13 +14,13 @@
 ## Prerequisites
 
 ### Required
-- Kubernetes cluster version 1.24 or higher
+- Kubernetes cluster version 1.33 or higher
 - kubectl configured to access your cluster
 - Helm 3.8+ (for Helm installation method)
 - Cluster admin permissions for CRD installation
 
 ### Optional
-- Kubernetes 1.27+ for in-place pod resizing support
+- Kubernetes 1.33+ for in-place pod resizing support
 - Metrics Server or Prometheus for resource metrics
 - cert-manager (if using webhook features)
 
@@ -110,7 +110,7 @@ rightsizerConfig:
   
   # Feature flags
   featureGates:
-    # Enable in-place pod resizing (requires K8s 1.27+)
+    # Enable in-place pod resizing (requires K8s 1.33+)
     # Default is false for safety
     updateResizePolicy: false
 
@@ -129,7 +129,7 @@ rightsizerConfig:
 
 #### Enable In-Place Pod Resizing
 
-For Kubernetes 1.27+, you can enable in-place pod resizing:
+For Kubernetes 1.33+, you can enable in-place pod resizing:
 
 ```yaml
 rightsizerConfig:
@@ -330,4 +330,4 @@ After installation:
 2. Start with dry-run mode to observe recommendations
 3. Gradually enable right-sizing for specific namespaces
 4. Adjust configuration based on your workload patterns
-5. Consider enabling in-place resizing if using Kubernetes 1.27+
+5. Consider enabling in-place resizing if using Kubernetes 1.33+

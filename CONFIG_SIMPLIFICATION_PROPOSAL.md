@@ -19,7 +19,7 @@ Having two separate flags creates complexity:
 Before simplifying, we must ensure these scenarios remain supported:
 
 1. **Preview Mode**: See what changes would be made without applying them
-2. **Resource-Only Updates**: Update CPU/memory without modifying restart policies (for K8s < 1.27)
+2. **Resource-Only Updates**: Update CPU/memory without modifying restart policies (for K8s < 1.33)
 3. **Full In-Place Support**: Update resources AND add restart policies for seamless resizing
 4. **Gradual Rollout**: Test resource changes before enabling restart policy modifications
 
@@ -98,8 +98,8 @@ spec:
   dryRun: false
   resizeStrategy: "auto"  # Options: "auto", "legacy", "in-place"
   # - "auto": Detect K8s version and use best strategy
-  # - "legacy": Never patch restart policies (for K8s < 1.27)
-  # - "in-place": Always patch restart policies (requires K8s 1.27+)
+  # - "legacy": Never patch restart policies (for K8s < 1.33)
+  # - "in-place": Always patch restart policies (requires K8s 1.33+)
 ```
 
 **Pros:**
