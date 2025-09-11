@@ -394,7 +394,7 @@ func IsRetryableKubernetesError(err error) bool {
 	return false
 }
 
-// contains checks if a string contains a substring (case-insensitive)
+// contains checks if a string contains a substring (case-insensitive) - used for error pattern matching
 func contains(s, substr string) bool {
 	return strings.Contains(strings.ToLower(s), strings.ToLower(substr))
 }

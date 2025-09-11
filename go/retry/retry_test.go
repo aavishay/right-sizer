@@ -629,7 +629,7 @@ func TestContains(t *testing.T) {
 		expected bool
 	}{
 		{"hello world", "world", true},
-		{"hello world", "WORLD", false}, // case sensitive
+		{"hello world", "WORLD", true}, // case insensitive
 		{"test", "test", true},
 		{"connection refused", "connection", true},
 		{"timeout", "timeout", true},
