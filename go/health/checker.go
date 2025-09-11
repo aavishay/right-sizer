@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"right-sizer/logger"
+
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 )
 
@@ -54,14 +55,14 @@ func NewOperatorHealthChecker() *OperatorHealthChecker {
 				Message:     "Controller initialized",
 			},
 			"metrics-provider": {
-				Healthy:     false,
+				Healthy:     true, // Default to healthy, will be updated if actually unhealthy
 				LastChecked: time.Now(),
-				Message:     "Metrics provider not yet initialized",
+				Message:     "Not initialized",
 			},
 			"webhook": {
-				Healthy:     false,
+				Healthy:     true, // Default to healthy, will be updated if actually unhealthy
 				LastChecked: time.Now(),
-				Message:     "Webhook not yet initialized",
+				Message:     "Not initialized",
 			},
 		},
 		metricsServerURL: "http://localhost:8080/metrics",
@@ -115,21 +116,25 @@ func (h *OperatorHealthChecker) IsHealthy() bool {
 	defer h.mu.RUnlock()
 
 	for name, status := range h.components {
-		// Skip optional components that are not initialized
+		// Skip optional components that are not initialized or not enabled
 		if name == "webhook" || name == "metrics-provider" {
 			if status.Message == "Not enabled" || status.Message == "Not initialized" {
 				continue
 			}
 		}
 
-		if !status.Healthy {
-			return false
+		// Check if component has been checked recently
+		if time.Since(status.LastChecked) > 5*time.Minute {
+			// Consider stale checks as unhealthy only for critical components
+			if name == "controller" {
+				return false
+			}
+			// Skip stale checks for non-critical components
+			continue
 		}
 
-		// Check if the component hasn't been updated recently (stale health check)
-		if time.Since(status.LastChecked) > 5*time.Minute {
-			logger.Warn("Component %s health check is stale (last checked: %v ago)",
-				name, time.Since(status.LastChecked))
+		// Only fail if a critical component is unhealthy
+		if !status.Healthy && name == "controller" {
 			return false
 		}
 	}
@@ -232,7 +237,12 @@ func (h *OperatorHealthChecker) CheckHTTPEndpoint(url string, timeout time.Durat
 func (h *OperatorHealthChecker) LivenessCheck(_ *http.Request) error {
 	// For liveness, we only check if the controller is running
 	// This prevents unnecessary restarts if external dependencies are down
-	if status, exists := h.GetComponentStatus("controller"); exists && status.Healthy {
+	status, exists := h.GetComponentStatus("controller")
+	if !exists {
+		// If controller status doesn't exist yet, assume healthy to avoid premature restarts
+		return nil
+	}
+	if status.Healthy {
 		return nil
 	}
 	return errors.New("controller is not healthy")
@@ -240,37 +250,23 @@ func (h *OperatorHealthChecker) LivenessCheck(_ *http.Request) error {
 
 // ReadinessCheck implements the healthz.Checker interface for readiness probes
 func (h *OperatorHealthChecker) ReadinessCheck(_ *http.Request) error {
-	// For readiness, we check critical components only
-	// Skip metrics-provider as it's not critical for operator functionality
-	report := h.GetHealthReport()
-	unhealthyComponents := []string{}
-
-	if components, ok := report["components"].(map[string]interface{}); ok {
-		for name, details := range components {
-			// Skip metrics-provider entirely as it's not critical
-			if name == "metrics-provider" {
-				continue
-			}
-
-			if componentDetails, ok := details.(map[string]interface{}); ok {
-				if healthy, ok := componentDetails["healthy"].(bool); ok && !healthy {
-					// Skip optional components
-					if name == "webhook" {
-						if msg, ok := componentDetails["message"].(string); ok {
-							if msg == "Not enabled" || msg == "Not initialized" {
-								continue
-							}
-						}
-					}
-					unhealthyComponents = append(unhealthyComponents, name)
-				}
-			}
-		}
+	// For readiness, check only the controller component
+	// Other components are optional and shouldn't affect readiness
+	status, exists := h.GetComponentStatus("controller")
+	if !exists {
+		// If controller status doesn't exist yet, assume ready
+		return nil
 	}
 
-	if len(unhealthyComponents) > 0 {
-		return fmt.Errorf("unhealthy components: %v", unhealthyComponents)
+	if !status.Healthy {
+		return fmt.Errorf("controller is not healthy: %s", status.Message)
 	}
+
+	// Check if the controller status is stale
+	if time.Since(status.LastChecked) > 5*time.Minute {
+		return fmt.Errorf("controller health check is stale (last checked: %v ago)", time.Since(status.LastChecked))
+	}
+
 	return nil
 }
 

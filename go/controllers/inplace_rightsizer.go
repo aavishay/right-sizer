@@ -696,10 +696,10 @@ func (r *InPlaceRightSizer) applyInPlaceResize(ctx context.Context, pod *corev1.
 		}
 	}
 
-	// STEP 1: Skip direct pod patching for resize policy
+	// Skip direct pod patching for resize policy
 	// Resize policies should only be set in parent resources (Deployments/StatefulSets/DaemonSets)
 	// not in pods directly. The parent resources should have already set the resize policy.
-	logger.Info("📝 Step 1: Skipping direct pod resize policy patch - relying on parent resource policies")
+	logger.Info("📝 Skipping direct pod resize policy patch - relying on parent resource policies")
 
 	// Refresh pod state after resize policy update
 	time.Sleep(100 * time.Millisecond)
@@ -710,8 +710,8 @@ func (r *InPlaceRightSizer) applyInPlaceResize(ctx context.Context, pod *corev1.
 		return fmt.Errorf("failed to refresh pod state: %w", err)
 	}
 
-	// STEP 2: Resize CPU for all containers
-	logger.Info("⚡ Step 2: Resizing CPU for pod %s/%s", pod.Namespace, pod.Name)
+	// Resize CPU for all containers
+	logger.Info("⚡ Resizing CPU for pod %s/%s", pod.Namespace, pod.Name)
 	cpuContainers := make([]ContainerResourcesPatch, 0, len(newResourcesMap))
 	for containerName, newResources := range newResourcesMap {
 		// Find the current container resources
@@ -799,8 +799,8 @@ func (r *InPlaceRightSizer) applyInPlaceResize(ctx context.Context, pod *corev1.
 		}
 	}
 
-	// STEP 3: Resize Memory for all containers
-	logger.Info("💾 Step 3: Resizing Memory for pod %s/%s", pod.Namespace, pod.Name)
+	// Resize Memory for all containers
+	logger.Info("💾 Resizing Memory for pod %s/%s", pod.Namespace, pod.Name)
 	memContainers := make([]ContainerResourcesPatch, 0, len(newResourcesMap))
 	for containerName, newResources := range newResourcesMap {
 		// Find the current container resources (after CPU update)

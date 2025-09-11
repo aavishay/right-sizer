@@ -597,10 +597,10 @@ func (r *AdaptiveRightSizer) updatePodInPlace(ctx context.Context, update Resour
 	memoryLimitDecreased := currentMemLimit != nil && newMemLimit != nil && currentMemLimit.Cmp(*newMemLimit) > 0
 	memoryRequestDecreased := currentMemRequest != nil && newMemRequest != nil && currentMemRequest.Cmp(*newMemRequest) > 0
 
-	// STEP 0: First ensure parent resource (Deployment/StatefulSet/DaemonSet) has resize policy
+	// First ensure parent resource (Deployment/StatefulSet/DaemonSet) has resize policy
 	// This should happen only if UpdateResizePolicy feature flag is enabled
 	if r.Config != nil && r.Config.UpdateResizePolicy {
-		log.Printf("📝 Step 0: Ensuring parent resource has resize policy for pod %s/%s", update.Namespace, update.Name)
+		log.Printf("📝 Ensuring parent resource has resize policy for pod %s/%s", update.Namespace, update.Name)
 		if err := r.ensureParentHasResizePolicy(ctx, &pod); err != nil {
 			log.Printf("⚠️  Failed to update parent resource with resize policy: %v", err)
 			// Continue anyway as parent might not exist or already have the policy
@@ -705,9 +705,9 @@ func (r *AdaptiveRightSizer) updatePodInPlace(ctx context.Context, update Resour
 		Value interface{} `json:"value"`
 	}
 
-	// STEP 1: Skip direct pod patching for resize policy
+	// Skip direct pod patching for resize policy
 	// Resize policy should only be set in parent resources (Deployments/StatefulSets/DaemonSets)
-	log.Printf("📝 Step 1: Skipping direct pod resize policy patch - policies should be set in parent resources only")
+	log.Printf("📝 Skipping direct pod resize policy patch - policies should be set in parent resources only")
 
 	// Refresh pod state after policy update
 	time.Sleep(100 * time.Millisecond)
@@ -731,7 +731,7 @@ func (r *AdaptiveRightSizer) updatePodInPlace(ctx context.Context, update Resour
 	// Ensure safe resource patch
 	safeResources := ensureSafeResourcePatchAdaptive(*currentResources, update.NewResources)
 
-	// STEP 2: Resize CPU first
+	// Resize CPU first
 	cpuChanged := false
 	var cpuPatchOps []JSONPatchOp
 
@@ -777,7 +777,7 @@ func (r *AdaptiveRightSizer) updatePodInPlace(ctx context.Context, update Resour
 
 	// Apply CPU resize if needed
 	if cpuChanged && len(cpuPatchOps) > 0 {
-		log.Printf("⚡ Step 2: Resizing CPU for pod %s/%s container %s", update.Namespace, update.Name, update.ContainerName)
+		log.Printf("⚡ Resizing CPU for pod %s/%s container %s", update.Namespace, update.Name, update.ContainerName)
 		cpuPatchData, err := json.Marshal(cpuPatchOps)
 		if err != nil {
 			return "", fmt.Errorf("failed to marshal CPU patch: %w", err)
@@ -819,7 +819,7 @@ func (r *AdaptiveRightSizer) updatePodInPlace(ctx context.Context, update Resour
 		}
 	}
 
-	// STEP 3: Resize Memory
+	// Resize Memory
 	memChanged := false
 	var memPatchOps []JSONPatchOp
 
@@ -865,7 +865,7 @@ func (r *AdaptiveRightSizer) updatePodInPlace(ctx context.Context, update Resour
 
 	// Apply memory resize if needed
 	if memChanged && len(memPatchOps) > 0 {
-		log.Printf("💾 Step 3: Resizing Memory for pod %s/%s container %s", update.Namespace, update.Name, update.ContainerName)
+		log.Printf("💾 Resizing Memory for pod %s/%s container %s", update.Namespace, update.Name, update.ContainerName)
 		memPatchData, err := json.Marshal(memPatchOps)
 		if err != nil {
 			return "", fmt.Errorf("failed to marshal memory patch: %w", err)
