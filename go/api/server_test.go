@@ -292,7 +292,7 @@ func TestServer_ConvertNodesToMetricsAPI(t *testing.T) {
 
 	item := items[0]
 	assert.Equal(t, "test-node", item["metadata"].(map[string]interface{})["name"])
-	assert.Contains(t, item["usage"].(map[string]interface{})["cpu"], "2000m")
+	assert.Equal(t, "2", item["usage"].(map[string]interface{})["cpu"]) // 2000m converts to canonical form "2"
 }
 
 func TestServer_FilterMetricsHistory(t *testing.T) {
@@ -304,9 +304,9 @@ func TestServer_FilterMetricsHistory(t *testing.T) {
 	// Add test samples
 	now := time.Now()
 	samples := []MetricSample{
-		{Time: now.Add(-1 * time.Hour), CPUUsagePercent: 10.0},
-		{Time: now.Add(-2 * time.Hour), CPUUsagePercent: 20.0},
-		{Time: now.Add(-25 * time.Hour), CPUUsagePercent: 30.0},
+		{Time: now.Add(-30 * time.Minute), CPUUsagePercent: 10.0}, // Within 1 hour
+		{Time: now.Add(-2 * time.Hour), CPUUsagePercent: 20.0},    // Within 24 hours but not 1 hour
+		{Time: now.Add(-25 * time.Hour), CPUUsagePercent: 30.0},   // Outside 24 hours
 	}
 
 	metricsHistoryMu.Lock()

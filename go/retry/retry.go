@@ -262,6 +262,13 @@ func (cb *CircuitBreaker) ExecuteWithContext(ctx context.Context, fn RetryFuncWi
 	cb.mutex.Lock()
 	defer cb.mutex.Unlock()
 
+	// Check if context is already cancelled
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+
 	// Check if circuit should transition to half-open
 	if cb.state == StateOpen && time.Since(cb.lastFailureTime) >= cb.config.RecoveryTimeout {
 		cb.state = StateHalfOpen

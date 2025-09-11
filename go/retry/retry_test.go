@@ -412,6 +412,9 @@ func TestCustomRetryer_Execute_ExponentialBackoff(t *testing.T) {
 		BaseDelay:  10 * time.Millisecond,
 		MaxDelay:   100 * time.Millisecond,
 		Factor:     2.0,
+		ShouldRetry: func(err error, attempt int) bool {
+			return err != nil // Retry all errors for this test
+		},
 	}
 	retryer := NewCustomRetryer(config, nil)
 
@@ -438,6 +441,9 @@ func TestCustomRetryer_Execute_LinearBackoff(t *testing.T) {
 		BaseDelay:  10 * time.Millisecond,
 		MaxDelay:   100 * time.Millisecond,
 		Factor:     1.5,
+		ShouldRetry: func(err error, attempt int) bool {
+			return err != nil // Retry all errors for this test
+		},
 	}
 	retryer := NewCustomRetryer(config, nil)
 
@@ -464,6 +470,9 @@ func TestCustomRetryer_Execute_ConstantBackoff(t *testing.T) {
 		BaseDelay:  10 * time.Millisecond,
 		MaxDelay:   100 * time.Millisecond,
 		Factor:     2.0,
+		ShouldRetry: func(err error, attempt int) bool {
+			return err != nil // Retry all errors for this test
+		},
 	}
 	retryer := NewCustomRetryer(config, nil)
 
@@ -510,6 +519,9 @@ func TestCustomRetryer_Execute_OnRetryCallback(t *testing.T) {
 		MaxRetries: 2,
 		Strategy:   ConstantBackoff,
 		BaseDelay:  1 * time.Millisecond,
+		ShouldRetry: func(err error, attempt int) bool {
+			return err != nil // Retry all errors for this test
+		},
 		OnRetry: func(err error, attempt int) {
 			retryCount++
 		},
@@ -529,6 +541,9 @@ func TestCustomRetryer_ExecuteWithContext_Cancellation(t *testing.T) {
 		MaxRetries: 5,
 		Strategy:   ConstantBackoff,
 		BaseDelay:  10 * time.Millisecond,
+		ShouldRetry: func(err error, attempt int) bool {
+			return err != nil // Retry all errors for this test
+		},
 	}
 	retryer := NewCustomRetryer(config, nil)
 

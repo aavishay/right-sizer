@@ -367,7 +367,7 @@ func TestPolicyEngine_RuleMatches_PodNameRegex(t *testing.T) {
 
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-app-123",
+			Name:      "web-app-123", // Changed to match the regex "^web-.*"
 			Namespace: "default",
 		},
 	}
@@ -819,7 +819,14 @@ func TestPolicyEngine_ApplyRuleActions(t *testing.T) {
 
 	result := &PolicyEvaluationResult{}
 
-	engine.applyRuleActions(Rule{Name: "test-rule"}, pod, "test-container", currentUsage, result)
+	rule := Rule{
+		Name: "test-rule",
+		Actions: RuleActions{
+			CPUMultiplier: func() *float64 { f := 1.5; return &f }(),
+		},
+	}
+
+	engine.applyRuleActions(rule, pod, "test-container", currentUsage, result)
 
 	assert.NotNil(t, result.RecommendedCPU)
 	assert.Equal(t, int64(150), result.RecommendedCPU.MilliValue()) // 100m * 1.5
