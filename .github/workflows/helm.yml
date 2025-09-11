@@ -25,6 +25,7 @@ jobs:
 
       - name: Lint Helm chart
         run: |
+          ls -l helm/
           helm lint helm/
           helm template test helm/ --validate
 
