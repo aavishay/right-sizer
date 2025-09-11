@@ -1,7 +1,7 @@
 # Right-Sizer Helm Chart
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
-[![Version](https://img.shields.io/badge/Version-0.1.17-green.svg)](https://github.com/aavishay/right-sizer/releases)
+[![Version](https://img.shields.io/badge/Version-0.1.18-green.svg)](https://github.com/aavishay/right-sizer/releases)
 [![Kubernetes](https://img.shields.io/badge/Kubernetes-1.24%2B-326ce5)](https://kubernetes.io)
 [![Helm](https://img.shields.io/badge/Helm-3.8%2B-0F1689)](https://helm.sh)
 [![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/right-sizer)](https://artifacthub.io/packages/search?repo=right-sizer)
@@ -23,7 +23,7 @@ helm repo update
 helm install right-sizer right-sizer/right-sizer \
   --namespace right-sizer \
   --create-namespace \
-  --version 0.1.17
+  --version 0.1.18
 ```
 
 ## 📋 Prerequisites
@@ -63,13 +63,13 @@ helm repo update
 helm install right-sizer right-sizer/right-sizer \
   --namespace right-sizer \
   --create-namespace \
-  --version 0.1.17
+  --version 0.1.18
 
 # Install with custom values
 helm install right-sizer right-sizer/right-sizer \
   --namespace right-sizer \
   --create-namespace \
-  --version 0.1.17 \
+  --version 0.1.18 \
   --values custom-values.yaml
 ```
 
@@ -288,7 +288,7 @@ helm repo update
 # Upgrade to latest version
 helm upgrade right-sizer right-sizer/right-sizer \
   --namespace right-sizer \
-  --version 0.1.17
+  --version 0.1.18
 ```
 
 ### Update CRDs (Manual)
