@@ -528,9 +528,14 @@ func TestServer_HandleMetricsHistory(t *testing.T) {
 	clientset := fake.NewSimpleClientset()
 	server := NewServer(clientset, nil)
 
-	// Add test sample to history
+	// Clear any existing metrics history to avoid test interference
+	metricsHistoryMu.Lock()
+	metricsHistory = []MetricSample{}
+	metricsHistoryMu.Unlock()
+
+	// Add test sample to history - ensure it's well within the 1h window
 	sample := MetricSample{
-		Time:               time.Now(),
+		Time:               time.Now().Add(-30 * time.Minute), // 30 minutes ago, well within 1h
 		CPUUsagePercent:    25.5,
 		MemoryUsagePercent: 45.2,
 		ActivePods:         10,

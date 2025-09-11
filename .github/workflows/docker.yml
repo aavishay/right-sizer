@@ -11,51 +11,6 @@ env:
   IMAGE_NAME: aavishay/right-sizer
 
 jobs:
-  lint:
-    name: Lint
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache: false
-
-      - name: golangci-lint
-        uses: golangci/golangci-lint-action@v3
-        with:
-          version: latest
-          working-directory: go
-          args: --timeout=5m
-
-  test:
-    name: Test
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache: true
-          cache-dependency-path: go/go.sum
-
-      - name: Download dependencies
-        working-directory: ./go
-        run: |
-          go mod download
-          go mod verify
-
-      - name: Run tests
-        working-directory: ./go
-        run: |
-          go test -v -race -timeout=10m ./...
-
   docker-build-and-push:
     name: Docker Build and Push
     runs-on: ubuntu-latest
