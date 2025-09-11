@@ -811,9 +811,10 @@ func TestWebhookManager_StartStop(t *testing.T) {
 	// Should return context canceled/timeout error
 	select {
 	case err := <-errChan:
-		// Could be context canceled, deadline exceeded, or server error
-		assert.Error(t, err)
-		// Don't assert on specific error message since it could vary
+		// Server may return nil error on clean shutdown or context.Canceled
+		if err != nil {
+			assert.Contains(t, []error{context.Canceled, context.DeadlineExceeded}, err)
+		}
 	case <-time.After(200 * time.Millisecond):
 		t.Fatal("Test timed out - webhook did not stop")
 	}

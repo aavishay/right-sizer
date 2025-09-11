@@ -822,7 +822,8 @@ func TestPolicyEngine_ApplyRuleActions(t *testing.T) {
 	rule := Rule{
 		Name: "test-rule",
 		Actions: RuleActions{
-			CPUMultiplier: func() *float64 { f := 1.5; return &f }(),
+			CPUMultiplier:    func() *float64 { f := 1.5; return &f }(),
+			MemoryMultiplier: func() *float64 { f := 2.0; return &f }(),
 		},
 	}
 
