@@ -1,0 +1,482 @@
+# Kubernetes 1.33+ In-Place Resize Compliance Testing Manifests
+# This file contains various pod and workload configurations to test
+# right-sizer operator compliance with K8s in-place resizing specifications
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: k8s-compliance-test
+  labels:
+    rightsizer.io/enabled: "true"
+---
+# Test Pod 1: Basic in-place resize with NotRequired policies
+apiVersion: v1
+kind: Pod
+metadata:
+  name: basic-resize-test
+  namespace: k8s-compliance-test
+  labels:
+    test-case: "basic-resize"
+    rightsizer.io/enabled: "true"
+  annotations:
+    rightsizer.io/test-description: "Tests basic CPU and memory resize with NotRequired restart policy"
+spec:
+  restartPolicy: Always
+  containers:
+  - name: test-container
+    image: registry.k8s.io/pause:3.8
+    resources:
+      requests:
+        cpu: "100m"
+        memory: "128Mi"
+      limits:
+        cpu: "200m"
+        memory: "256Mi"
+    resizePolicy:
+    - resourceName: cpu
+      restartPolicy: NotRequired
+    - resourceName: memory
+      restartPolicy: NotRequired
+---
+# Test Pod 2: Mixed restart policies (CPU NotRequired, Memory RestartContainer)
+apiVersion: v1
+kind: Pod
+metadata:
+  name: mixed-policy-test
+  namespace: k8s-compliance-test
+  labels:
+    test-case: "mixed-restart-policy"
+  annotations:
+    rightsizer.io/test-description: "Tests different restart policies for CPU vs Memory"
+spec:
+  restartPolicy: Always
+  containers:
+  - name: test-container
+    image: registry.k8s.io/pause:3.8
+    resources:
+      requests:
+        cpu: "100m"
+        memory: "128Mi"
+      limits:
+        cpu: "200m"
+        memory: "256Mi"
+    resizePolicy:
+    - resourceName: cpu
+      restartPolicy: NotRequired
+    - resourceName: memory
+      restartPolicy: RestartContainer
+---
+# Test Pod 3: Guaranteed QoS class (requests = limits)
+apiVersion: v1
+kind: Pod
+metadata:
+  name: guaranteed-qos-test
+  namespace: k8s-compliance-test
+  labels:
+    test-case: "guaranteed-qos"
+    qos-class: "Guaranteed"
+  annotations:
+    rightsizer.io/test-description: "Tests QoS preservation for Guaranteed pods"
+spec:
+  restartPolicy: Always
+  containers:
+  - name: test-container
+    image: registry.k8s.io/pause:3.8
+    resources:
+      requests:
+        cpu: "200m"
+        memory: "256Mi"
+      limits:
+        cpu: "200m"
+        memory: "256Mi"
+    resizePolicy:
+    - resourceName: cpu
+      restartPolicy: NotRequired
+    - resourceName: memory
+      restartPolicy: NotRequired
+---
+# Test Pod 4: Burstable QoS class (requests < limits)
+apiVersion: v1
+kind: Pod
+metadata:
+  name: burstable-qos-test
+  namespace: k8s-compliance-test
+  labels:
+    test-case: "burstable-qos"
+    qos-class: "Burstable"
+  annotations:
+    rightsizer.io/test-description: "Tests QoS preservation for Burstable pods"
+spec:
+  restartPolicy: Always
+  containers:
+  - name: test-container
+    image: registry.k8s.io/pause:3.8
+    resources:
+      requests:
+        cpu: "100m"
+        memory: "128Mi"
+      limits:
+        cpu: "300m"
+        memory: "512Mi"
+    resizePolicy:
+    - resourceName: cpu
+      restartPolicy: NotRequired
+    - resourceName: memory
+      restartPolicy: NotRequired
+---
+# Test Pod 5: BestEffort QoS class (no resources specified)
+apiVersion: v1
+kind: Pod
+metadata:
+  name: besteffort-qos-test
+  namespace: k8s-compliance-test
+  labels:
+    test-case: "besteffort-qos"
+    qos-class: "BestEffort"
+  annotations:
+    rightsizer.io/test-description: "Tests that BestEffort pods cannot have resources added"
+spec:
+  restartPolicy: Always
+  containers:
+  - name: test-container
+    image: registry.k8s.io/pause:3.8
+    # No resources specified - BestEffort QoS
+---
+# Test Pod 6: Never restart policy (should reject RestartContainer resize policy)
+apiVersion: v1
+kind: Pod
+metadata:
+  name: never-restart-test
+  namespace: k8s-compliance-test
+  labels:
+    test-case: "never-restart-policy"
+  annotations:
+    rightsizer.io/test-description: "Tests validation of RestartContainer policy with Never restart policy"
+spec:
+  restartPolicy: Never
+  containers:
+  - name: test-container
+    image: registry.k8s.io/pause:3.8
+    resources:
+      requests:
+        cpu: "100m"
+        memory: "128Mi"
+      limits:
+        cpu: "200m"
+        memory: "256Mi"
+    resizePolicy:
+    - resourceName: cpu
+      restartPolicy: NotRequired
+    - resourceName: memory
+      restartPolicy: NotRequired  # Must be NotRequired with Never restart policy
+---
+# Test Pod 7: Multi-container pod
+apiVersion: v1
+kind: Pod
+metadata:
+  name: multi-container-test
+  namespace: k8s-compliance-test
+  labels:
+    test-case: "multi-container"
+  annotations:
+    rightsizer.io/test-description: "Tests resize operations on multi-container pods"
+spec:
+  restartPolicy: Always
+  containers:
+  - name: main-container
+    image: registry.k8s.io/pause:3.8
+    resources:
+      requests:
+        cpu: "100m"
+        memory: "128Mi"
+      limits:
+        cpu: "200m"
+        memory: "256Mi"
+    resizePolicy:
+    - resourceName: cpu
+      restartPolicy: NotRequired
+    - resourceName: memory
+      restartPolicy: NotRequired
+  - name: sidecar-container
+    image: registry.k8s.io/pause:3.8
+    resources:
+      requests:
+        cpu: "50m"
+        memory: "64Mi"
+      limits:
+        cpu: "100m"
+        memory: "128Mi"
+    resizePolicy:
+    - resourceName: cpu
+      restartPolicy: NotRequired
+    - resourceName: memory
+      restartPolicy: RestartContainer
+---
+# Test Pod 8: Memory decrease testing
+apiVersion: v1
+kind: Pod
+metadata:
+  name: memory-decrease-test
+  namespace: k8s-compliance-test
+  labels:
+    test-case: "memory-decrease"
+  annotations:
+    rightsizer.io/test-description: "Tests memory decrease handling with NotRequired policy"
+spec:
+  restartPolicy: Always
+  containers:
+  - name: test-container
+    image: registry.k8s.io/pause:3.8
+    resources:
+      requests:
+        cpu: "100m"
+        memory: "1Gi"  # Start with high memory
+      limits:
+        cpu: "200m"
+        memory: "2Gi"
+    resizePolicy:
+    - resourceName: cpu
+      restartPolicy: NotRequired
+    - resourceName: memory
+      restartPolicy: NotRequired  # Memory decrease should be best-effort
+---
+# Test Pod 9: Memory decrease with RestartContainer policy
+apiVersion: v1
+kind: Pod
+metadata:
+  name: memory-decrease-restart-test
+  namespace: k8s-compliance-test
+  labels:
+    test-case: "memory-decrease-restart"
+  annotations:
+    rightsizer.io/test-description: "Tests memory decrease with RestartContainer policy"
+spec:
+  restartPolicy: Always
+  containers:
+  - name: test-container
+    image: registry.k8s.io/pause:3.8
+    resources:
+      requests:
+        cpu: "100m"
+        memory: "1Gi"
+      limits:
+        cpu: "200m"
+        memory: "2Gi"
+    resizePolicy:
+    - resourceName: cpu
+      restartPolicy: NotRequired
+    - resourceName: memory
+      restartPolicy: RestartContainer  # Should succeed for memory decrease
+---
+# Test Pod 10: Large resource requests (for infeasible resize testing)
+apiVersion: v1
+kind: Pod
+metadata:
+  name: large-resources-test
+  namespace: k8s-compliance-test
+  labels:
+    test-case: "large-resources"
+  annotations:
+    rightsizer.io/test-description: "Tests infeasible resize handling with very large resource requests"
+spec:
+  restartPolicy: Always
+  containers:
+  - name: test-container
+    image: registry.k8s.io/pause:3.8
+    resources:
+      requests:
+        cpu: "100m"
+        memory: "128Mi"
+      limits:
+        cpu: "200m"
+        memory: "256Mi"
+    resizePolicy:
+    - resourceName: cpu
+      restartPolicy: NotRequired
+    - resourceName: memory
+      restartPolicy: NotRequired
+---
+# Test Deployment: For right-sizer integration testing
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rightsizer-integration-test
+  namespace: k8s-compliance-test
+  labels:
+    test-case: "rightsizer-integration"
+  annotations:
+    rightsizer.io/test-description: "Tests right-sizer integration with deployments"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: rightsizer-test
+  template:
+    metadata:
+      labels:
+        app: rightsizer-test
+        rightsizer.io/enabled: "true"
+    spec:
+      containers:
+      - name: app-container
+        image: registry.k8s.io/pause:3.8
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "128Mi"
+          limits:
+            cpu: "200m"
+            memory: "256Mi"
+        resizePolicy:
+        - resourceName: cpu
+          restartPolicy: NotRequired
+        - resourceName: memory
+          restartPolicy: NotRequired
+---
+# Test StatefulSet: For right-sizer integration testing
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: statefulset-resize-test
+  namespace: k8s-compliance-test
+  labels:
+    test-case: "statefulset-integration"
+spec:
+  serviceName: "statefulset-test"
+  replicas: 2
+  selector:
+    matchLabels:
+      app: statefulset-test
+  template:
+    metadata:
+      labels:
+        app: statefulset-test
+        rightsizer.io/enabled: "true"
+    spec:
+      containers:
+      - name: app-container
+        image: registry.k8s.io/pause:3.8
+        resources:
+          requests:
+            cpu: "150m"
+            memory: "192Mi"
+          limits:
+            cpu: "300m"
+            memory: "384Mi"
+        resizePolicy:
+        - resourceName: cpu
+          restartPolicy: NotRequired
+        - resourceName: memory
+          restartPolicy: RestartContainer
+---
+# Service for StatefulSet
+apiVersion: v1
+kind: Service
+metadata:
+  name: statefulset-test
+  namespace: k8s-compliance-test
+spec:
+  clusterIP: None
+  selector:
+    app: statefulset-test
+  ports:
+  - port: 80
+    targetPort: 8080
+---
+# RightSizerConfig for testing
+apiVersion: rightsizer.io/v1alpha1
+kind: RightSizerConfig
+metadata:
+  name: compliance-test-config
+  namespace: k8s-compliance-test
+spec:
+  enabled: true
+  defaultMode: balanced
+  resizeInterval: "30s"  # Fast interval for testing
+  dryRun: false
+  updateResizePolicy: true
+  patchResizePolicy: true
+  namespaceConfig:
+    includeNamespaces:
+      - k8s-compliance-test
+  defaultResourceStrategy:
+    cpu:
+      requestMultiplier: 1.1
+      limitMultiplier: 1.5
+      minRequest: "10m"
+      maxLimit: "4000m"
+      scaleUpThreshold: 80.0
+      scaleDownThreshold: 20.0
+    memory:
+      requestMultiplier: 1.1
+      limitMultiplier: 1.5
+      minRequest: "64Mi"
+      maxLimit: "8192Mi"
+      scaleUpThreshold: 80.0
+      scaleDownThreshold: 20.0
+  globalConstraints:
+    maxChangePercentage: 100.0
+    minChangeThreshold: "10m"
+    maxMemoryGB: 16
+    maxCPUCores: 8
+    preventOOMKill: true
+    respectPodDisruptionBudget: true
+---
+# RightSizerPolicy for aggressive testing
+apiVersion: rightsizer.io/v1alpha1
+kind: RightSizerPolicy
+metadata:
+  name: aggressive-test-policy
+  namespace: k8s-compliance-test
+spec:
+  enabled: true
+  priority: 10
+  mode: aggressive
+  targetRef:
+    kind: Deployment
+    namespaces:
+      - k8s-compliance-test
+    labelSelector:
+      matchLabels:
+        app: rightsizer-test
+  resourceStrategy:
+    cpu:
+      requestMultiplier: 0.8
+      limitMultiplier: 1.2
+      targetUtilization: 70
+    memory:
+      requestMultiplier: 0.9
+      limitMultiplier: 1.3
+      targetUtilization: 80
+  constraints:
+    maxChangePercentage: 50.0
+    cooldownPeriod: "1m"
+---
+# Test Pod with invalid configuration (for validation testing)
+apiVersion: v1
+kind: Pod
+metadata:
+  name: invalid-config-test
+  namespace: k8s-compliance-test
+  labels:
+    test-case: "invalid-configuration"
+  annotations:
+    rightsizer.io/test-description: "Tests validation of invalid configurations"
+    rightsizer.io/expected-result: "should-be-rejected"
+spec:
+  restartPolicy: Never  # Never restart policy
+  containers:
+  - name: test-container
+    image: registry.k8s.io/pause:3.8
+    resources:
+      requests:
+        cpu: "200m"  # Request higher than limit
+        memory: "128Mi"
+      limits:
+        cpu: "100m"  # Limit lower than request - invalid
+        memory: "256Mi"
+    resizePolicy:
+    - resourceName: cpu
+      restartPolicy: NotRequired
+    - resourceName: memory
+      restartPolicy: RestartContainer  # Should be rejected with Never restart policy

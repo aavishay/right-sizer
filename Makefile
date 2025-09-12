@@ -48,6 +48,116 @@ help: ## Show this help message
 	@echo "Available targets:"
 	@awk 'BEGIN {FS = ":.*##"; printf "\n"} /^[a-zA-Z_-]+:.*?##/ { printf "  $(GREEN)%-20s$(NC) %s\n", $$1, $$2 } /^##@/ { printf "\n$(YELLOW)%s$(NC)\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
 
+##@ Testing
+
+.PHONY: test-k8s-compliance
+test-k8s-compliance: ## Run K8s 1.33+ in-place resize compliance check
+	@echo "$(BLUE)Running Kubernetes 1.33+ In-Place Resize Compliance Check...$(NC)"
+	@./scripts/check-k8s-compliance.sh
+
+.PHONY: test-compliance-integration
+test-compliance-integration: ## Run comprehensive K8s compliance integration tests
+	@echo "$(BLUE)Running K8s compliance integration tests...$(NC)"
+	cd tests/integration && go test -v -tags=integration -run TestK8sSpecCompliance -timeout=30m
+
+.PHONY: test-inplace-resize
+test-inplace-resize: ## Run in-place resize compliance tests
+	@echo "$(BLUE)Running in-place resize compliance tests...$(NC)"
+	cd tests/integration && go test -v -tags=integration -run TestK8sInPlaceResizeCompliance -timeout=20m
+
+.PHONY: test-resize-policy
+test-resize-policy: ## Run resize policy validation unit tests
+	@echo "$(BLUE)Running resize policy validation tests...$(NC)"
+	cd tests/unit && go test -v -run TestResizePolicyValidation
+
+.PHONY: test-qos-validation
+test-qos-validation: ## Run QoS class preservation tests
+	@echo "$(BLUE)Running QoS class preservation tests...$(NC)"
+	cd tests/unit && go test -v -run TestQoSClassPreservationValidation
+
+.PHONY: test-compliance-full
+test-compliance-full: test-k8s-compliance test-resize-policy test-qos-validation test-inplace-resize test-compliance-integration ## Run full K8s compliance test suite
+	@echo "$(GREEN)✅ Full K8s compliance test suite completed$(NC)"
+
+.PHONY: test-unit
+test-unit: ## Run all unit tests
+	@echo "$(BLUE)Running unit tests...$(NC)"
+	cd go && go test -v ./... -race -coverprofile=coverage.out
+	cd tests/unit && go test -v ./...
+
+.PHONY: test-integration
+test-integration: ## Run all integration tests
+	@echo "$(BLUE)Running integration tests...$(NC)"
+	cd tests/integration && go test -v -tags=integration ./... -timeout=30m
+
+.PHONY: test-all
+test-all: test-unit test-integration test-compliance-full ## Run all tests including compliance checks
+	@echo "$(GREEN)✅ All tests completed$(NC)"
+
+##@ Development Tools
+
+.PHONY: check-k8s-prereqs
+check-k8s-prereqs: ## Check K8s cluster prerequisites for in-place resizing
+	@echo "$(BLUE)Checking Kubernetes prerequisites...$(NC)"
+	@echo "Kubernetes version:"
+	@kubectl version --short 2>/dev/null || echo "$(RED)❌ kubectl not available$(NC)"
+	@echo "Checking for resize subresource support..."
+	@kubectl api-resources --subresource=resize 2>/dev/null | grep -q resize && echo "$(GREEN)✅ Resize subresource supported$(NC)" || echo "$(YELLOW)⚠️  Resize subresource may not be supported$(NC)"
+
+.PHONY: create-test-pod
+create-test-pod: ## Create a test pod for manual resize testing
+	@echo "$(BLUE)Creating test pod for resize testing...$(NC)"
+	@kubectl apply -f - <<EOF || true
+	apiVersion: v1
+	kind: Pod
+	metadata:
+	  name: resize-test-pod
+	  namespace: default
+	spec:
+	  containers:
+	  - name: test-container
+	    image: registry.k8s.io/pause:3.8
+	    resources:
+	      requests:
+	        cpu: "100m"
+	        memory: "128Mi"
+	      limits:
+	        cpu: "200m"
+	        memory: "256Mi"
+	    resizePolicy:
+	    - resourceName: cpu
+	      restartPolicy: NotRequired
+	    - resourceName: memory
+	      restartPolicy: NotRequired
+	EOF
+	@echo "$(GREEN)✅ Test pod created. Test resize with:$(NC)"
+	@echo "kubectl patch pod resize-test-pod --subresource resize --patch '{\"spec\":{\"containers\":[{\"name\":\"test-container\", \"resources\":{\"requests\":{\"cpu\":\"150m\"}, \"limits\":{\"cpu\":\"300m\"}}}]}}'"
+
+.PHONY: cleanup-test-resources
+cleanup-test-resources: ## Clean up test resources
+	@echo "$(BLUE)Cleaning up test resources...$(NC)"
+	@kubectl delete pod resize-test-pod --ignore-not-found=true
+	@kubectl delete namespace rightsizer-compliance-test k8s-resize-compliance-test k8s-spec-compliance-test --ignore-not-found=true
+	@echo "$(GREEN)✅ Test resources cleaned up$(NC)"
+
+##@ Compliance Reporting
+
+.PHONY: generate-compliance-report
+generate-compliance-report: ## Generate detailed compliance report
+	@echo "$(BLUE)Generating K8s compliance report...$(NC)"
+	@./scripts/check-k8s-compliance.sh > compliance-report-$(shell date +%Y%m%d-%H%M%S).txt
+	@echo "$(GREEN)✅ Compliance report generated$(NC)"
+
+.PHONY: validate-implementation
+validate-implementation: ## Validate current implementation against K8s spec
+	@echo "$(BLUE)Validating implementation against K8s 1.33+ spec...$(NC)"
+	@echo "Checking resize subresource usage in code..."
+	@grep -r "resize.*subresource\|SubResource.*resize" go/ && echo "$(GREEN)✅ Found resize subresource usage$(NC)" || echo "$(RED)❌ No resize subresource usage found$(NC)"
+	@echo "Checking for status condition handling..."
+	@grep -r "PodResizePending\|PodResizeInProgress" go/ && echo "$(GREEN)✅ Found status condition handling$(NC)" || echo "$(YELLOW)⚠️  No status condition handling found$(NC)"
+	@echo "Checking for QoS validation..."
+	@grep -r "QOSClass\|qos.*validation" go/ && echo "$(GREEN)✅ Found QoS handling$(NC)" || echo "$(YELLOW)⚠️  Limited QoS validation found$(NC)"
+
 ##@ Version Management
 
 .PHONY: version

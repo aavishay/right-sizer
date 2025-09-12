@@ -12,6 +12,7 @@
 //
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 package controllers
 
 import (
@@ -24,19 +25,20 @@ import (
 	"sync"
 	"time"
 
-	"right-sizer/config"
-	"right-sizer/logger"
-	"right-sizer/metrics"
-	"right-sizer/validation"
-
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+
+	"right-sizer/config"
+	"right-sizer/logger"
+	"right-sizer/metrics"
+	"right-sizer/validation"
 )
 
 // InPlaceRightSizer performs in-place resource adjustments without pod restarts using Kubernetes 1.33+ resize subresource
@@ -48,6 +50,9 @@ type InPlaceRightSizer struct {
 	MetricsProvider metrics.Provider
 	Interval        time.Duration
 	Validator       *validation.ResourceValidator
+	QoSValidator    *validation.QoSValidator
+	RetryManager    *RetryManager
+	EventRecorder   record.EventRecorder
 	Config          *config.Config // Configuration with feature flags
 	resizeCache     map[string]*ResizeDecisionCache
 	cacheMutex      sync.RWMutex
@@ -650,12 +655,46 @@ func formatResource(q resource.Quantity) string {
 // applyInPlaceResize performs the actual in-place resource update using the resize subresource
 // According to K8s 1.33 best practices, we resize CPU and memory in two separate steps
 func (r *InPlaceRightSizer) applyInPlaceResize(ctx context.Context, pod *corev1.Pod, newResourcesMap map[string]corev1.ResourceRequirements) error {
-	// Validate the new resources if validator is available
+	// Update ObservedGeneration to track spec changes
+	SetPodObservedGeneration(pod)
+
+	// Set PodResizeInProgress condition
+	SetPodResizeInProgress(pod, ReasonResizeInProgress, "Starting in-place resize operation")
+	// Comprehensive QoS validation if QoS validator is available
+	if r.QoSValidator != nil {
+		for containerName, newResources := range newResourcesMap {
+			qosResult := r.QoSValidator.ValidateQoSPreservation(pod, containerName, newResources)
+			if !qosResult.Valid {
+				logger.Warn("QoS validation failed for pod %s/%s container %s:", pod.Namespace, pod.Name, containerName)
+				for _, err := range qosResult.Errors {
+					logger.Warn("  - %s", err)
+				}
+
+				// Record event for QoS validation failure
+				if r.EventRecorder != nil {
+					r.EventRecorder.Event(pod, corev1.EventTypeWarning, "QoSValidationFailed",
+						fmt.Sprintf("QoS validation failed for container %s: %v", containerName, qosResult.Errors))
+				}
+
+				ClearResizeConditions(pod)
+				return fmt.Errorf("QoS validation failed: %v", qosResult.Errors)
+			}
+
+			// Log QoS validation warnings
+			if len(qosResult.Warnings) > 0 {
+				logger.Warn("QoS validation warnings for pod %s/%s container %s:", pod.Namespace, pod.Name, containerName)
+				for _, warning := range qosResult.Warnings {
+					logger.Warn("  - %s", warning)
+				}
+			}
+		}
+	}
+
+	// Standard resource validation if validator is available
 	if r.Validator != nil {
 		for containerName, newResources := range newResourcesMap {
 			validationResult := r.Validator.ValidateResourceChange(ctx, pod, newResources, containerName)
 			if !validationResult.Valid {
-				// Log validation errors and skip this pod
 				// Check if validation failed due to node resource constraints
 				hasNodeConstraint := false
 				for _, err := range validationResult.Errors {
@@ -667,28 +706,38 @@ func (r *InPlaceRightSizer) applyInPlaceResize(ctx context.Context, pod *corev1.
 				}
 
 				if hasNodeConstraint {
-					logger.Info("📍 Node resource constraint for pod %s/%s container %s:",
-						pod.Namespace, pod.Name, containerName)
+					logger.Info("📍 Node resource constraint for pod %s/%s container %s:", pod.Namespace, pod.Name, containerName)
 					for _, err := range validationResult.Errors {
 						logger.Info("  - %s", err)
 					}
-					// Return a specific error message for node constraints
+
+					// Add to retry manager for deferred retry
+					if r.RetryManager != nil {
+						reason := "Node resource constraints prevent resize"
+						r.RetryManager.AddDeferredResize(pod, newResourcesMap, reason,
+							fmt.Errorf("exceeds available node capacity: %v", validationResult.Errors))
+					}
+
+					// Record event for deferred resize
+					if r.EventRecorder != nil {
+						r.EventRecorder.Event(pod, corev1.EventTypeWarning, "ResizeDeferred",
+							"Resize deferred due to node resource constraints")
+					}
+
 					return fmt.Errorf("exceeds available node capacity: %v", validationResult.Errors)
 				} else {
-					logger.Warn("Skipping resize for pod %s/%s container %s due to validation errors:",
-						pod.Namespace, pod.Name, containerName)
+					logger.Warn("Skipping resize for pod %s/%s container %s due to validation errors:", pod.Namespace, pod.Name, containerName)
 					for _, err := range validationResult.Errors {
 						logger.Warn("  - %s", err)
 					}
+					ClearResizeConditions(pod)
+					return fmt.Errorf("validation failed: %v", validationResult.Errors)
 				}
-				// Return early - don't attempt resize if validation fails
-				return fmt.Errorf("validation failed: %v", validationResult.Errors)
 			}
 
 			// Log any warnings but continue
 			if len(validationResult.Warnings) > 0 {
-				logger.Warn("Validation warnings for pod %s/%s container %s:",
-					pod.Namespace, pod.Name, containerName)
+				logger.Warn("Validation warnings for pod %s/%s container %s:", pod.Namespace, pod.Name, containerName)
 				for _, warning := range validationResult.Warnings {
 					logger.Warn("  - %s", warning)
 				}
@@ -701,17 +750,25 @@ func (r *InPlaceRightSizer) applyInPlaceResize(ctx context.Context, pod *corev1.
 	// not in pods directly. The parent resources should have already set the resize policy.
 	logger.Info("📝 Skipping direct pod resize policy patch - relying on parent resource policies")
 
+	// Update pod status to show resize is in progress
+	if err := r.Client.Status().Update(ctx, pod); err != nil {
+		logger.Warn("Failed to update pod status with resize progress: %v", err)
+	}
+
 	// Refresh pod state after resize policy update
 	time.Sleep(100 * time.Millisecond)
 	if err := r.Client.Get(ctx, types.NamespacedName{
 		Namespace: pod.Namespace,
 		Name:      pod.Name,
 	}, pod); err != nil {
+		ClearResizeConditions(pod)
 		return fmt.Errorf("failed to refresh pod state: %w", err)
 	}
 
 	// Resize CPU for all containers
 	logger.Info("⚡ Resizing CPU for pod %s/%s", pod.Namespace, pod.Name)
+	UpdateResizeProgress(pod, "", corev1.ResourceCPU, "cpu-resize")
+
 	cpuContainers := make([]ContainerResourcesPatch, 0, len(newResourcesMap))
 	for containerName, newResources := range newResourcesMap {
 		// Find the current container resources
@@ -882,6 +939,47 @@ func (r *InPlaceRightSizer) applyInPlaceResize(ctx context.Context, pod *corev1.
 		}
 		logger.Info("✅ Memory resize successful for pod %s/%s", pod.Namespace, pod.Name)
 	}
+
+	// Update resize progress to show memory phase completion
+	UpdateResizeProgress(pod, "", corev1.ResourceMemory, "memory-resize")
+
+	// Update pod status to reflect successful completion
+	if err := r.Client.Status().Update(ctx, pod); err != nil {
+		logger.Warn("Failed to update pod status after memory resize: %v", err)
+	}
+
+	// Final refresh of pod state to get latest generation
+	if err := r.Client.Get(ctx, types.NamespacedName{
+		Namespace: pod.Namespace,
+		Name:      pod.Name,
+	}, pod); err != nil {
+		logger.Warn("Failed to refresh pod state for ObservedGeneration update: %v", err)
+	} else {
+		// Update ObservedGeneration after successful resize
+		SetPodObservedGeneration(pod)
+		if err := r.Client.Status().Update(ctx, pod); err != nil {
+			logger.Warn("Failed to update ObservedGeneration: %v", err)
+		}
+	}
+
+	// Clear resize conditions on successful completion
+	ClearResizeConditions(pod)
+	if err := r.Client.Status().Update(ctx, pod); err != nil {
+		logger.Warn("Failed to clear resize conditions: %v", err)
+	}
+
+	// Record success event
+	if r.EventRecorder != nil {
+		containerNames := make([]string, 0, len(newResourcesMap))
+		for name := range newResourcesMap {
+			containerNames = append(containerNames, name)
+		}
+		r.EventRecorder.Event(pod, corev1.EventTypeNormal, "ResizeCompleted",
+			fmt.Sprintf("Successfully resized containers: %s", strings.Join(containerNames, ", ")))
+	}
+
+	// Record success in resize event history
+	RecordResizeEvent(pod, "Normal", "ResizeCompleted", "In-place resize operation completed successfully")
 
 	logger.Info("🎯 All resize operations completed for pod %s/%s", pod.Namespace, pod.Name)
 	return nil
@@ -1067,6 +1165,19 @@ func SetupInPlaceRightSizer(mgr manager.Manager, provider metrics.Provider) erro
 	// Note: passing nil for metrics since we don't have OperatorMetrics here
 	validator := validation.NewResourceValidator(mgr.GetClient(), clientSet, cfg, nil)
 
+	// Create QoS validator for Kubernetes 1.33+ compliance
+	qosValidator := validation.NewQoSValidator()
+
+	// Create event recorder for recording resize events
+	eventRecorder := mgr.GetEventRecorderFor("right-sizer-inplace")
+
+	// Create retry manager for deferred resizes
+	retryConfig := DefaultRetryManagerConfig()
+	// TODO: Convert provider to OperatorMetrics when metric methods are available
+	// For now, pass nil to avoid type assertion issues
+	var operatorMetrics *metrics.OperatorMetrics = nil
+	retryManager := NewRetryManager(retryConfig, operatorMetrics, eventRecorder)
+
 	rightsizer := &InPlaceRightSizer{
 		Client:          mgr.GetClient(),
 		ClientSet:       clientSet,
@@ -1075,8 +1186,16 @@ func SetupInPlaceRightSizer(mgr manager.Manager, provider metrics.Provider) erro
 		Config:          cfg,
 		Interval:        cfg.ResizeInterval,
 		Validator:       validator,
+		QoSValidator:    qosValidator,
+		RetryManager:    retryManager,
+		EventRecorder:   eventRecorder,
 		resizeCache:     make(map[string]*ResizeDecisionCache),
 		cacheExpiry:     5 * time.Minute, // Cache entries for 5 minutes
+	}
+
+	// Start the retry manager
+	if err := retryManager.Start(); err != nil {
+		return fmt.Errorf("failed to start retry manager: %w", err)
 	}
 
 	// Start the rightsizer in a goroutine
@@ -1088,6 +1207,10 @@ func SetupInPlaceRightSizer(mgr manager.Manager, provider metrics.Provider) erro
 		}
 	}()
 
-	log.Println("✅ In-place rightsizer setup complete with Kubernetes 1.33+ resize subresource support")
+	log.Println("✅ In-place rightsizer setup complete with Kubernetes 1.33+ compliance features:")
+	log.Println("   - Pod resize status conditions")
+	log.Println("   - ObservedGeneration tracking")
+	log.Println("   - Comprehensive QoS validation")
+	log.Println("   - Deferred resize retry logic")
 	return nil
 }

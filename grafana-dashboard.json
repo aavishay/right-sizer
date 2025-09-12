@@ -1,0 +1,383 @@
+{
+  "dashboard": {
+    "id": null,
+    "title": "Right-Sizer Monitoring Dashboard",
+    "tags": ["right-sizer", "kubernetes", "monitoring"],
+    "style": "dark",
+    "timezone": "browser",
+    "refresh": "30s",
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "timepicker": {},
+    "templating": {
+      "list": [
+        {
+          "name": "namespace",
+          "type": "query",
+          "query": "label_values(kube_pod_info, namespace)",
+          "refresh": 1,
+          "includeAll": true,
+          "allValue": ".*",
+          "current": {
+            "text": "All",
+            "value": ".*"
+          }
+        },
+        {
+          "name": "pod",
+          "type": "query",
+          "query": "label_values(kube_pod_info{namespace=~\"$namespace\"}, pod)",
+          "refresh": 1,
+          "includeAll": true,
+          "allValue": ".*"
+        }
+      ]
+    },
+    "panels": [
+      {
+        "id": 1,
+        "title": "Right-Sizer Overview",
+        "type": "stat",
+        "gridPos": {
+          "x": 0,
+          "y": 0,
+          "w": 24,
+          "h": 3
+        },
+        "targets": [
+          {
+            "expr": "sum(up{job=~\".*right-sizer.*\"})",
+            "legendFormat": "Right-Sizer Instances"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "displayMode": "list",
+              "orientation": "horizontal"
+            },
+            "mappings": [],
+            "thresholds": {
+              "steps": [
+                {
+                  "color": "red",
+                  "value": null
+                },
+                {
+                  "color": "green",
+                  "value": 1
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 2,
+        "title": "HTTP Request Rate",
+        "type": "graph",
+        "gridPos": {
+          "x": 0,
+          "y": 3,
+          "w": 12,
+          "h": 8
+        },
+        "targets": [
+          {
+            "expr": "rate(promhttp_metric_handler_requests_total{job=~\".*right-sizer.*\"}[5m])",
+            "legendFormat": "Right-Sizer Metrics Endpoint - {{code}}"
+          },
+          {
+            "expr": "rate(nginx_http_requests_total[5m])",
+            "legendFormat": "Web App Requests"
+          }
+        ],
+        "yAxes": [
+          {
+            "label": "Requests/sec",
+            "min": 0
+          }
+        ],
+        "legend": {
+          "show": true
+        }
+      },
+      {
+        "id": 3,
+        "title": "Memory Usage",
+        "type": "graph",
+        "gridPos": {
+          "x": 12,
+          "y": 3,
+          "w": 12,
+          "h": 8
+        },
+        "targets": [
+          {
+            "expr": "go_memstats_heap_inuse_bytes{job=~\".*right-sizer.*\"}",
+            "legendFormat": "Right-Sizer Heap In Use"
+          },
+          {
+            "expr": "go_memstats_heap_alloc_bytes{job=~\".*right-sizer.*\"}",
+            "legendFormat": "Right-Sizer Heap Allocated"
+          },
+          {
+            "expr": "container_memory_usage_bytes{pod=~\"web-app-1.*\"}",
+            "legendFormat": "Web App Memory - {{pod}}"
+          }
+        ],
+        "yAxes": [
+          {
+            "label": "Bytes",
+            "min": 0
+          }
+        ]
+      },
+      {
+        "id": 4,
+        "title": "CPU Usage",
+        "type": "graph",
+        "gridPos": {
+          "x": 0,
+          "y": 11,
+          "w": 12,
+          "h": 8
+        },
+        "targets": [
+          {
+            "expr": "rate(process_cpu_seconds_total{job=~\".*right-sizer.*\"}[5m]) * 100",
+            "legendFormat": "Right-Sizer CPU %"
+          },
+          {
+            "expr": "rate(container_cpu_usage_seconds_total{pod=~\"web-app-1.*\"}[5m]) * 100",
+            "legendFormat": "Web App CPU % - {{pod}}"
+          }
+        ],
+        "yAxes": [
+          {
+            "label": "CPU %",
+            "min": 0,
+            "max": 100
+          }
+        ]
+      },
+      {
+        "id": 5,
+        "title": "Goroutines",
+        "type": "graph",
+        "gridPos": {
+          "x": 12,
+          "y": 11,
+          "w": 12,
+          "h": 8
+        },
+        "targets": [
+          {
+            "expr": "go_goroutines{job=~\".*right-sizer.*\"}",
+            "legendFormat": "Right-Sizer Goroutines"
+          }
+        ],
+        "yAxes": [
+          {
+            "label": "Count",
+            "min": 0
+          }
+        ]
+      },
+      {
+        "id": 6,
+        "title": "Kubernetes Pod Status",
+        "type": "stat",
+        "gridPos": {
+          "x": 0,
+          "y": 19,
+          "w": 8,
+          "h": 6
+        },
+        "targets": [
+          {
+            "expr": "kube_pod_status_phase{namespace=~\"$namespace\", pod=~\".*right-sizer.*\", phase=\"Running\"}",
+            "legendFormat": "Right-Sizer Running"
+          },
+          {
+            "expr": "kube_pod_status_phase{namespace=~\"$namespace\", pod=~\"web-app-1.*\", phase=\"Running\"}",
+            "legendFormat": "Web App Running"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "steps": [
+                {
+                  "color": "red",
+                  "value": null
+                },
+                {
+                  "color": "green",
+                  "value": 1
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 7,
+        "title": "Network I/O",
+        "type": "graph",
+        "gridPos": {
+          "x": 8,
+          "y": 19,
+          "w": 8,
+          "h": 6
+        },
+        "targets": [
+          {
+            "expr": "rate(process_network_receive_bytes_total{job=~\".*right-sizer.*\"}[5m])",
+            "legendFormat": "Right-Sizer RX"
+          },
+          {
+            "expr": "rate(process_network_transmit_bytes_total{job=~\".*right-sizer.*\"}[5m])",
+            "legendFormat": "Right-Sizer TX"
+          }
+        ],
+        "yAxes": [
+          {
+            "label": "Bytes/sec",
+            "min": 0
+          }
+        ]
+      },
+      {
+        "id": 8,
+        "title": "Container Resource Requests vs Limits",
+        "type": "graph",
+        "gridPos": {
+          "x": 16,
+          "y": 19,
+          "w": 8,
+          "h": 6
+        },
+        "targets": [
+          {
+            "expr": "kube_pod_container_resource_requests{pod=~\"web-app-1.*\", resource=\"memory\"}",
+            "legendFormat": "Memory Requests - {{pod}}"
+          },
+          {
+            "expr": "kube_pod_container_resource_limits{pod=~\"web-app-1.*\", resource=\"memory\"}",
+            "legendFormat": "Memory Limits - {{pod}}"
+          }
+        ],
+        "yAxes": [
+          {
+            "label": "Bytes",
+            "min": 0
+          }
+        ]
+      },
+      {
+        "id": 9,
+        "title": "GC Duration",
+        "type": "graph",
+        "gridPos": {
+          "x": 0,
+          "y": 25,
+          "w": 12,
+          "h": 6
+        },
+        "targets": [
+          {
+            "expr": "go_gc_duration_seconds{job=~\".*right-sizer.*\", quantile=\"0.5\"}",
+            "legendFormat": "GC Duration P50"
+          },
+          {
+            "expr": "go_gc_duration_seconds{job=~\".*right-sizer.*\", quantile=\"0.95\"}",
+            "legendFormat": "GC Duration P95"
+          }
+        ],
+        "yAxes": [
+          {
+            "label": "Seconds",
+            "min": 0
+          }
+        ]
+      },
+      {
+        "id": 10,
+        "title": "File Descriptors",
+        "type": "graph",
+        "gridPos": {
+          "x": 12,
+          "y": 25,
+          "w": 12,
+          "h": 6
+        },
+        "targets": [
+          {
+            "expr": "process_open_fds{job=~\".*right-sizer.*\"}",
+            "legendFormat": "Open FDs"
+          },
+          {
+            "expr": "process_max_fds{job=~\".*right-sizer.*\"}",
+            "legendFormat": "Max FDs"
+          }
+        ],
+        "yAxes": [
+          {
+            "label": "Count",
+            "min": 0
+          }
+        ]
+      },
+      {
+        "id": 11,
+        "title": "Load Generator Activity",
+        "type": "table",
+        "gridPos": {
+          "x": 0,
+          "y": 31,
+          "w": 24,
+          "h": 6
+        },
+        "targets": [
+          {
+            "expr": "up{job=~\".*load-generator.*\"}",
+            "legendFormat": "Load Generator Status"
+          },
+          {
+            "expr": "increase(promhttp_metric_handler_requests_total{job=~\".*right-sizer.*\"}[1m])",
+            "legendFormat": "Metrics Requests (1min)"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "displayMode": "table"
+            }
+          }
+        }
+      }
+    ],
+    "annotations": {
+      "list": [
+        {
+          "name": "Deployments",
+          "datasource": "prometheus",
+          "enable": true,
+          "expr": "increase(kube_deployment_status_replicas_updated[1m])",
+          "iconColor": "green",
+          "titleFormat": "Deployment Updated"
+        }
+      ]
+    }
+  },
+  "overwrite": false
+}
