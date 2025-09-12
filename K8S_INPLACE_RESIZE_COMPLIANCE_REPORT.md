@@ -104,7 +104,7 @@ if strings.Contains(err.Error(), "cannot be decreased") {
 ```go
 // File: go/validation/
 - Validates limits >= requests
-- Checks for positive resource values  
+- Checks for positive resource values
 - Respects node capacity constraints
 - Validates QoS class preservation
 ```
@@ -147,9 +147,9 @@ condition := corev1.PodCondition{
     LastTransitionTime: metav1.Now(),
 }
 
-// REQUIRED: Set PodResizeInProgress condition  
+// REQUIRED: Set PodResizeInProgress condition
 condition := corev1.PodCondition{
-    Type:               "PodResizeInProgress", 
+    Type:               "PodResizeInProgress",
     Status:             corev1.ConditionTrue,
     Reason:             "InProgress",
     Message:            "Resize operation in progress",
@@ -189,7 +189,7 @@ condition.ObservedGeneration = pod.Generation
    kubectl version --short
    # Client Version: v1.33.0+
    # Server Version: v1.33.0+
-   
+
    # Verify feature gate is enabled
    kubectl get nodes -o jsonpath='{.items[*].status.nodeInfo.kubeletVersion}'
    ```
@@ -220,7 +220,7 @@ go test -v -tags=integration -run TestK8sSpecCompliance
 # === RUN   TestK8sSpecCompliance
 # 🔍 Testing: Resize Subresource Support
 # ✅ PASS: Cluster supports resize subresource
-# 🔍 Testing: Container Resize Policy Implementation  
+# 🔍 Testing: Container Resize Policy Implementation
 # ✅ PASS: NotRequired CPU policy works correctly
 # ❌ FAIL: PodResizeInProgress condition not found
 ```
@@ -230,7 +230,7 @@ go test -v -tags=integration -run TestK8sSpecCompliance
 # Test resize subresource usage
 go test -v -run TestResizeSubresourceSupport
 
-# Test container resize policies  
+# Test container resize policies
 go test -v -run TestContainerResizePolicyCompliance
 
 # Test QoS preservation
@@ -258,7 +258,7 @@ go test -v -run TestRightSizerIntegrationWithResizeSubresource
 cd right-sizer/tests/unit
 go test -v -run TestResizePolicyValidation
 
-# Test QoS preservation logic  
+# Test QoS preservation logic
 go test -v -run TestQoSClassPreservationValidation
 
 # Test resource validation rules
@@ -282,7 +282,7 @@ spec:
     resizePolicy:
     - resourceName: cpu
       restartPolicy: NotRequired
-    - resourceName: memory  
+    - resourceName: memory
       restartPolicy: RestartContainer
     resources:
       limits:
@@ -300,7 +300,7 @@ kubectl wait --for=condition=Ready pod/resize-demo
 kubectl patch pod resize-demo --subresource resize --patch \
   '{"spec":{"containers":[{"name":"pause", "resources":{"requests":{"cpu":"800m"}, "limits":{"cpu":"800m"}}}]}}'
 
-# Verify CPU was resized and container not restarted  
+# Verify CPU was resized and container not restarted
 kubectl get pod resize-demo -o yaml | grep -A 10 "resources:"
 kubectl get pod resize-demo -o yaml | grep "restartCount"
 
@@ -323,7 +323,7 @@ kubectl get pod resize-demo -o yaml | grep -A 5 "conditions:"
 
 # Should show:
 # - type: PodResizePending
-#   status: "True"  
+#   status: "True"
 #   reason: Infeasible
 #   message: "Node didn't have enough capacity"
 ```
@@ -359,7 +359,7 @@ func SetPodResizePending(pod *corev1.Pod, reason, message string) {
 func SetPodResizeInProgress(pod *corev1.Pod) {
     condition := corev1.PodCondition{
         Type:               "PodResizeInProgress",
-        Status:             corev1.ConditionTrue, 
+        Status:             corev1.ConditionTrue,
         Reason:             "InProgress",
         Message:            "Resize operation in progress",
         LastTransitionTime: metav1.Now(),
@@ -383,15 +383,15 @@ func (r *InPlaceRightSizer) applyInPlaceResize(ctx context.Context, pod *corev1.
     if err := r.Client.Status().Update(ctx, pod); err != nil {
         return fmt.Errorf("failed to update pod status: %w", err)
     }
-    
+
     // Perform resize operations...
-    
+
     // Update observedGeneration after successful resize
     pod.Status.ObservedGeneration = pod.Generation
     if err := r.Client.Status().Update(ctx, pod); err != nil {
         logger.Warn("Failed to update observedGeneration: %v", err)
     }
-    
+
     // Clear resize conditions on success
     ClearResizeConditions(pod)
     return r.Client.Status().Update(ctx, pod)
@@ -411,30 +411,30 @@ import (
 
 func ValidateQoSPreservation(current corev1.ResourceRequirements, desired corev1.ResourceRequirements, currentQoS corev1.PodQOSClass) error {
     newQoS := CalculateQoSClass(desired)
-    
+
     switch currentQoS {
     case corev1.PodQOSGuaranteed:
         if newQoS != corev1.PodQOSGuaranteed {
             return fmt.Errorf("cannot change from Guaranteed QoS class")
         }
         return validateGuaranteedQoS(desired)
-        
+
     case corev1.PodQOSBurstable:
         if newQoS == corev1.PodQOSGuaranteed {
             return fmt.Errorf("cannot change from Burstable to Guaranteed QoS class")
         }
         if newQoS == corev1.PodQOSBestEffort {
-            return fmt.Errorf("cannot change from Burstable to BestEffort QoS class") 
+            return fmt.Errorf("cannot change from Burstable to BestEffort QoS class")
         }
         return nil
-        
+
     case corev1.PodQOSBestEffort:
         if newQoS != corev1.PodQOSBestEffort {
             return fmt.Errorf("cannot add resource requirements to BestEffort pod")
         }
         return nil
     }
-    
+
     return nil
 }
 
@@ -454,7 +454,7 @@ func CalculateQoSClass(resources corev1.ResourceRequirements) corev1.PodQOSClass
     if len(resources.Requests) == 0 && len(resources.Limits) == 0 {
         return corev1.PodQOSBestEffort
     }
-    
+
     for resourceName, request := range resources.Requests {
         if limit, exists := resources.Limits[resourceName]; exists {
             if !request.Equal(limit) {
@@ -462,7 +462,7 @@ func CalculateQoSClass(resources corev1.ResourceRequirements) corev1.PodQOSClass
             }
         }
     }
-    
+
     return corev1.PodQOSGuaranteed
 }
 ```
@@ -479,7 +479,7 @@ import (
     "sort"
     "sync"
     "time"
-    
+
     corev1 "k8s.io/api/core/v1"
 )
 
@@ -501,7 +501,7 @@ type RetryManager struct {
 func (rm *RetryManager) AddDeferredResize(pod *corev1.Pod, resources map[string]corev1.ResourceRequirements, reason string) {
     rm.mutex.Lock()
     defer rm.mutex.Unlock()
-    
+
     key := fmt.Sprintf("%s/%s", pod.Namespace, pod.Name)
     rm.deferredResizes[key] = &DeferredResize{
         Pod:          pod,
@@ -520,7 +520,7 @@ func (rm *RetryManager) ProcessDeferredResizes(ctx context.Context, resizer *InP
         resizes = append(resizes, resize)
     }
     rm.mutex.Unlock()
-    
+
     // Sort by priority (higher priority first), then by wait time
     sort.Slice(resizes, func(i, j int) bool {
         if resizes[i].Priority != resizes[j].Priority {
@@ -528,7 +528,7 @@ func (rm *RetryManager) ProcessDeferredResizes(ctx context.Context, resizer *InP
         }
         return resizes[i].FirstAttempt.Before(resizes[j].FirstAttempt)
     })
-    
+
     // Retry each deferred resize
     for _, resize := range resizes {
         err := resizer.ProcessPod(ctx, resize.Pod, resize.NewResources)
@@ -573,7 +573,7 @@ func getPodPriority(pod *corev1.Pod) int32 {
       ]
     },
     {
-      "feature_name": "Pod Resize Status Conditions", 
+      "feature_name": "Pod Resize Status Conditions",
       "k8s_requirement": "Set PodResizePending and PodResizeInProgress conditions",
       "status": "NON_COMPLIANT",
       "details": "Pod resize status conditions not implemented",
@@ -607,7 +607,7 @@ rightsizer_resize_operations_total:
   description: "Total number of resize operations performed"
 
 rightsizer_resize_duration_seconds:
-  type: histogram  
+  type: histogram
   labels: [namespace, pod, resource_type]
   description: "Time taken for resize operations"
 
@@ -623,7 +623,7 @@ rightsizer_qos_violations_total:
 
 rightsizer_resize_policy_applications_total:
   type: counter
-  labels: [policy_type, resource_type]  
+  labels: [policy_type, resource_type]
   description: "Number of resize policy applications"
 ```
 
@@ -631,18 +631,18 @@ rightsizer_resize_policy_applications_total:
 
 ```promql
 # Resize success rate
-sum(rate(rightsizer_resize_operations_total{status="success"}[5m])) / 
+sum(rate(rightsizer_resize_operations_total{status="success"}[5m])) /
 sum(rate(rightsizer_resize_operations_total[5m])) * 100
 
 # Average resize duration by resource type
-histogram_quantile(0.95, 
+histogram_quantile(0.95,
   rate(rightsizer_resize_duration_seconds_bucket[5m])
 ) by (resource_type)
 
 # Deferred resize queue depth
 rightsizer_deferred_resizes_total
 
-# QoS compliance rate  
+# QoS compliance rate
 sum(rate(rightsizer_qos_violations_total[5m])) by (violation_type)
 ```
 
@@ -657,7 +657,7 @@ The right-sizer operator has solid foundations for Kubernetes 1.33+ in-place res
 2. ObservedGeneration tracking in status and conditions
 3. Comprehensive QoS class preservation validation
 
-### 🟡 **IMPORTANT (Should Fix)** 
+### 🟡 **IMPORTANT (Should Fix)**
 4. Deferred resize retry logic with priority handling
 5. Enhanced error handling and status reporting
 6. Comprehensive integration tests
@@ -669,9 +669,9 @@ The right-sizer operator has solid foundations for Kubernetes 1.33+ in-place res
 
 **Estimated Development Time:** 3-4 weeks for full compliance
 
-**Testing Timeline:** 
+**Testing Timeline:**
 - Week 1: Implement critical missing features
-- Week 2: Add comprehensive test coverage  
+- Week 2: Add comprehensive test coverage
 - Week 3: Performance testing and optimization
 - Week 4: Final validation and documentation
 

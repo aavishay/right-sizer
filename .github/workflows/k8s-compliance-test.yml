@@ -2,45 +2,45 @@ name: Kubernetes In-Place Resize Compliance Tests
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [main, develop]
     paths:
-      - 'go/**'
-      - 'tests/**'
-      - 'helm/**'
-      - '.github/workflows/k8s-compliance-test.yml'
+      - "go/**"
+      - "tests/**"
+      - "helm/**"
+      - ".github/workflows/k8s-compliance-test.yml"
   pull_request:
-    branches: [ main, develop ]
+    branches: [main, develop]
     paths:
-      - 'go/**'
-      - 'tests/**'
-      - 'helm/**'
+      - "go/**"
+      - "tests/**"
+      - "helm/**"
   schedule:
     # Run compliance tests daily at 2 AM UTC
-    - cron: '0 2 * * *'
+    - cron: "0 2 * * *"
   workflow_dispatch:
     inputs:
       k8s_version:
-        description: 'Kubernetes version to test against'
+        description: "Kubernetes version to test against"
         required: false
-        default: 'v1.33.0'
+        default: "v1.33.0"
         type: choice
         options:
-          - 'v1.33.0'
-          - 'v1.32.0'
-          - 'v1.31.0'
+          - "v1.33.0"
+          - "v1.32.0"
+          - "v1.31.0"
       test_suite:
-        description: 'Test suite to run'
+        description: "Test suite to run"
         required: false
-        default: 'full'
+        default: "full"
         type: choice
         options:
-          - 'full'
-          - 'compliance-only'
-          - 'integration-only'
-          - 'unit-only'
+          - "full"
+          - "compliance-only"
+          - "integration-only"
+          - "unit-only"
 
 env:
-  GO_VERSION: '1.21'
+  GO_VERSION: "1.21"
   K8S_VERSION: ${{ github.event.inputs.k8s_version || 'v1.33.0' }}
   TEST_SUITE: ${{ github.event.inputs.test_suite || 'full' }}
 
@@ -53,7 +53,7 @@ jobs:
       matrix:
         k8s_version:
           - v1.33.0
-          - v1.32.0  # For backwards compatibility testing
+          - v1.32.0 # For backwards compatibility testing
         include:
           - k8s_version: v1.33.0
             expected_compliance: true
@@ -63,274 +63,274 @@ jobs:
             features: "limited-resize-support"
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-    - name: Set up Go
-      uses: actions/setup-go@v4
-      with:
-        go-version: ${{ env.GO_VERSION }}
-        cache: true
-        cache-dependency-path: go/go.sum
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+          cache-dependency-path: go/go.sum
 
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-    - name: Create kind cluster with K8s ${{ matrix.k8s_version }}
-      uses: helm/kind-action@v1.8.0
-      with:
-        version: v0.20.0
-        kubectl_version: ${{ matrix.k8s_version }}
-        cluster_name: compliance-test
-        config: |
-          kind: Cluster
-          apiVersion: kind.x-k8s.io/v1alpha4
-          nodes:
-          - role: control-plane
-            image: kindest/node:${{ matrix.k8s_version }}
-            kubeadmConfigPatches:
-            - |
-              kind: ClusterConfiguration
-              apiServer:
-                extraArgs:
-                  feature-gates: "InPlacePodVerticalScaling=true"
-              controllerManager:
-                extraArgs:
-                  feature-gates: "InPlacePodVerticalScaling=true"
-            - |
-              kind: KubeletConfiguration
-              featureGates:
-                InPlacePodVerticalScaling: true
-          - role: worker
-            image: kindest/node:${{ matrix.k8s_version }}
-            kubeadmConfigPatches:
-            - |
-              kind: KubeletConfiguration
-              featureGates:
-                InPlacePodVerticalScaling: true
+      - name: Create kind cluster with K8s ${{ matrix.k8s_version }}
+        uses: helm/kind-action@v1.8.0
+        with:
+          version: v0.20.0
+          kubectl_version: ${{ matrix.k8s_version }}
+          cluster_name: compliance-test
+          config: |
+            kind: Cluster
+            apiVersion: kind.x-k8s.io/v1alpha4
+            nodes:
+            - role: control-plane
+              image: kindest/node:${{ matrix.k8s_version }}
+              kubeadmConfigPatches:
+              - |
+                kind: ClusterConfiguration
+                apiServer:
+                  extraArgs:
+                    feature-gates: "InPlacePodVerticalScaling=true"
+                controllerManager:
+                  extraArgs:
+                    feature-gates: "InPlacePodVerticalScaling=true"
+              - |
+                kind: KubeletConfiguration
+                featureGates:
+                  InPlacePodVerticalScaling: true
+            - role: worker
+              image: kindest/node:${{ matrix.k8s_version }}
+              kubeadmConfigPatches:
+              - |
+                kind: KubeletConfiguration
+                featureGates:
+                  InPlacePodVerticalScaling: true
 
-    - name: Wait for cluster to be ready
-      run: |
-        kubectl cluster-info
-        kubectl wait --for=condition=Ready nodes --all --timeout=300s
-        kubectl get nodes -o wide
+      - name: Wait for cluster to be ready
+        run: |
+          kubectl cluster-info
+          kubectl wait --for=condition=Ready nodes --all --timeout=300s
+          kubectl get nodes -o wide
 
-    - name: Verify K8s version and feature gates
-      run: |
-        echo "Kubernetes version:"
-        kubectl version --short
+      - name: Verify K8s version and feature gates
+        run: |
+          echo "Kubernetes version:"
+          kubectl version --short
 
-        echo "Checking feature gates on nodes:"
-        kubectl get nodes -o jsonpath='{range .items[*]}{.metadata.name}{": "}{.status.nodeInfo.kubeletVersion}{"\n"}{end}'
+          echo "Checking feature gates on nodes:"
+          kubectl get nodes -o jsonpath='{range .items[*]}{.metadata.name}{": "}{.status.nodeInfo.kubeletVersion}{"\n"}{end}'
 
-        echo "Checking API resources for resize subresource:"
-        kubectl api-resources --subresource=resize || echo "Resize subresource not available"
+          echo "Checking API resources for resize subresource:"
+          kubectl api-resources --subresource=resize || echo "Resize subresource not available"
 
-    - name: Build right-sizer image
-      run: |
-        cd go
-        docker build -t right-sizer:test .
-        kind load docker-image right-sizer:test --name compliance-test
+      - name: Build right-sizer image
+        run: |
+          cd go
+          docker build -t right-sizer:test .
+          kind load docker-image right-sizer:test --name compliance-test
 
-    - name: Install right-sizer operator
-      run: |
-        # Install CRDs first
-        kubectl apply -f helm/crds/
+      - name: Install right-sizer operator
+        run: |
+          # Install CRDs first
+          kubectl apply -f helm/crds/
 
-        # Wait for CRDs to be established
-        kubectl wait --for condition=established --timeout=60s crd/rightsizerconfigs.rightsizer.io || true
-        kubectl wait --for condition=established --timeout=60s crd/rightsizerpolicies.rightsizer.io || true
+          # Wait for CRDs to be established
+          kubectl wait --for condition=established --timeout=60s crd/rightsizerconfigs.rightsizer.io || true
+          kubectl wait --for condition=established --timeout=60s crd/rightsizerpolicies.rightsizer.io || true
 
-        # Install right-sizer with compliance-friendly configuration
-        helm install right-sizer ./helm \
-          --set image.repository=right-sizer \
-          --set image.tag=test \
-          --set image.pullPolicy=Never \
-          --set config.updateResizePolicy=true \
-          --set config.patchResizePolicy=true \
-          --set config.dryRun=false \
-          --set config.logLevel=debug \
-          --wait --timeout=300s
+          # Install right-sizer with compliance-friendly configuration
+          helm install right-sizer ./helm \
+            --set image.repository=right-sizer \
+            --set image.tag=test \
+            --set image.pullPolicy=Never \
+            --set config.updateResizePolicy=true \
+            --set config.patchResizePolicy=true \
+            --set config.dryRun=false \
+            --set config.logLevel=debug \
+            --wait --timeout=300s
 
-    - name: Wait for right-sizer to be ready
-      run: |
-        kubectl wait --for=condition=available --timeout=300s deployment/right-sizer
-        kubectl get pods -A
-        kubectl logs -l app.kubernetes.io/name=right-sizer --tail=50
+      - name: Wait for right-sizer to be ready
+        run: |
+          kubectl wait --for=condition=available --timeout=300s deployment/right-sizer
+          kubectl get pods -A
+          kubectl logs -l app.kubernetes.io/name=right-sizer --tail=50
 
-    - name: Run basic compliance check
-      run: |
-        chmod +x scripts/check-k8s-compliance.sh
-        ./scripts/check-k8s-compliance.sh
-      continue-on-error: true
+      - name: Run basic compliance check
+        run: |
+          chmod +x scripts/check-k8s-compliance.sh
+          ./scripts/check-k8s-compliance.sh
+        continue-on-error: true
 
-    - name: Run unit tests
-      if: env.TEST_SUITE == 'full' || env.TEST_SUITE == 'unit-only'
-      run: |
-        cd tests/unit
-        go test -v ./... -race -coverprofile=coverage.out
-      continue-on-error: true
+      - name: Run unit tests
+        if: env.TEST_SUITE == 'full' || env.TEST_SUITE == 'unit-only'
+        run: |
+          cd tests/unit
+          go test -v ./... -race -coverprofile=coverage.out
+        continue-on-error: true
 
-    - name: Run K8s compliance integration tests
-      if: env.TEST_SUITE == 'full' || env.TEST_SUITE == 'compliance-only' || env.TEST_SUITE == 'integration-only'
-      run: |
-        cd tests/integration
-        go test -v -tags=integration -run TestK8sSpecCompliance -timeout=30m
-      continue-on-error: true
+      - name: Run K8s compliance integration tests
+        if: env.TEST_SUITE == 'full' || env.TEST_SUITE == 'compliance-only' || env.TEST_SUITE == 'integration-only'
+        run: |
+          cd tests/integration
+          go test -v -tags=integration -run TestK8sSpecCompliance -timeout=30m
+        continue-on-error: true
 
-    - name: Run in-place resize compliance tests
-      if: env.TEST_SUITE == 'full' || env.TEST_SUITE == 'compliance-only'
-      run: |
-        cd tests/integration
-        go test -v -tags=integration -run TestK8sInPlaceResizeCompliance -timeout=20m
-      continue-on-error: true
+      - name: Run in-place resize compliance tests
+        if: env.TEST_SUITE == 'full' || env.TEST_SUITE == 'compliance-only'
+        run: |
+          cd tests/integration
+          go test -v -tags=integration -run TestK8sInPlaceResizeCompliance -timeout=20m
+        continue-on-error: true
 
-    - name: Test manual resize scenarios
-      if: matrix.k8s_version == 'v1.33.0'
-      run: |
-        echo "Testing manual resize scenarios..."
+      - name: Test manual resize scenarios
+        if: matrix.k8s_version == 'v1.33.0'
+        run: |
+          echo "Testing manual resize scenarios..."
 
-        # Create test pod with resize policy
-        kubectl apply -f - <<EOF
-        apiVersion: v1
-        kind: Pod
-        metadata:
-          name: manual-resize-test
-          namespace: default
-        spec:
-          containers:
-          - name: test-container
-            image: registry.k8s.io/pause:3.8
-            resources:
-              requests:
-                cpu: "100m"
-                memory: "128Mi"
-              limits:
-                cpu: "200m"
-                memory: "256Mi"
-            resizePolicy:
-            - resourceName: cpu
-              restartPolicy: NotRequired
-            - resourceName: memory
-              restartPolicy: RestartContainer
-        EOF
+          # Create test pod with resize policy
+          kubectl apply -f - <<EOF
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            name: manual-resize-test
+            namespace: default
+          spec:
+            containers:
+            - name: test-container
+              image: registry.k8s.io/pause:3.8
+              resources:
+                requests:
+                  cpu: "100m"
+                  memory: "128Mi"
+                limits:
+                  cpu: "200m"
+                  memory: "256Mi"
+              resizePolicy:
+              - resourceName: cpu
+                restartPolicy: NotRequired
+              - resourceName: memory
+                restartPolicy: RestartContainer
+          EOF
 
-        kubectl wait --for=condition=Ready pod/manual-resize-test --timeout=60s
+          kubectl wait --for=condition=Ready pod/manual-resize-test --timeout=60s
 
-        echo "Initial pod resources:"
-        kubectl get pod manual-resize-test -o yaml | grep -A 10 "resources:"
+          echo "Initial pod resources:"
+          kubectl get pod manual-resize-test -o yaml | grep -A 10 "resources:"
 
-        # Test CPU resize (should not restart)
-        echo "Testing CPU resize..."
-        initial_restart_count=$(kubectl get pod manual-resize-test -o jsonpath='{.status.containerStatuses[0].restartCount}')
+          # Test CPU resize (should not restart)
+          echo "Testing CPU resize..."
+          initial_restart_count=$(kubectl get pod manual-resize-test -o jsonpath='{.status.containerStatuses[0].restartCount}')
 
-        kubectl patch pod manual-resize-test --subresource resize --patch \
-          '{"spec":{"containers":[{"name":"test-container", "resources":{"requests":{"cpu":"150m"}, "limits":{"cpu":"300m"}}}]}}'
+          kubectl patch pod manual-resize-test --subresource resize --patch \
+            '{"spec":{"containers":[{"name":"test-container", "resources":{"requests":{"cpu":"150m"}, "limits":{"cpu":"300m"}}}]}}'
 
-        sleep 5
-        new_restart_count=$(kubectl get pod manual-resize-test -o jsonpath='{.status.containerStatuses[0].restartCount}')
+          sleep 5
+          new_restart_count=$(kubectl get pod manual-resize-test -o jsonpath='{.status.containerStatuses[0].restartCount}')
 
-        echo "Restart count before CPU resize: $initial_restart_count"
-        echo "Restart count after CPU resize: $new_restart_count"
+          echo "Restart count before CPU resize: $initial_restart_count"
+          echo "Restart count after CPU resize: $new_restart_count"
 
-        if [ "$initial_restart_count" == "$new_restart_count" ]; then
-          echo "✅ CPU resize did not restart container (correct)"
-        else
-          echo "❌ CPU resize restarted container (incorrect)"
-        fi
+          if [ "$initial_restart_count" == "$new_restart_count" ]; then
+            echo "✅ CPU resize did not restart container (correct)"
+          else
+            echo "❌ CPU resize restarted container (incorrect)"
+          fi
 
-        # Test Memory resize (should restart)
-        echo "Testing Memory resize..."
-        kubectl patch pod manual-resize-test --subresource resize --patch \
-          '{"spec":{"containers":[{"name":"test-container", "resources":{"requests":{"memory":"256Mi"}, "limits":{"memory":"512Mi"}}}]}}'
+          # Test Memory resize (should restart)
+          echo "Testing Memory resize..."
+          kubectl patch pod manual-resize-test --subresource resize --patch \
+            '{"spec":{"containers":[{"name":"test-container", "resources":{"requests":{"memory":"256Mi"}, "limits":{"memory":"512Mi"}}}]}}'
 
-        sleep 10
-        final_restart_count=$(kubectl get pod manual-resize-test -o jsonpath='{.status.containerStatuses[0].restartCount}')
+          sleep 10
+          final_restart_count=$(kubectl get pod manual-resize-test -o jsonpath='{.status.containerStatuses[0].restartCount}')
 
-        echo "Restart count after memory resize: $final_restart_count"
+          echo "Restart count after memory resize: $final_restart_count"
 
-        if [ "$final_restart_count" -gt "$new_restart_count" ]; then
-          echo "✅ Memory resize restarted container (correct)"
-        else
-          echo "❌ Memory resize did not restart container (may be incorrect)"
-        fi
+          if [ "$final_restart_count" -gt "$new_restart_count" ]; then
+            echo "✅ Memory resize restarted container (correct)"
+          else
+            echo "❌ Memory resize did not restart container (may be incorrect)"
+          fi
 
-        echo "Final pod resources:"
-        kubectl get pod manual-resize-test -o yaml | grep -A 10 "resources:"
+          echo "Final pod resources:"
+          kubectl get pod manual-resize-test -o yaml | grep -A 10 "resources:"
 
-    - name: Collect logs and diagnostics
-      if: always()
-      run: |
-        echo "=== Right-sizer logs ==="
-        kubectl logs -l app.kubernetes.io/name=right-sizer --tail=100 || true
+      - name: Collect logs and diagnostics
+        if: always()
+        run: |
+          echo "=== Right-sizer logs ==="
+          kubectl logs -l app.kubernetes.io/name=right-sizer --tail=100 || true
 
-        echo "=== Right-sizer operator status ==="
-        kubectl get deployment right-sizer -o yaml || true
+          echo "=== Right-sizer operator status ==="
+          kubectl get deployment right-sizer -o yaml || true
 
-        echo "=== Pod statuses ==="
-        kubectl get pods -A -o wide || true
+          echo "=== Pod statuses ==="
+          kubectl get pods -A -o wide || true
 
-        echo "=== Events ==="
-        kubectl get events --sort-by='.lastTimestamp' || true
+          echo "=== Events ==="
+          kubectl get events --sort-by='.lastTimestamp' || true
 
-        echo "=== Node information ==="
-        kubectl describe nodes || true
+          echo "=== Node information ==="
+          kubectl describe nodes || true
 
-    - name: Generate compliance report
-      if: always()
-      run: |
-        echo "# K8s ${{ matrix.k8s_version }} Compliance Test Report" > compliance-report.md
-        echo "Generated: $(date)" >> compliance-report.md
-        echo "" >> compliance-report.md
+      - name: Generate compliance report
+        if: always()
+        run: |
+          echo "# K8s ${{ matrix.k8s_version }} Compliance Test Report" > compliance-report.md
+          echo "Generated: $(date)" >> compliance-report.md
+          echo "" >> compliance-report.md
 
-        echo "## Test Environment" >> compliance-report.md
-        echo "- Kubernetes Version: ${{ matrix.k8s_version }}" >> compliance-report.md
-        echo "- Expected Compliance: ${{ matrix.expected_compliance }}" >> compliance-report.md
-        echo "- Features: ${{ matrix.features }}" >> compliance-report.md
-        echo "" >> compliance-report.md
+          echo "## Test Environment" >> compliance-report.md
+          echo "- Kubernetes Version: ${{ matrix.k8s_version }}" >> compliance-report.md
+          echo "- Expected Compliance: ${{ matrix.expected_compliance }}" >> compliance-report.md
+          echo "- Features: ${{ matrix.features }}" >> compliance-report.md
+          echo "" >> compliance-report.md
 
-        echo "## Compliance Check Results" >> compliance-report.md
-        ./scripts/check-k8s-compliance.sh >> compliance-report.md 2>&1 || true
+          echo "## Compliance Check Results" >> compliance-report.md
+          ./scripts/check-k8s-compliance.sh >> compliance-report.md 2>&1 || true
 
-    - name: Upload compliance report
-      if: always()
-      uses: actions/upload-artifact@v3
-      with:
-        name: compliance-report-k8s-${{ matrix.k8s_version }}
-        path: |
-          compliance-report.md
-          tests/*/coverage.out
+      - name: Upload compliance report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: compliance-report-k8s-${{ matrix.k8s_version }}
+          path: |
+            compliance-report.md
+            tests/*/coverage.out
 
-    - name: Comment PR with compliance results
-      if: github.event_name == 'pull_request' && matrix.k8s_version == 'v1.33.0'
-      uses: actions/github-script@v7
-      with:
-        script: |
-          const fs = require('fs');
-          try {
-            const report = fs.readFileSync('compliance-report.md', 'utf8');
-            const body = `## 🔍 K8s In-Place Resize Compliance Test Results
+      - name: Comment PR with compliance results
+        if: github.event_name == 'pull_request' && matrix.k8s_version == 'v1.33.0'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            try {
+              const report = fs.readFileSync('compliance-report.md', 'utf8');
+              const body = `## 🔍 K8s In-Place Resize Compliance Test Results
 
-            ${report}
+              ${report}
 
-            <details>
-            <summary>View full compliance analysis</summary>
+              <details>
+              <summary>View full compliance analysis</summary>
 
-            For detailed implementation guidance, see the [K8s Compliance Report](https://github.com/${{ github.repository }}/blob/${{ github.head_ref || github.ref_name }}/K8S_INPLACE_RESIZE_COMPLIANCE_REPORT.md).
+              For detailed implementation guidance, see the [K8s Compliance Report](https://github.com/${{ github.repository }}/blob/${{ github.head_ref || github.ref_name }}/K8S_INPLACE_RESIZE_COMPLIANCE_REPORT.md).
 
-            </details>`;
+              </details>`;
 
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: body
-            });
-          } catch (error) {
-            console.error('Failed to post compliance report:', error);
-          }
+              github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: body
+              });
+            } catch (error) {
+              console.error('Failed to post compliance report:', error);
+            }
 
   summary:
     name: Compliance Test Summary
@@ -339,17 +339,17 @@ jobs:
     if: always()
 
     steps:
-    - name: Check test results
-      run: |
-        echo "Compliance test summary:"
-        echo "- K8s v1.33.0: ${{ needs.compliance-check.result }}"
+      - name: Check test results
+        run: |
+          echo "Compliance test summary:"
+          echo "- K8s v1.33.0: ${{ needs.compliance-check.result }}"
 
-        if [[ "${{ needs.compliance-check.result }}" == "success" ]]; then
-          echo "✅ All compliance tests passed"
-        else
-          echo "❌ Some compliance tests failed"
-          exit 1
-        fi
+          if [[ "${{ needs.compliance-check.result }}" == "success" ]]; then
+            echo "✅ All compliance tests passed"
+          else
+            echo "❌ Some compliance tests failed"
+            exit 1
+          fi
 
   release-gate:
     name: Release Gate Check
@@ -358,11 +358,11 @@ jobs:
     if: github.ref == 'refs/heads/main'
 
     steps:
-    - name: Verify K8s 1.33+ compliance
-      run: |
-        if [[ "${{ needs.compliance-check.result }}" != "success" ]]; then
-          echo "❌ K8s 1.33+ compliance tests failed - blocking release"
-          echo "Please fix compliance issues before releasing"
-          exit 1
-        fi
-        echo "✅ K8s 1.33+ compliance verified - ready for release"
+      - name: Verify K8s 1.33+ compliance
+        run: |
+          if [[ "${{ needs.compliance-check.result }}" != "success" ]]; then
+            echo "❌ K8s 1.33+ compliance tests failed - blocking release"
+            echo "Please fix compliance issues before releasing"
+            exit 1
+          fi
+          echo "✅ K8s 1.33+ compliance verified - ready for release"

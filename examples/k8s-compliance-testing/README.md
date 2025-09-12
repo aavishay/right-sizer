@@ -10,7 +10,7 @@ The Kubernetes 1.33+ release introduced in-place pod resizing capabilities that 
 
 #### ✅ **MANDATORY Requirements (K8s Spec)**
 - **Resize Subresource Usage** - Uses `kubectl patch --subresource=resize` API
-- **Container Resize Policies** - Supports `NotRequired` and `RestartContainer` policies  
+- **Container Resize Policies** - Supports `NotRequired` and `RestartContainer` policies
 - **Pod Resize Status Conditions** - Sets `PodResizePending` and `PodResizeInProgress` conditions
 - **QoS Class Preservation** - Maintains original QoS class during resize operations
 - **Memory Decrease Handling** - Best-effort for `NotRequired`, guaranteed for `RestartContainer`
@@ -134,7 +134,7 @@ go test -v -tags=integration -run TestK8sInPlaceResizeCompliance
 ```yaml
 # Test Pods: guaranteed-qos-test, burstable-qos-test, besteffort-qos-test
 - Guaranteed QoS: requests = limits maintained
-- Burstable QoS: requests < limits maintained  
+- Burstable QoS: requests < limits maintained
 - BestEffort QoS: no resources → cannot add resources
 - Invalid QoS transitions → rejected
 ```
@@ -149,7 +149,7 @@ go test -v -tags=integration -run TestK8sInPlaceResizeCompliance
 
 ### 5. Error Handling Tests
 ```yaml
-# Test Pod: large-resources-test  
+# Test Pod: large-resources-test
 - Infeasible resource requests → PodResizePending condition
 - Node capacity validation → proper error messages
 - Invalid configurations → rejected with clear errors
@@ -189,7 +189,7 @@ go test -v -tags=integration -run TestK8sInPlaceResizeCompliance
 ================================================================
 
 ✅ PASS: Resize Subresource Support - Right-sizer correctly uses resize subresource API
-✅ PASS: Container Resize Policy - NotRequired and RestartContainer policies work correctly  
+✅ PASS: Container Resize Policy - NotRequired and RestartContainer policies work correctly
 ❌ FAIL: Pod Resize Status Conditions - PodResizePending/PodResizeInProgress not implemented
 ⚠️  WARN: QoS Class Preservation - Basic validation present but not comprehensive
 ✅ PASS: Memory Decrease Handling - Proper handling based on restart policy
@@ -219,7 +219,7 @@ Tests generate detailed JSON reports:
   "test_results": [
     {
       "test": "basic-resize",
-      "status": "PASS", 
+      "status": "PASS",
       "message": "CPU and memory resize successful"
     }
   ],
@@ -384,7 +384,7 @@ The framework includes GitHub Actions workflow (`.github/workflows/k8s-complianc
   run: |
     cd right-sizer/examples/k8s-compliance-testing/
     ./run-compliance-tests.sh
-    
+
 - name: Upload Compliance Report
   uses: actions/upload-artifact@v3
   with:
@@ -426,9 +426,9 @@ spec:
 # 2. Add test function to run-compliance-tests.sh
 test_my_new_feature() {
   print_test "My New Feature Test"
-  
+
   local pod_name="my-new-test"
-  
+
   # Test implementation
   if kubectl wait --for=condition=Ready pod/$pod_name -n $TEST_NAMESPACE --timeout=60s; then
     print_pass "My new feature works correctly" "my-new-feature"
