@@ -101,6 +101,10 @@ jobs:
           fi
           echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
 
+      - name: Generate build date
+        id: build_date
+        run: echo "BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")" >> $GITHUB_OUTPUT
+
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
@@ -112,7 +116,7 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
           build-args: |
             VERSION=${{ steps.version.outputs.VERSION }}
-            BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+            BUILD_DATE=${{ steps.build_date.outputs.BUILD_DATE }}
             GIT_COMMIT=${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
