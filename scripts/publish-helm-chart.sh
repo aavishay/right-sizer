@@ -62,7 +62,7 @@ fi
 
 print_color $GREEN "✅ Prerequisites check passed"
 
-# Step 1: Package the Helm chart
+# Package the Helm chart
 print_color $BLUE "\n📦 Packaging Helm chart version $VERSION..."
 helm package $CHART_DIR --destination /tmp/
 CHART_PACKAGE="/tmp/right-sizer-${VERSION}.tgz"
@@ -72,16 +72,16 @@ if [ ! -f "$CHART_PACKAGE" ]; then
 fi
 print_color $GREEN "✅ Chart packaged: $CHART_PACKAGE"
 
-# Step 2: Lint the chart
+# Lint the chart
 print_color $BLUE "\n🔍 Linting Helm chart..."
 helm lint $CHART_DIR
 print_color $GREEN "✅ Chart validation passed"
 
-# Step 3: Save current branch and stash changes
+# Save current branch and stash changes
 print_color $BLUE "\n💾 Saving current state..."
 git stash push -m "Publishing Helm chart $VERSION"
 
-# Step 4: Switch to gh-pages branch
+# Switch to gh-pages branch
 print_color $BLUE "\n🔄 Switching to $BRANCH branch..."
 if git show-ref --verify --quiet refs/heads/$BRANCH; then
   git checkout $BRANCH
@@ -90,18 +90,18 @@ else
   error_exit "$BRANCH branch does not exist. Please create it first."
 fi
 
-# Step 5: Create charts directory if it doesn't exist
+# Create charts directory if it doesn't exist
 if [ ! -d "$CHARTS_REPO_DIR" ]; then
   print_color $YELLOW "📁 Creating $CHARTS_REPO_DIR directory..."
   mkdir -p $CHARTS_REPO_DIR
 fi
 
-# Step 6: Copy the packaged chart
+# Copy the packaged chart
 print_color $BLUE "\n📋 Copying chart package to repository..."
 cp $CHART_PACKAGE $CHARTS_REPO_DIR/
 print_color $GREEN "✅ Chart copied to $CHARTS_REPO_DIR/"
 
-# Step 7: Generate or update Helm repository index
+# Generate or update Helm repository index
 print_color $BLUE "\n📑 Updating Helm repository index..."
 if [ -f "$CHARTS_REPO_DIR/index.yaml" ]; then
   helm repo index $CHARTS_REPO_DIR --merge $CHARTS_REPO_DIR/index.yaml --url https://aavishay.github.io/right-sizer/charts
@@ -110,7 +110,7 @@ else
 fi
 print_color $GREEN "✅ Repository index updated"
 
-# Step 8: Update the main index.html if it exists
+# Update the main index.html if it exists
 if [ -f "index.html" ]; then
   print_color $BLUE "\n📝 Updating index.html with latest version..."
   sed -i.bak "s/Version-[0-9]\+\.[0-9]\+\.[0-9]\+/Version-${VERSION}/g" index.html
@@ -118,7 +118,7 @@ if [ -f "index.html" ]; then
   rm -f index.html.bak
 fi
 
-# Step 9: Commit and push changes
+# Commit and push changes
 print_color $BLUE "\n📤 Committing and pushing changes..."
 git add $CHARTS_REPO_DIR/
 if [ -f "index.html" ]; then
@@ -133,7 +133,7 @@ else
   print_color $YELLOW "ℹ️  No changes to push"
 fi
 
-# Step 10: Return to original branch
+# Return to original branch
 print_color $BLUE "\n🔄 Returning to $CURRENT_BRANCH branch..."
 git checkout $CURRENT_BRANCH
 
@@ -146,7 +146,7 @@ fi
 # Clean up temporary files
 rm -f $CHART_PACKAGE
 
-# Step 11: Create a GitHub release (optional)
+# Create a GitHub release (optional)
 print_color $BLUE "\n🎉 Chart published successfully!"
 print_color $GREEN "
 ✨ Helm Chart v$VERSION has been published!

@@ -28,7 +28,7 @@
 
 ### Method 1: Helm (Recommended)
 
-#### Step 1: Add the Helm Repository
+#### Add the Helm Repository
 
 ```bash
 # Add the Right-Sizer Helm repository
@@ -38,7 +38,7 @@ helm repo add right-sizer https://aavishay.github.io/right-sizer
 helm repo update
 ```
 
-#### Step 2: Install CRDs
+#### Install CRDs
 
 **Important:** CRDs must be installed before the main chart. This is a one-time operation per cluster.
 
@@ -52,7 +52,7 @@ kubectl get crd rightsizerconfigs.rightsizer.io
 kubectl get crd rightsizerpolicies.rightsizer.io
 ```
 
-#### Step 3: Install Right-Sizer
+#### Install Right-Sizer
 
 ```bash
 # Install with default values
@@ -69,20 +69,20 @@ helm upgrade --install right-sizer right-sizer/right-sizer \
 
 ### Method 2: Manual Installation
 
-#### Step 1: Clone the Repository
+#### Clone the Repository
 
 ```bash
 git clone https://github.com/aavishay/right-sizer.git
 cd right-sizer
 ```
 
-#### Step 2: Install CRDs
+#### Install CRDs
 
 ```bash
 kubectl apply -f helm/crds/
 ```
 
-#### Step 3: Install Using Local Helm Chart
+#### Install Using Local Helm Chart
 
 ```bash
 helm upgrade --install right-sizer ./helm \
@@ -101,13 +101,13 @@ Create a `values.yaml` file to customize your installation:
 rightsizerConfig:
   # Enable or disable right-sizing
   enabled: true
-  
+
   # Operating mode: adaptive, aggressive, balanced, conservative, custom
   mode: "balanced"
-  
+
   # Enable dry-run mode (no actual changes)
   dryRun: false
-  
+
   # Feature flags
   featureGates:
     # Enable in-place pod resizing (requires K8s 1.33+)
