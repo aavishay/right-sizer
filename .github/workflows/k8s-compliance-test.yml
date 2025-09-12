@@ -22,12 +22,12 @@ on:
       k8s_version:
         description: "Kubernetes version to test against"
         required: false
-        default: "v1.33"
+        default: "v1.33.5"
         type: choice
         options:
-          - "v1.33"
-          - "v1.32"
-          - "v1.31"
+          - "v1.33.5"
+          - "v1.32.9"
+          - "v1.31.13"
       test_suite:
         description: "Test suite to run"
         required: false
@@ -41,7 +41,7 @@ on:
 
 env:
   GO_VERSION: "1.21"
-  K8S_VERSION: ${{ github.event.inputs.k8s_version || 'v1.33' }}
+  K8S_VERSION: ${{ github.event.inputs.k8s_version || 'v1.33.5' }}
   TEST_SUITE: ${{ github.event.inputs.test_suite || 'full' }}
 
 jobs:
@@ -52,13 +52,13 @@ jobs:
       fail-fast: false
       matrix:
         k8s_version:
-          - v1.33
-          - v1.32 # For backwards compatibility testing
+          - v1.33.5
+          - v1.32.9 # For backwards compatibility testing
         include:
-          - k8s_version: v1.33
+          - k8s_version: v1.33.5
             expected_compliance: true
             features: "resize-subresource,status-conditions,qos-preservation"
-          - k8s_version: v1.32
+          - k8s_version: v1.32.9
             expected_compliance: true
             features: "resize-subresource,status-conditions,qos-preservation"
 
@@ -188,7 +188,7 @@ jobs:
         continue-on-error: true
 
       - name: Test manual resize scenarios
-        if: matrix.k8s_version == 'v1.33'
+        if: matrix.k8s_version == 'v1.33.5'
         run: |
           echo "Testing manual resize scenarios..."
 
@@ -304,7 +304,7 @@ jobs:
             tests/*/coverage.out
 
       - name: Comment PR with compliance results
-        if: github.event_name == 'pull_request' && matrix.k8s_version == 'v1.33'
+        if: github.event_name == 'pull_request' && matrix.k8s_version == 'v1.33.5'
         uses: actions/github-script@v7
         with:
           script: |
@@ -342,7 +342,7 @@ jobs:
       - name: Check test results
         run: |
           echo "Compliance test summary:"
-          echo "- K8s v1.33: ${{ needs.compliance-check.result }}"
+          echo "- K8s v1.33.5: ${{ needs.compliance-check.result }}"
 
           if [[ "${{ needs.compliance-check.result }}" == "success" ]]; then
             echo "✅ All compliance tests passed"
@@ -361,8 +361,8 @@ jobs:
       - name: Verify K8s 1.33+ compliance
         run: |
           if [[ "${{ needs.compliance-check.result }}" != "success" ]]; then
-            echo "❌ K8s 1.33+ compliance tests failed - blocking release"
+            echo "❌ K8s 1.33.5+ compliance tests failed - blocking release"
             echo "Please fix compliance issues before releasing"
             exit 1
           fi
-          echo "✅ K8s 1.33+ compliance verified - ready for release"
+          echo "✅ K8s 1.33.5+ compliance verified - ready for release"
