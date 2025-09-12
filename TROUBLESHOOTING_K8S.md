@@ -63,11 +63,11 @@ resources:
     memory: 256Mi
 ```
 
-**Option 3: Use Version 0.1.17+ with Improved Probes**
+**Option 3: Use Version 0.1.19+ with Improved Probes**
 ```bash
 helm upgrade right-sizer right-sizer/right-sizer \
   --namespace right-sizer \
-  --version 0.1.17 \
+  --version 0.1.19 \
   --reuse-values
 ```
 
@@ -83,8 +83,8 @@ Error: Chart.yaml file is missing
 **Solution:**
 ```bash
 # Download and extract the chart manually
-wget https://github.com/aavishay/right-sizer/releases/download/v0.1.17/right-sizer-0.1.17.tgz
-tar -xzf right-sizer-0.1.17.tgz
+wget https://github.com/aavishay/right-sizer/releases/download/v0.1.19/right-sizer-0.1.19.tgz
+tar -xzf right-sizer-0.1.19.tgz
 
 # Install from local directory
 helm upgrade --install right-sizer ./right-sizer \
@@ -186,7 +186,7 @@ kubectl logs -n right-sizer deployment/right-sizer | grep -i error
 # values.yaml
 rightsizerConfig:
   featureGates:
-    updateResizePolicy: true  # Disabled by default in v0.1.16+
+    updateResizePolicy: true  # Disabled by default in v0.1.19+
 ```
 
 **Verify Kubernetes Support:**

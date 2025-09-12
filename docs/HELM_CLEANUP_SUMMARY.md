@@ -153,7 +153,7 @@ examples/
 1. **Test Helm chart packaging**:
    ```bash
    cd right-sizer
-   ./scripts/helm-package.sh --version 0.1.16
+   ./scripts/helm-package.sh --version 0.1.19
    ```
 
 2. **Verify GitHub workflows**:

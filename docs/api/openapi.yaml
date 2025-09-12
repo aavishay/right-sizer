@@ -5,7 +5,7 @@ info:
     The Right-Sizer Operator API provides endpoints for monitoring, configuration, and management
     of Kubernetes pod resource optimization. This API enables real-time metrics access, optimization
     event tracking, and health monitoring of the Right-Sizer operator.
-  version: 0.1.15
+  version: 0.1.19
   contact:
     name: Right-Sizer Contributors
     email: maintainers@right-sizer.dev
@@ -43,18 +43,18 @@ paths:
       description: Returns the health status of the operator. Used by Kubernetes liveness probes.
       operationId: getLiveness
       responses:
-        '200':
+        "200":
           description: Operator is healthy
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HealthResponse'
-        '503':
+                $ref: "#/components/schemas/HealthResponse"
+        "503":
           description: Operator is unhealthy
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HealthResponse'
+                $ref: "#/components/schemas/HealthResponse"
 
   /readyz:
     get:
@@ -64,18 +64,18 @@ paths:
       description: Returns the readiness status of the operator. Used by Kubernetes readiness probes.
       operationId: getReadiness
       responses:
-        '200':
+        "200":
           description: Operator is ready
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ReadinessResponse'
-        '503':
+                $ref: "#/components/schemas/ReadinessResponse"
+        "503":
           description: Operator is not ready
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ReadinessResponse'
+                $ref: "#/components/schemas/ReadinessResponse"
 
   /metrics:
     get:
@@ -95,7 +95,7 @@ paths:
         - `rightsizer_errors_total` - Error counts by type
       operationId: getMetrics
       responses:
-        '200':
+        "200":
           description: Prometheus metrics
           content:
             text/plain:
@@ -151,7 +151,7 @@ paths:
             maximum: 1000
             default: 100
       responses:
-        '200':
+        "200":
           description: List of optimization events
           content:
             application/json:
@@ -161,7 +161,7 @@ paths:
                   events:
                     type: array
                     items:
-                      $ref: '#/components/schemas/OptimizationEvent'
+                      $ref: "#/components/schemas/OptimizationEvent"
                   total:
                     type: integer
                     description: Total number of events matching the filter
@@ -182,26 +182,26 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/OptimizationEventRequest'
+              $ref: "#/components/schemas/OptimizationEventRequest"
       responses:
-        '201':
+        "201":
           description: Event created successfully
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/OptimizationEvent'
-        '400':
+                $ref: "#/components/schemas/OptimizationEvent"
+        "400":
           description: Invalid request
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '401':
+                $ref: "#/components/schemas/Error"
+        "401":
           description: Unauthorized
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: "#/components/schemas/Error"
 
   /api/v1/events/{eventId}:
     get:
@@ -219,18 +219,18 @@ paths:
             type: string
             format: uuid
       responses:
-        '200':
+        "200":
           description: Event details
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/OptimizationEvent'
-        '404':
+                $ref: "#/components/schemas/OptimizationEvent"
+        "404":
           description: Event not found
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: "#/components/schemas/Error"
 
   /api/v1/config:
     get:
@@ -240,12 +240,12 @@ paths:
       description: Returns the current runtime configuration of the operator
       operationId: getConfiguration
       responses:
-        '200':
+        "200":
           description: Current configuration
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Configuration'
+                $ref: "#/components/schemas/Configuration"
 
     patch:
       tags:
@@ -260,26 +260,26 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ConfigurationUpdate'
+              $ref: "#/components/schemas/ConfigurationUpdate"
       responses:
-        '200':
+        "200":
           description: Configuration updated
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Configuration'
-        '400':
+                $ref: "#/components/schemas/Configuration"
+        "400":
           description: Invalid configuration
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '401':
+                $ref: "#/components/schemas/Error"
+        "401":
           description: Unauthorized
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: "#/components/schemas/Error"
 
   /api/v1/statistics:
     get:
@@ -297,12 +297,12 @@ paths:
             enum: [1h, 6h, 24h, 7d, 30d]
             default: 24h
       responses:
-        '200':
+        "200":
           description: Optimization statistics
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Statistics'
+                $ref: "#/components/schemas/Statistics"
 
   /validate:
     post:
@@ -316,14 +316,14 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/AdmissionReview'
+              $ref: "#/components/schemas/AdmissionReview"
       responses:
-        '200':
+        "200":
           description: Admission review response
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AdmissionReview'
+                $ref: "#/components/schemas/AdmissionReview"
 
   /mutate:
     post:
@@ -337,14 +337,14 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/AdmissionReview'
+              $ref: "#/components/schemas/AdmissionReview"
       responses:
-        '200':
+        "200":
           description: Admission review response with mutations
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AdmissionReview'
+                $ref: "#/components/schemas/AdmissionReview"
 
 components:
   schemas:
@@ -368,7 +368,7 @@ components:
         version:
           type: string
           description: Operator version
-          example: "0.1.15"
+          example: "0.1.19"
 
     ReadinessResponse:
       type: object
@@ -533,11 +533,11 @@ components:
           type: object
           properties:
             cpu:
-              $ref: '#/components/schemas/ResourceStrategy'
+              $ref: "#/components/schemas/ResourceStrategy"
             memory:
-              $ref: '#/components/schemas/ResourceStrategy'
+              $ref: "#/components/schemas/ResourceStrategy"
         constraints:
-          $ref: '#/components/schemas/Constraints'
+          $ref: "#/components/schemas/Constraints"
 
     ConfigurationUpdate:
       type: object

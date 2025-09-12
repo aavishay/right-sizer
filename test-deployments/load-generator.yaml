@@ -18,93 +18,93 @@ spec:
         app: load-generator
         purpose: testing
       annotations:
-        right-sizer.io/enabled: "false"  # Exclude from right-sizing
+        right-sizer.io/enabled: "false" # Exclude from right-sizing
     spec:
       containers:
-      - name: load-generator
-        image: busybox:1.35
-        command:
-        - sh
-        - -c
-        - |
-          echo "Starting load generator..."
+        - name: load-generator
+          image: busybox:1.35
+          command:
+            - sh
+            - -c
+            - |
+              echo "Starting load generator..."
 
-          # Function to generate CPU load
-          cpu_load() {
-            echo "Generating CPU load..."
-            for i in $(seq 1 30); do
-              timeout 10s yes > /dev/null 2>&1 &
-              sleep 5
-            done
-            wait
-          }
+              # Function to generate CPU load
+              cpu_load() {
+                echo "Generating CPU load..."
+                for i in $(seq 1 30); do
+                  timeout 10s yes > /dev/null 2>&1 &
+                  sleep 5
+                done
+                wait
+              }
 
-          # Function to generate memory load
-          memory_load() {
-            echo "Generating memory load..."
-            # Create memory pressure
-            dd if=/dev/zero of=/tmp/memtest bs=1M count=50 2>/dev/null
-            sleep 30
-            rm -f /tmp/memtest
-          }
+              # Function to generate memory load
+              memory_load() {
+                echo "Generating memory load..."
+                # Create memory pressure
+                dd if=/dev/zero of=/tmp/memtest bs=1M count=50 2>/dev/null
+                sleep 30
+                rm -f /tmp/memtest
+              }
 
-          # Function to generate network load
-          network_load() {
-            echo "Generating network load..."
-            for i in $(seq 1 20); do
-              wget -q -O /dev/null http://web-frontend-service.test-workloads.svc.cluster.local/ &
-              wget -q -O /dev/null http://api-backend-service.test-workloads.svc.cluster.local:8080/ &
-              sleep 2
-            done
-            wait
-          }
+              # Function to generate network load
+              network_load() {
+                echo "Generating network load..."
+                for i in $(seq 1 20); do
+                  wget -q -O /dev/null http://web-frontend-service.test-workloads.svc.cluster.local/ &
+                  wget -q -O /dev/null http://api-backend-service.test-workloads.svc.cluster.local:8080/ &
+                  sleep 2
+                done
+                wait
+              }
 
-          # Main load generation loop
-          while true; do
-            echo "=== Load Generation Cycle Started ==="
+              # Main load generation loop
+              while true; do
+                echo "=== Load Generation Cycle Started ==="
 
-            # Light load phase (5 minutes)
-            echo "Phase 1: Light load (5 min)"
-            for i in $(seq 1 5); do
-              network_load &
-              sleep 60
-            done
+                # Light load phase (5 minutes)
+                echo "Phase 1: Light load (5 min)"
+                for i in $(seq 1 5); do
+                  network_load &
+                  sleep 60
+                done
 
-            # Medium load phase (10 minutes)
-            echo "Phase 2: Medium load (10 min)"
-            for i in $(seq 1 10); do
-              cpu_load &
-              network_load &
-              sleep 60
-            done
+                # Medium load phase (10 minutes)
+                echo "Phase 2: Medium load (10 min)"
+                for i in $(seq 1 10); do
+                  cpu_load &
+                  network_load &
+                  sleep 60
+                done
 
-            # Heavy load phase (5 minutes)
-            echo "Phase 3: Heavy load (5 min)"
-            for i in $(seq 1 5); do
-              cpu_load &
-              memory_load &
-              network_load &
-              sleep 60
-            done
+                # Heavy load phase (5 minutes)
+                echo "Phase 3: Heavy load (5 min)"
+                for i in $(seq 1 5); do
+                  cpu_load &
+                  memory_load &
+                  network_load &
+                  sleep 60
+                done
 
-            # Cool down phase (10 minutes)
-            echo "Phase 4: Cool down (10 min)"
-            sleep 600
+                # Cool down phase (10 minutes)
+                echo "Phase 4: Cool down (10 min)"
+                sleep 600
 
-            echo "=== Load Generation Cycle Completed ==="
-          done
-        resources:
-          requests:
-            cpu: "50m"
-            memory: "64Mi"
-            ephemeral-storage: "100Mi"
-          limits:
-            cpu: "200m"
-            memory: "128Mi"
-            ephemeral-storage: "500Mi"
-        env:
-        - name: LOAD_DURATION
-          value: "1800"  # 30 minutes per cycle
+                echo "=== Load Generation Cycle Completed ==="
+              done
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+              ephemeral-storage: "100Mi"
+            limits:
+              cpu: "200m"
+              memory: "128Mi"
+              ephemeral-storage: "500Mi"
+          env:
+            - name: LOAD_DURATION
+              value: "1800" # 30 minutes per cycle
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -187,5 +187,5 @@ data:
     echo "helm search repo right-sizer"
     echo ""
     echo "# OCI method (new)"
-    echo "helm show chart oci://registry-1.docker.io/aavishay/right-sizer --version 0.1.7"
+    echo "helm show chart oci://registry-1.docker.io/aavishay/right-sizer --version 0.1.19"
     echo ""

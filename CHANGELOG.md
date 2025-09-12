@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.19] - 2025-01-13
+
+### Changed
+- Updated version to 0.1.19 across all components
+- Synchronized dashboard version with main operator version
+
+### Updated
+- All documentation and examples updated to use version 0.1.19
+- Helm charts updated to version 0.1.19
+- Docker image tags updated to 0.1.19
+- Package.json version updated to 0.1.19
+- OpenAPI specification version updated to 0.1.19
+
 ## [0.1.16] - 2024-12-20
 
 ### Changed

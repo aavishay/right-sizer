@@ -18,13 +18,13 @@ The modern approach using OCI registries:
 ```bash
 # Install directly from OCI registry
 helm install right-sizer oci://registry-1.docker.io/aavishay/right-sizer \
-  --version 0.1.7 \
+  --version 0.1.19 \
   --namespace right-sizer \
   --create-namespace
 
 # Install with custom values
 helm install right-sizer oci://registry-1.docker.io/aavishay/right-sizer \
-  --version 0.1.7 \
+  --version 0.1.19 \
   --namespace right-sizer \
   --create-namespace \
   -f custom-values.yaml
@@ -41,7 +41,7 @@ helm repo update
 
 # Install chart
 helm install right-sizer right-sizer/right-sizer \
-  --version 0.1.7 \
+  --version 0.1.19 \
   --namespace right-sizer \
   --create-namespace
 ```
@@ -52,7 +52,7 @@ helm install right-sizer right-sizer/right-sizer \
 
 Both publishing methods are automated via GitHub Actions:
 
-1. **On Git Tag**: When a version tag is pushed (e.g., `v0.1.7`)
+1. **On Git Tag**: When a version tag is pushed (e.g., `v0.1.19`)
 2. **On Release**: When a GitHub release is created
 3. **On Helm Changes**: When files in `helm/` directory are modified
 
@@ -109,7 +109,7 @@ Both workflows authenticate to Docker Hub using secrets:
 
 ```bash
 # OCI registry (requires Helm 3.8+)
-helm show chart oci://registry-1.docker.io/aavishay/right-sizer --version 0.1.7
+helm show chart oci://registry-1.docker.io/aavishay/right-sizer --version 0.1.19
 
 # Traditional repository
 helm repo add right-sizer https://aavishay.github.io/right-sizer/charts
@@ -193,7 +193,7 @@ helm repo add right-sizer https://aavishay.github.io/right-sizer/charts
 helm install right-sizer right-sizer/right-sizer
 
 # New method (recommended)
-helm install right-sizer oci://registry-1.docker.io/aavishay/right-sizer --version 0.1.7
+helm install right-sizer oci://registry-1.docker.io/aavishay/right-sizer --version 0.1.19
 ```
 
 ### Benefits of OCI

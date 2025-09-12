@@ -60,7 +60,7 @@ The following table lists the configurable parameters of the Right-Sizer chart a
 | Parameter | Description | Default |
 |-----------|-------------|---------|
 | `image.repository` | Right-sizer image repository | `aavishay/right-sizer` |
-| `image.tag` | Right-sizer image tag | `0.1.18` |
+| `image.tag` | Right-sizer image tag | `0.1.19` |
 | `image.pullPolicy` | Image pull policy | `IfNotPresent` |
 | `image.pullSecrets` | Image pull secrets | `[]` |
 
@@ -325,7 +325,7 @@ This chart follows [Semantic Versioning](https://semver.org/). Version numbers a
 
 | Chart Version | App Version | Kubernetes Version | Notes |
 |---------------|-------------|--------------------|-------|
-| 0.1.18 | 0.1.18 | 1.19+ | Initial release |
+| 0.1.19 | 0.1.19 | 1.19+ | Initial release |
 
 ## Related Projects
 

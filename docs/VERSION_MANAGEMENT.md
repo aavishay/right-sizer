@@ -18,7 +18,7 @@ MAJOR.MINOR.PATCH[-PRERELEASE][+BUILD]
 - **BUILD**: Optional build metadata
 
 ### Examples
-- `0.1.6` - Current stable version
+- `0.1.19` - Current stable version
 - `1.0.0` - Major release
 - `1.2.3-beta.1` - Beta pre-release
 - `1.2.3-alpha.2+build.123` - Alpha with build metadata
@@ -28,8 +28,8 @@ MAJOR.MINOR.PATCH[-PRERELEASE][+BUILD]
 ### Tagging Strategy
 | Tag Format | Example | Description | Use Case |
 |------------|---------|-------------|----------|
-| `MAJOR.MINOR.PATCH` | `0.1.6` | Semantic version | Production deployments |
-| `MAJOR.MINOR.PATCH-vBUILD` | `0.1.6-v123` | Version + build number | Specific build tracking |
+| `MAJOR.MINOR.PATCH` | `0.1.19` | Semantic version | Production deployments |
+| `MAJOR.MINOR.PATCH-vBUILD` | `0.1.19-v123` | Version + build number | Specific build tracking |
 | `vBUILD` | `v123` | Build number only | CI/CD references |
 | `latest` | `latest` | Latest stable | Development/testing |
 | `main` | `main` | Main branch build | Development |
@@ -49,8 +49,8 @@ MAJOR.MINOR.PATCH[-PRERELEASE][+BUILD]
 # helm/Chart.yaml
 apiVersion: v2
 name: right-sizer
-version: 0.1.6      # Chart version
-appVersion: "0.1.6" # Application version
+version: 0.1.19      # Chart version
+appVersion: "0.1.19" # Application version
 ```
 
 ### Chart Distribution
@@ -65,7 +65,7 @@ Use the GitHub Actions workflow to update versions across all files:
 
 ```bash
 # Go to GitHub → Actions → "Update Versions" → "Run workflow"
-# Enter new version: 0.1.7
+# Enter new version: 0.1.19
 # Choose: Create Pull Request = true
 ```
 
@@ -83,8 +83,8 @@ After merging the version update PR:
 
 ```bash
 # Create and push git tag
-git tag v0.1.7
-git push origin v0.1.7
+git tag v0.1.19
+git push origin v0.1.19
 ```
 
 **This automatically triggers:**
@@ -99,14 +99,14 @@ You can also run the version update script locally:
 
 ```bash
 # Update to new version
-./scripts/update-versions.sh 0.1.7
+./scripts/update-versions.sh 0.1.19
 
 # Review changes
 git diff
 
 # Commit and push
 git add .
-git commit -m "chore: update version to 0.1.7"
+git commit -m "chore: update version to 0.1.19"
 git push origin main
 ```
 
@@ -126,23 +126,23 @@ The automated version update affects these files:
 
 ### README Files
 ```markdown
-[![Version](https://img.shields.io/badge/Version-0.1.6-green.svg)]
-docker pull aavishay/right-sizer:0.1.6
-helm install right-sizer right-sizer/right-sizer --version 0.1.6
---set image.tag=0.1.6
-targetRevision: 0.1.6
+[![Version](https://img.shields.io/badge/Version-0.1.19-green.svg)]
+docker pull aavishay/right-sizer:0.1.19
+helm install right-sizer right-sizer/right-sizer --version 0.1.19
+--set image.tag=0.1.19
+targetRevision: 0.1.19
 ```
 
 ### Helm Chart
 ```yaml
-version: 0.1.6
-appVersion: "0.1.6"
+version: 0.1.19
+appVersion: "0.1.19"
 ```
 
 ### Docker Commands
 ```bash
-docker pull aavishay/right-sizer:0.1.6
-docker pull aavishay/right-sizer:0.1.6-v123
+docker pull aavishay/right-sizer:0.1.19
+docker pull aavishay/right-sizer:0.1.19-v123
 docker pull aavishay/right-sizer:latest
 ```
 
@@ -175,7 +175,7 @@ docker pull aavishay/right-sizer:latest
 chmod +x scripts/update-versions.sh
 
 # Run with verbose output
-bash -x scripts/update-versions.sh 0.1.7
+bash -x scripts/update-versions.sh 0.1.19
 
 # Restore from backup if needed
 cp version-backup-*/README.md ./README.md
@@ -184,7 +184,7 @@ cp version-backup-*/README.md ./README.md
 ### Missing Version References
 ```bash
 # Find all version references
-grep -r "0.1.6" . --exclude-dir=.git
+grep -r "0.1.19" . --exclude-dir=.git
 
 # Check specific patterns
 grep -r "Version-[0-9]" . --include="*.md"
