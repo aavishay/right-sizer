@@ -170,7 +170,7 @@ func TestResizePolicyValidation(t *testing.T) {
 		},
 	}
 
-	validator := validation.NewResizePolicyValidator()
+	validator := validation.NewResourceValidator(nil, nil, nil, nil)
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
