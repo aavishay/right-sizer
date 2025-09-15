@@ -118,6 +118,12 @@ type Config struct {
 	UpdateResizePolicy bool // Update resize policy for in-place pod resizing (Kubernetes 1.33+)
 	PatchResizePolicy  bool // Automatically patch parent resources with resize policy
 
+	// Prediction configuration
+	PredictionEnabled           bool    // Enable resource prediction using historical data
+	PredictionConfidenceThreshold float64 // Minimum confidence threshold for using predictions (0-1)
+	PredictionHistoryDays       int     // Days of historical data to retain for predictions
+	PredictionMethods           []string // Enabled prediction methods (linear_regression, exponential_smoothing, simple_moving_average)
+
 	// QoS preservation settings
 	PreserveGuaranteedQoS      bool // Preserve Guaranteed QoS class during resizing
 	ForceGuaranteedForCritical bool // Force Guaranteed QoS for critical workloads
@@ -239,6 +245,13 @@ func GetDefaults() *Config {
 
 		// Default feature flags
 		UpdateResizePolicy: false,
+		PatchResizePolicy:  false,
+
+		// Default prediction configuration
+		PredictionEnabled:             true,
+		PredictionConfidenceThreshold: 0.6,
+		PredictionHistoryDays:         7,
+		PredictionMethods:             []string{"linear_regression", "exponential_smoothing", "simple_moving_average"},
 
 		// Default observability configuration
 		EnableAuditLogging: true,

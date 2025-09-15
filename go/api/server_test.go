@@ -21,7 +21,7 @@ func TestNewServer(t *testing.T) {
 	clientset := fake.NewSimpleClientset()
 	metricsClient := metricsclient.NewSimpleClientset()
 
-	server := NewServer(clientset, metricsClient)
+	server := NewServer(clientset, metricsClient, nil) // nil predictor for tests
 
 	assert.NotNil(t, server)
 	assert.NotNil(t, server.clientset)
@@ -33,7 +33,7 @@ func TestNewServer(t *testing.T) {
 func TestNewServer_WithoutMetricsClient(t *testing.T) {
 	clientset := fake.NewSimpleClientset()
 
-	server := NewServer(clientset, nil)
+	server := NewServer(clientset, nil, nil)
 
 	assert.NotNil(t, server)
 	assert.NotNil(t, server.clientset)
@@ -42,7 +42,7 @@ func TestNewServer_WithoutMetricsClient(t *testing.T) {
 
 func TestServer_HandlePodCount(t *testing.T) {
 	clientset := fake.NewSimpleClientset()
-	server := NewServer(clientset, nil)
+	server := NewServer(clientset, nil, nil)
 
 	// Create test pods
 	pod1 := &v1.Pod{
@@ -79,7 +79,7 @@ func TestServer_HandlePodCount(t *testing.T) {
 
 func TestServer_HandleHealth(t *testing.T) {
 	clientset := fake.NewSimpleClientset()
-	server := NewServer(clientset, nil)
+	server := NewServer(clientset, nil, nil)
 
 	req := httptest.NewRequest("GET", "/api/health", nil)
 	w := httptest.NewRecorder()
@@ -97,7 +97,7 @@ func TestServer_HandleHealth(t *testing.T) {
 
 func TestServer_HandleHealthCheck(t *testing.T) {
 	clientset := fake.NewSimpleClientset()
-	server := NewServer(clientset, nil)
+	server := NewServer(clientset, nil, nil)
 
 	req := httptest.NewRequest("GET", "/health", nil)
 	w := httptest.NewRecorder()
@@ -110,7 +110,7 @@ func TestServer_HandleHealthCheck(t *testing.T) {
 
 func TestServer_WriteJSONResponse(t *testing.T) {
 	clientset := fake.NewSimpleClientset()
-	server := NewServer(clientset, nil)
+	server := NewServer(clientset, nil, nil)
 
 	data := map[string]interface{}{
 		"test":  "value",
@@ -133,7 +133,7 @@ func TestServer_WriteJSONResponse(t *testing.T) {
 
 func TestServer_CalculateClusterMetrics(t *testing.T) {
 	clientset := fake.NewSimpleClientset()
-	server := NewServer(clientset, nil)
+	server := NewServer(clientset, nil, nil)
 
 	// Create test pods with resources
 	pod1 := &v1.Pod{
@@ -220,7 +220,7 @@ func TestServer_CalculateClusterMetrics(t *testing.T) {
 
 func TestServer_ConvertPodsToMetricsAPI(t *testing.T) {
 	clientset := fake.NewSimpleClientset()
-	server := NewServer(clientset, nil)
+	server := NewServer(clientset, nil, nil)
 
 	pod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -266,7 +266,7 @@ func TestServer_ConvertPodsToMetricsAPI(t *testing.T) {
 
 func TestServer_ConvertNodesToMetricsAPI(t *testing.T) {
 	clientset := fake.NewSimpleClientset()
-	server := NewServer(clientset, nil)
+	server := NewServer(clientset, nil, nil)
 
 	node := &v1.Node{
 		ObjectMeta: metav1.ObjectMeta{
@@ -357,7 +357,7 @@ func TestServer_FilterMetricsHistory(t *testing.T) {
 
 func TestServer_SortAndLimitEvents(t *testing.T) {
 	clientset := fake.NewSimpleClientset()
-	server := NewServer(clientset, nil)
+	server := NewServer(clientset, nil, nil)
 
 	events := []map[string]interface{}{
 		{
@@ -383,7 +383,7 @@ func TestServer_SortAndLimitEvents(t *testing.T) {
 
 func TestServer_ConvertAuditEvent(t *testing.T) {
 	clientset := fake.NewSimpleClientset()
-	server := NewServer(clientset, nil)
+	server := NewServer(clientset, nil, nil)
 
 	auditEvent := map[string]interface{}{
 		"timestamp":     "2023-01-01T00:00:00Z",
@@ -428,7 +428,7 @@ func TestServer_ConvertAuditEvent(t *testing.T) {
 
 func TestServer_HandlePods(t *testing.T) {
 	clientset := fake.NewSimpleClientset()
-	server := NewServer(clientset, nil)
+	server := NewServer(clientset, nil, nil)
 
 	// Create test pod
 	pod := &v1.Pod{
@@ -476,7 +476,7 @@ func TestServer_HandlePods(t *testing.T) {
 
 func TestServer_HandlePodsV1(t *testing.T) {
 	clientset := fake.NewSimpleClientset()
-	server := NewServer(clientset, nil)
+	server := NewServer(clientset, nil, nil)
 
 	// Create test pod
 	pod := &v1.Pod{
@@ -512,7 +512,7 @@ func TestServer_HandlePodsV1(t *testing.T) {
 
 func TestServer_HandlePodsRedirect(t *testing.T) {
 	clientset := fake.NewSimpleClientset()
-	server := NewServer(clientset, nil)
+	server := NewServer(clientset, nil, nil)
 
 	req := httptest.NewRequest("GET", "/apis/v1/pods", nil)
 	w := httptest.NewRecorder()
@@ -526,7 +526,7 @@ func TestServer_HandlePodsRedirect(t *testing.T) {
 
 func TestServer_HandleMetricsHistory(t *testing.T) {
 	clientset := fake.NewSimpleClientset()
-	server := NewServer(clientset, nil)
+	server := NewServer(clientset, nil, nil)
 
 	// Clear any existing metrics history to avoid test interference
 	metricsHistoryMu.Lock()
@@ -575,7 +575,7 @@ func TestServer_HandleMetricsHistory(t *testing.T) {
 
 func TestServer_HandleSystemPods(t *testing.T) {
 	clientset := fake.NewSimpleClientset()
-	server := NewServer(clientset, nil)
+	server := NewServer(clientset, nil, nil)
 
 	// Create pods in different namespaces
 	systemPod := &v1.Pod{
@@ -621,7 +621,7 @@ func TestServer_HandleSystemPods(t *testing.T) {
 
 func TestServer_HandleOptimizationEvents(t *testing.T) {
 	clientset := fake.NewSimpleClientset()
-	server := NewServer(clientset, nil)
+	server := NewServer(clientset, nil, nil)
 
 	req := httptest.NewRequest("GET", "/api/optimization-events", nil)
 	w := httptest.NewRecorder()
@@ -641,7 +641,7 @@ func TestServer_HandleOptimizationEvents(t *testing.T) {
 
 func TestServer_HandleNodesProxy(t *testing.T) {
 	clientset := fake.NewSimpleClientset()
-	server := NewServer(clientset, nil)
+	server := NewServer(clientset, nil, nil)
 
 	// Create test node
 	node := &v1.Node{
@@ -679,7 +679,7 @@ func TestServer_HandleNodesProxy(t *testing.T) {
 
 func TestServer_HandlePodsProxy(t *testing.T) {
 	clientset := fake.NewSimpleClientset()
-	server := NewServer(clientset, nil)
+	server := NewServer(clientset, nil, nil)
 
 	// Create test pod
 	pod := &v1.Pod{
@@ -728,7 +728,7 @@ func TestServer_HandlePodsProxy(t *testing.T) {
 
 func TestServer_BuildEnhancedPodData(t *testing.T) {
 	clientset := fake.NewSimpleClientset()
-	server := NewServer(clientset, nil)
+	server := NewServer(clientset, nil, nil)
 
 	pod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -783,7 +783,7 @@ func TestServer_BuildEnhancedPodData(t *testing.T) {
 
 func TestServer_ConvertPodsToV1API(t *testing.T) {
 	clientset := fake.NewSimpleClientset()
-	server := NewServer(clientset, nil)
+	server := NewServer(clientset, nil, nil)
 
 	pod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{

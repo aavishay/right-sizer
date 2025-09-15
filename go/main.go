@@ -417,7 +417,8 @@ func main() {
 	// Use AdaptiveRightSizer as the default implementation with rate limiting
 	// It will check for in-place resize capability based on CRD configuration
 	// The controller will respect the manager's rate limiting configuration
-	if err := controllers.SetupAdaptiveRightSizer(mgr, provider, auditLogger, cfg.DryRun); err != nil {
+	predictorEngine, err := controllers.SetupAdaptiveRightSizer(mgr, provider, auditLogger, cfg.DryRun)
+	if err != nil {
 		logger.Error("unable to setup AdaptiveRightSizer: %v", err)
 		os.Exit(1)
 	}
@@ -463,7 +464,7 @@ func main() {
 		// Wait for configuration to be loaded from CRD
 		time.Sleep(5 * time.Second)
 
-		apiServer := api.NewServer(clientset, metricsClient, operatorMetrics)
+		apiServer := api.NewServer(clientset, metricsClient, predictorEngine, operatorMetrics)
 		if err := apiServer.Start(8082); err != nil {
 			logger.Error("API server error: %v", err)
 		}

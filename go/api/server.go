@@ -33,6 +33,7 @@ import (
 
 	"right-sizer/logger"
 	"right-sizer/metrics"
+	"right-sizer/predictor"
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -73,7 +74,8 @@ type Server struct {
 	clientset       kubernetes.Interface
 	metricsClient   metricsclient.Interface
 	operatorMetrics *metrics.OperatorMetrics
-	optimizationOps atomic.Uint64 // counts optimization actions applied
+	predictor       *predictor.Engine // Resource prediction engine
+	optimizationOps atomic.Uint64    // counts optimization actions applied
 }
 
 // MetricSample stores a historical aggregate sample for time range filtering
@@ -145,7 +147,7 @@ func filterMetricsHistory(rangeParam string) []MetricSample {
 }
 
 // NewServer creates a new API server instance
-func NewServer(clientset kubernetes.Interface, metricsClient metricsclient.Interface, optMetrics ...*metrics.OperatorMetrics) *Server {
+func NewServer(clientset kubernetes.Interface, metricsClient metricsclient.Interface, predictor *predictor.Engine, optMetrics ...*metrics.OperatorMetrics) *Server {
 	var m *metrics.OperatorMetrics
 	if len(optMetrics) > 0 {
 		m = optMetrics[0]
@@ -154,6 +156,7 @@ func NewServer(clientset kubernetes.Interface, metricsClient metricsclient.Inter
 		clientset:       clientset,
 		metricsClient:   metricsClient,
 		operatorMetrics: m,
+		predictor:       predictor,
 	}
 }
 
@@ -186,6 +189,11 @@ func (s *Server) registerEndpoints() {
 	http.HandleFunc("/api/metrics", s.handleMetrics)
 	http.HandleFunc("/api/metrics/history", s.handleMetricsHistory) // NEW: historical samples
 	http.HandleFunc("/api/metrics/live", s.handleMetricsLive)       // NEW: live JSON cluster summary
+
+	// Prediction endpoints
+	http.HandleFunc("/api/predictions", s.handlePredictions)                   // NEW: get predictions for resources
+	http.HandleFunc("/api/predictions/historical", s.handleHistoricalData)    // NEW: get historical data
+	http.HandleFunc("/api/predictions/stats", s.handlePredictionStats)        // NEW: prediction engine stats
 
 	// Optimization events
 	http.HandleFunc("/api/optimization-events", s.handleOptimizationEvents)
@@ -1155,6 +1163,107 @@ func (s *Server) handleSystemPods(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.writeJSONResponse(w, results)
+}
+
+// handlePredictions handles /api/predictions endpoint
+func (s *Server) handlePredictions(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	if s.predictor == nil {
+		http.Error(w, "Prediction engine not available", http.StatusServiceUnavailable)
+		return
+	}
+
+	// Parse query parameters
+	namespace := r.URL.Query().Get("namespace")
+	podName := r.URL.Query().Get("pod")
+	container := r.URL.Query().Get("container")
+	resourceType := r.URL.Query().Get("type") // "cpu" or "memory"
+
+	if namespace == "" || podName == "" || container == "" || resourceType == "" {
+		http.Error(w, "Missing required parameters: namespace, pod, container, type", http.StatusBadRequest)
+		return
+	}
+
+	// Create prediction request
+	request := predictor.PredictionRequest{
+		Namespace:    namespace,
+		PodName:      podName,
+		Container:    container,
+		ResourceType: resourceType,
+	}
+
+	// Get predictions
+	response, err := s.predictor.Predict(r.Context(), request)
+	if err != nil {
+		logger.Error("Failed to generate predictions: %v", err)
+		http.Error(w, fmt.Sprintf("Failed to generate predictions: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	s.writeJSONResponse(w, response)
+}
+
+// handleHistoricalData handles /api/predictions/historical endpoint
+func (s *Server) handleHistoricalData(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	if s.predictor == nil {
+		http.Error(w, "Prediction engine not available", http.StatusServiceUnavailable)
+		return
+	}
+
+	// Parse query parameters
+	namespace := r.URL.Query().Get("namespace")
+	podName := r.URL.Query().Get("pod")
+	container := r.URL.Query().Get("container")
+	resourceType := r.URL.Query().Get("type") // "cpu" or "memory"
+	sinceParam := r.URL.Query().Get("since")   // duration like "24h", "7d"
+
+	if namespace == "" || podName == "" || container == "" || resourceType == "" {
+		http.Error(w, "Missing required parameters: namespace, pod, container, type", http.StatusBadRequest)
+		return
+	}
+
+	// Parse since parameter
+	var since time.Time
+	if sinceParam != "" {
+		duration, err := time.ParseDuration(sinceParam)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Invalid since parameter: %v", err), http.StatusBadRequest)
+			return
+		}
+		since = time.Now().Add(-duration)
+	} else {
+		since = time.Now().Add(-24 * time.Hour) // Default to 24 hours
+	}
+
+	// Get historical data
+	historicalData, err := s.predictor.GetHistoricalData(namespace, podName, container, resourceType, since)
+	if err != nil {
+		logger.Error("Failed to get historical data: %v", err)
+		http.Error(w, fmt.Sprintf("Failed to get historical data: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	s.writeJSONResponse(w, historicalData)
+}
+
+// handlePredictionStats handles /api/predictions/stats endpoint
+func (s *Server) handlePredictionStats(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	if s.predictor == nil {
+		http.Error(w, "Prediction engine not available", http.StatusServiceUnavailable)
+		return
+	}
+
+	// Get prediction engine statistics
+	stats := s.predictor.GetStats()
+	s.writeJSONResponse(w, stats)
 }
 
 // writeJSONResponse writes JSON response
