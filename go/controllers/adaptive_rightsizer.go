@@ -1829,7 +1829,7 @@ func getQoSClass(pod *corev1.Pod) corev1.PodQOSClass {
 }
 
 // SetupAdaptiveRightSizer creates and starts the adaptive rightsizer
-func SetupAdaptiveRightSizer(mgr manager.Manager, provider metrics.Provider, auditLogger *audit.AuditLogger, dryRun bool) error {
+func SetupAdaptiveRightSizer(mgr manager.Manager, provider metrics.Provider, auditLogger *audit.AuditLogger, dryRun bool) (*predictor.Engine, error) {
 	cfg := config.Get()
 
 	// Get the rest config from the manager
@@ -1838,7 +1838,7 @@ func SetupAdaptiveRightSizer(mgr manager.Manager, provider metrics.Provider, aud
 	// Create a clientset for using the resize subresource
 	clientSet, err := kubernetes.NewForConfig(restConfig)
 	if err != nil {
-		return fmt.Errorf("failed to create kubernetes clientset: %w", err)
+		return nil, fmt.Errorf("failed to create kubernetes clientset: %w", err)
 	}
 
 	// Initialize prediction engine
@@ -1890,7 +1890,7 @@ func SetupAdaptiveRightSizer(mgr manager.Manager, provider metrics.Provider, aud
 		}
 	}()
 
-	return nil
+	return predictorEngine, nil
 }
 
 // ensureSafeResourcePatchAdaptive ensures the patch never tries to remove or add resource fields
