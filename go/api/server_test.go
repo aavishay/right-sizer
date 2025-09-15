@@ -846,3 +846,47 @@ func TestServer_ConvertPodsToV1API(t *testing.T) {
 	assert.Equal(t, "200m", limits["cpu"])
 	assert.Equal(t, "256Mi", limits["memory"])
 }
+
+// TestServer_HandlePredictionBasedRecommendations tests the new prediction-based recommendations endpoint
+func TestServer_HandlePredictionBasedRecommendations(t *testing.T) {
+	clientset := fake.NewSimpleClientset()
+	metricsClient := metricsclient.NewSimpleClientset()
+
+	t.Run("Returns error when predictor is nil", func(t *testing.T) {
+		server := NewServer(clientset, metricsClient, nil) // nil predictor
+
+		req := httptest.NewRequest("GET", "/api/predictions/recommendations?namespace=default&pod=test-pod&container=test-container", nil)
+		w := httptest.NewRecorder()
+
+		server.handlePredictionBasedRecommendations(w, req)
+
+		assert.Equal(t, http.StatusServiceUnavailable, w.Code)
+		assert.Contains(t, w.Body.String(), "Prediction engine not available")
+	})
+
+	t.Run("Returns error for missing parameters with predictor nil", func(t *testing.T) {
+		server := NewServer(clientset, metricsClient, nil)
+
+		req := httptest.NewRequest("GET", "/api/predictions/recommendations?namespace=default", nil)
+		w := httptest.NewRecorder()
+
+		server.handlePredictionBasedRecommendations(w, req)
+
+		// Will still return 503 because predictor is nil - that's checked first
+		assert.Equal(t, http.StatusServiceUnavailable, w.Code)
+		assert.Contains(t, w.Body.String(), "Prediction engine not available")
+	})
+
+	t.Run("Sets correct error headers", func(t *testing.T) {
+		server := NewServer(clientset, metricsClient, nil)
+
+		req := httptest.NewRequest("GET", "/api/predictions/recommendations?namespace=default&pod=test-pod&container=test-container", nil)
+		w := httptest.NewRecorder()
+
+		server.handlePredictionBasedRecommendations(w, req)
+
+		// Headers are set even for error responses
+		assert.Equal(t, "*", w.Header().Get("Access-Control-Allow-Origin"))
+		// Content-Type for error is set by http.Error to text/plain
+	})
+}

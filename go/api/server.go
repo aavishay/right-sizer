@@ -23,6 +23,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"os"
 	"strconv"
@@ -194,6 +195,7 @@ func (s *Server) registerEndpoints() {
 	http.HandleFunc("/api/predictions", s.handlePredictions)                   // NEW: get predictions for resources
 	http.HandleFunc("/api/predictions/historical", s.handleHistoricalData)    // NEW: get historical data
 	http.HandleFunc("/api/predictions/stats", s.handlePredictionStats)        // NEW: prediction engine stats
+	http.HandleFunc("/api/predictions/recommendations", s.handlePredictionBasedRecommendations) // NEW: prediction-based resource recommendations
 
 	// Optimization events
 	http.HandleFunc("/api/optimization-events", s.handleOptimizationEvents)
@@ -1264,6 +1266,262 @@ func (s *Server) handlePredictionStats(w http.ResponseWriter, r *http.Request) {
 	// Get prediction engine statistics
 	stats := s.predictor.GetStats()
 	s.writeJSONResponse(w, stats)
+}
+
+// handlePredictionBasedRecommendations handles /api/predictions/recommendations endpoint
+// This endpoint provides actionable resource recommendations based on prediction analysis
+func (s *Server) handlePredictionBasedRecommendations(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	if s.predictor == nil {
+		http.Error(w, "Prediction engine not available", http.StatusServiceUnavailable)
+		return
+	}
+
+	// Parse query parameters
+	namespace := r.URL.Query().Get("namespace")
+	podName := r.URL.Query().Get("pod")
+	container := r.URL.Query().Get("container")
+
+	if namespace == "" || podName == "" || container == "" {
+		http.Error(w, "Missing required parameters: namespace, pod, container", http.StatusBadRequest)
+		return
+	}
+
+	// Generate recommendations for both CPU and memory
+	recommendations := map[string]interface{}{
+		"timestamp": time.Now().UTC(),
+		"namespace": namespace,
+		"pod":       podName,
+		"container": container,
+		"recommendations": map[string]interface{}{},
+		"confidence": map[string]float64{},
+		"analysis": map[string]interface{}{},
+	}
+
+	// Process CPU recommendations
+	if cpuRec, err := s.generateResourceRecommendation(r.Context(), namespace, podName, container, "cpu"); err == nil {
+		recommendations["recommendations"].(map[string]interface{})["cpu"] = cpuRec.Recommendation
+		recommendations["confidence"].(map[string]float64)["cpu"] = cpuRec.Confidence
+		recommendations["analysis"].(map[string]interface{})["cpu"] = cpuRec.Analysis
+	} else {
+		logger.Debug("Failed to generate CPU recommendation: %v", err)
+	}
+
+	// Process Memory recommendations
+	if memRec, err := s.generateResourceRecommendation(r.Context(), namespace, podName, container, "memory"); err == nil {
+		recommendations["recommendations"].(map[string]interface{})["memory"] = memRec.Recommendation
+		recommendations["confidence"].(map[string]float64)["memory"] = memRec.Confidence
+		recommendations["analysis"].(map[string]interface{})["memory"] = memRec.Analysis
+	} else {
+		logger.Debug("Failed to generate memory recommendation: %v", err)
+	}
+
+	s.writeJSONResponse(w, recommendations)
+}
+
+// ResourceRecommendation represents a recommendation for a specific resource type
+type ResourceRecommendation struct {
+	Recommendation map[string]interface{} `json:"recommendation"`
+	Confidence     float64                `json:"confidence"`
+	Analysis       map[string]interface{} `json:"analysis"`
+}
+
+// generateResourceRecommendation generates a recommendation for a specific resource type
+func (s *Server) generateResourceRecommendation(ctx context.Context, namespace, podName, container, resourceType string) (*ResourceRecommendation, error) {
+	// Get historical data for analysis
+	since := time.Now().Add(-7 * 24 * time.Hour) // Look back 7 days
+	historicalData, err := s.predictor.GetHistoricalData(namespace, podName, container, resourceType, since)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get historical data: %w", err)
+	}
+
+	if len(historicalData.DataPoints) < 10 {
+		return nil, fmt.Errorf("insufficient historical data: only %d data points", len(historicalData.DataPoints))
+	}
+
+	// Get predictions for multiple horizons
+	request := predictor.PredictionRequest{
+		Namespace:    namespace,
+		PodName:      podName,
+		Container:    container,
+		ResourceType: resourceType,
+		Horizons: []time.Duration{
+			1 * time.Hour,
+			6 * time.Hour,
+			24 * time.Hour,
+		},
+	}
+
+	response, err := s.predictor.Predict(ctx, request)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get predictions: %w", err)
+	}
+
+	if len(response.Predictions) == 0 {
+		return nil, fmt.Errorf("no predictions available")
+	}
+
+	// Analyze the data and generate recommendations
+	analysis := s.analyzeResourceUsage(historicalData, response.Predictions, resourceType)
+	recommendation := s.generateRecommendationFromAnalysis(analysis, resourceType)
+
+	return &ResourceRecommendation{
+		Recommendation: recommendation,
+		Confidence:     analysis["confidence"].(float64),
+		Analysis:       analysis,
+	}, nil
+}
+
+// analyzeResourceUsage analyzes historical data and predictions to provide insights
+func (s *Server) analyzeResourceUsage(historical predictor.HistoricalData, predictions []predictor.ResourcePrediction, resourceType string) map[string]interface{} {
+	analysis := map[string]interface{}{
+		"resourceType": resourceType,
+		"dataPoints":   len(historical.DataPoints),
+		"timeSpan":     time.Since(historical.DataPoints[0].Timestamp),
+	}
+
+	// Calculate statistics from historical data
+	var sum, max float64
+	min := historical.DataPoints[0].Value
+	for _, dp := range historical.DataPoints {
+		sum += dp.Value
+		if dp.Value > max {
+			max = dp.Value
+		}
+		if dp.Value < min {
+			min = dp.Value
+		}
+	}
+	avg := sum / float64(len(historical.DataPoints))
+
+	analysis["historical"] = map[string]interface{}{
+		"average": avg,
+		"minimum": min,
+		"maximum": max,
+		"latest":  historical.DataPoints[len(historical.DataPoints)-1].Value,
+	}
+
+	// Analyze predictions
+	var bestPrediction *predictor.ResourcePrediction
+	var maxConfidence float64
+	
+	for i := range predictions {
+		if predictions[i].Confidence > maxConfidence {
+			maxConfidence = predictions[i].Confidence
+			bestPrediction = &predictions[i]
+		}
+	}
+
+	analysis["predictions"] = map[string]interface{}{
+		"count":        len(predictions),
+		"bestValue":    bestPrediction.Value,
+		"confidence":   maxConfidence,
+		"horizon":      bestPrediction.Horizon.String(),
+		"method":       string(bestPrediction.Method),
+	}
+
+	// Calculate volatility (coefficient of variation)
+	var variance float64
+	for _, dp := range historical.DataPoints {
+		diff := dp.Value - avg
+		variance += diff * diff
+	}
+	variance /= float64(len(historical.DataPoints))
+	stdDev := math.Sqrt(variance)
+	volatility := stdDev / avg
+
+	analysis["volatility"] = volatility
+	analysis["confidence"] = maxConfidence
+
+	// Determine if resource usage is trending up or down
+	recentPoints := historical.DataPoints[len(historical.DataPoints)-10:]
+	var recentSum float64
+	for _, dp := range recentPoints {
+		recentSum += dp.Value
+	}
+	recentAvg := recentSum / float64(len(recentPoints))
+	
+	trend := "stable"
+	if recentAvg > avg*1.1 {
+		trend = "increasing"
+	} else if recentAvg < avg*0.9 {
+		trend = "decreasing"
+	}
+	analysis["trend"] = trend
+
+	return analysis
+}
+
+// generateRecommendationFromAnalysis generates actionable recommendations
+func (s *Server) generateRecommendationFromAnalysis(analysis map[string]interface{}, resourceType string) map[string]interface{} {
+	recommendation := map[string]interface{}{
+		"action": "maintain",
+		"reason": "Current configuration appears optimal",
+	}
+
+	historical := analysis["historical"].(map[string]interface{})
+	predictions := analysis["predictions"].(map[string]interface{})
+	confidence := analysis["confidence"].(float64)
+	volatility := analysis["volatility"].(float64)
+	trend := analysis["trend"].(string)
+
+	max := historical["maximum"].(float64)
+	avg := historical["average"].(float64)
+	latest := historical["latest"].(float64)
+	predicted := predictions["bestValue"].(float64)
+
+	// Only make recommendations if we have sufficient confidence
+	if confidence < 0.6 {
+		recommendation["action"] = "monitor"
+		recommendation["reason"] = "Insufficient confidence in predictions - continue monitoring"
+		return recommendation
+	}
+
+	// Determine recommendation based on analysis
+	if volatility > 0.5 {
+		// High volatility - recommend safety margins
+		if resourceType == "cpu" {
+			recommendedValue := max * 1.2 // 20% buffer above maximum
+			recommendation["action"] = "increase"
+			recommendation["suggested"] = fmt.Sprintf("%.0fm", recommendedValue)
+			recommendation["reason"] = "High volatility detected - recommend safety margin"
+		} else {
+			recommendedValue := max * 1.1 // 10% buffer for memory
+			recommendation["action"] = "increase"
+			recommendation["suggested"] = fmt.Sprintf("%.0fMi", recommendedValue/1024/1024)
+			recommendation["reason"] = "High volatility detected - recommend safety margin"
+		}
+	} else if trend == "increasing" && predicted > latest*1.1 {
+		// Upward trend with significant predicted increase
+		if resourceType == "cpu" {
+			recommendedValue := predicted * 1.1
+			recommendation["action"] = "increase"
+			recommendation["suggested"] = fmt.Sprintf("%.0fm", recommendedValue)
+			recommendation["reason"] = "Increasing trend detected with high predicted demand"
+		} else {
+			recommendedValue := predicted * 1.05
+			recommendation["action"] = "increase"
+			recommendation["suggested"] = fmt.Sprintf("%.0fMi", recommendedValue/1024/1024)
+			recommendation["reason"] = "Increasing trend detected with high predicted demand"
+		}
+	} else if trend == "decreasing" && max > avg*1.5 {
+		// Decreasing trend with over-provisioning
+		if resourceType == "cpu" {
+			recommendedValue := avg * 1.2
+			recommendation["action"] = "decrease"
+			recommendation["suggested"] = fmt.Sprintf("%.0fm", recommendedValue)
+			recommendation["reason"] = "Decreasing trend detected - can optimize down"
+		} else {
+			recommendedValue := avg * 1.1
+			recommendation["action"] = "decrease"
+			recommendation["suggested"] = fmt.Sprintf("%.0fMi", recommendedValue/1024/1024)
+			recommendation["reason"] = "Decreasing trend detected - can optimize down"
+		}
+	}
+
+	return recommendation
 }
 
 // writeJSONResponse writes JSON response
