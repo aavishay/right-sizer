@@ -25,7 +25,7 @@ import (
 
 // MemoryStore implements an in-memory prediction store
 type MemoryStore struct {
-	historicalData map[string][]DataPoint       // key: namespace/pod/container/resourceType
+	historicalData map[string][]DataPoint          // key: namespace/pod/container/resourceType
 	predictions    map[string][]ResourcePrediction // key: namespace/pod/container/resourceType
 	config         *Config
 	mutex          sync.RWMutex
@@ -37,7 +37,7 @@ func NewMemoryStore(config *Config) *MemoryStore {
 	if config == nil {
 		config = DefaultConfig()
 	}
-	
+
 	return &MemoryStore{
 		historicalData: make(map[string][]DataPoint),
 		predictions:    make(map[string][]ResourcePrediction),
@@ -55,9 +55,9 @@ func (s *MemoryStore) makeKey(namespace, podName, container, resourceType string
 func (s *MemoryStore) StoreHistoricalData(namespace, podName, container, resourceType string, dataPoint DataPoint) error {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
-	
+
 	key := s.makeKey(namespace, podName, container, resourceType)
-	
+
 	// Validate data point
 	if dataPoint.Timestamp.IsZero() {
 		return fmt.Errorf("invalid timestamp")
@@ -65,7 +65,7 @@ func (s *MemoryStore) StoreHistoricalData(namespace, podName, container, resourc
 	if math.IsNaN(dataPoint.Value) || math.IsInf(dataPoint.Value, 0) {
 		return fmt.Errorf("invalid value: %f", dataPoint.Value)
 	}
-	
+
 	// Add namespace, pod, and container info if not present
 	if dataPoint.Namespace == "" {
 		dataPoint.Namespace = namespace
@@ -76,18 +76,18 @@ func (s *MemoryStore) StoreHistoricalData(namespace, podName, container, resourc
 	if dataPoint.Container == "" {
 		dataPoint.Container = container
 	}
-	
+
 	// Get existing data points
 	dataPoints := s.historicalData[key]
-	
+
 	// Add new data point
 	dataPoints = append(dataPoints, dataPoint)
-	
+
 	// Sort by timestamp
 	sort.Slice(dataPoints, func(i, j int) bool {
 		return dataPoints[i].Timestamp.Before(dataPoints[j].Timestamp)
 	})
-	
+
 	// Remove old data points based on retention policy
 	cutoff := time.Now().Add(-s.config.HistoricalDataRetention)
 	var filteredData []DataPoint
@@ -96,15 +96,15 @@ func (s *MemoryStore) StoreHistoricalData(namespace, podName, container, resourc
 			filteredData = append(filteredData, dp)
 		}
 	}
-	
+
 	// Store the filtered data
 	s.historicalData[key] = filteredData
-	
+
 	// Trigger cleanup if needed
 	if time.Since(s.lastCleanup) > time.Hour {
 		go s.performCleanup()
 	}
-	
+
 	return nil
 }
 
@@ -112,10 +112,10 @@ func (s *MemoryStore) StoreHistoricalData(namespace, podName, container, resourc
 func (s *MemoryStore) GetHistoricalData(namespace, podName, container, resourceType string, since time.Time) (HistoricalData, error) {
 	s.mutex.RLock()
 	defer s.mutex.RUnlock()
-	
+
 	key := s.makeKey(namespace, podName, container, resourceType)
 	dataPoints := s.historicalData[key]
-	
+
 	// Filter data points by time
 	var filteredData []DataPoint
 	for _, dp := range dataPoints {
@@ -123,13 +123,13 @@ func (s *MemoryStore) GetHistoricalData(namespace, podName, container, resourceT
 			filteredData = append(filteredData, dp)
 		}
 	}
-	
+
 	// Calculate min and max values
 	var minValue, maxValue float64
 	if len(filteredData) > 0 {
 		minValue = filteredData[0].Value
 		maxValue = filteredData[0].Value
-		
+
 		for _, dp := range filteredData {
 			if dp.Value < minValue {
 				minValue = dp.Value
@@ -139,7 +139,7 @@ func (s *MemoryStore) GetHistoricalData(namespace, podName, container, resourceT
 			}
 		}
 	}
-	
+
 	return HistoricalData{
 		ResourceType: resourceType,
 		DataPoints:   filteredData,
@@ -153,20 +153,20 @@ func (s *MemoryStore) GetHistoricalData(namespace, podName, container, resourceT
 func (s *MemoryStore) StorePrediction(namespace, podName, container, resourceType string, prediction ResourcePrediction) error {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
-	
+
 	key := s.makeKey(namespace, podName, container, resourceType)
-	
+
 	// Get existing predictions
 	predictions := s.predictions[key]
-	
+
 	// Add new prediction
 	predictions = append(predictions, prediction)
-	
+
 	// Sort by timestamp (newest first)
 	sort.Slice(predictions, func(i, j int) bool {
 		return predictions[i].Timestamp.After(predictions[j].Timestamp)
 	})
-	
+
 	// Remove old predictions based on retention policy
 	cutoff := time.Now().Add(-s.config.PredictionRetention)
 	var filteredPredictions []ResourcePrediction
@@ -175,10 +175,10 @@ func (s *MemoryStore) StorePrediction(namespace, podName, container, resourceTyp
 			filteredPredictions = append(filteredPredictions, p)
 		}
 	}
-	
+
 	// Store the filtered predictions
 	s.predictions[key] = filteredPredictions
-	
+
 	return nil
 }
 
@@ -186,10 +186,10 @@ func (s *MemoryStore) StorePrediction(namespace, podName, container, resourceTyp
 func (s *MemoryStore) GetPredictions(namespace, podName, container, resourceType string, since time.Time) ([]ResourcePrediction, error) {
 	s.mutex.RLock()
 	defer s.mutex.RUnlock()
-	
+
 	key := s.makeKey(namespace, podName, container, resourceType)
 	predictions := s.predictions[key]
-	
+
 	// Filter predictions by time
 	var filteredPredictions []ResourcePrediction
 	for _, p := range predictions {
@@ -197,7 +197,7 @@ func (s *MemoryStore) GetPredictions(namespace, podName, container, resourceType
 			filteredPredictions = append(filteredPredictions, p)
 		}
 	}
-	
+
 	return filteredPredictions, nil
 }
 
@@ -205,7 +205,7 @@ func (s *MemoryStore) GetPredictions(namespace, podName, container, resourceType
 func (s *MemoryStore) CleanupOldData(olderThan time.Time) error {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
-	
+
 	// Clean up historical data
 	for key, dataPoints := range s.historicalData {
 		var filteredData []DataPoint
@@ -214,14 +214,14 @@ func (s *MemoryStore) CleanupOldData(olderThan time.Time) error {
 				filteredData = append(filteredData, dp)
 			}
 		}
-		
+
 		if len(filteredData) == 0 {
 			delete(s.historicalData, key)
 		} else {
 			s.historicalData[key] = filteredData
 		}
 	}
-	
+
 	// Clean up predictions
 	for key, predictions := range s.predictions {
 		var filteredPredictions []ResourcePrediction
@@ -230,14 +230,14 @@ func (s *MemoryStore) CleanupOldData(olderThan time.Time) error {
 				filteredPredictions = append(filteredPredictions, p)
 			}
 		}
-		
+
 		if len(filteredPredictions) == 0 {
 			delete(s.predictions, key)
 		} else {
 			s.predictions[key] = filteredPredictions
 		}
 	}
-	
+
 	s.lastCleanup = time.Now()
 	return nil
 }
@@ -246,13 +246,13 @@ func (s *MemoryStore) CleanupOldData(olderThan time.Time) error {
 func (s *MemoryStore) performCleanup() {
 	historicalCutoff := time.Now().Add(-s.config.HistoricalDataRetention)
 	predictionCutoff := time.Now().Add(-s.config.PredictionRetention)
-	
+
 	// Use the earliest cutoff time
 	cutoff := historicalCutoff
 	if predictionCutoff.Before(historicalCutoff) {
 		cutoff = predictionCutoff
 	}
-	
+
 	if err := s.CleanupOldData(cutoff); err != nil {
 		// Log error but don't fail
 		fmt.Printf("Error during automatic cleanup: %v\n", err)
@@ -263,7 +263,7 @@ func (s *MemoryStore) performCleanup() {
 func (s *MemoryStore) GetStats() map[string]interface{} {
 	s.mutex.RLock()
 	defer s.mutex.RUnlock()
-	
+
 	var totalDataPoints, totalPredictions int
 	for _, dataPoints := range s.historicalData {
 		totalDataPoints += len(dataPoints)
@@ -271,7 +271,7 @@ func (s *MemoryStore) GetStats() map[string]interface{} {
 	for _, predictions := range s.predictions {
 		totalPredictions += len(predictions)
 	}
-	
+
 	return map[string]interface{}{
 		"totalResources":      len(s.historicalData),
 		"totalDataPoints":     totalDataPoints,
@@ -286,12 +286,12 @@ func (s *MemoryStore) GetStats() map[string]interface{} {
 func (s *MemoryStore) GetResourceKeys() []string {
 	s.mutex.RLock()
 	defer s.mutex.RUnlock()
-	
+
 	keys := make([]string, 0, len(s.historicalData))
 	for key := range s.historicalData {
 		keys = append(keys, key)
 	}
-	
+
 	sort.Strings(keys)
 	return keys
 }
@@ -300,7 +300,7 @@ func (s *MemoryStore) GetResourceKeys() []string {
 func (s *MemoryStore) GetDataPointCount(namespace, podName, container, resourceType string) int {
 	s.mutex.RLock()
 	defer s.mutex.RUnlock()
-	
+
 	key := s.makeKey(namespace, podName, container, resourceType)
 	return len(s.historicalData[key])
 }
@@ -309,7 +309,7 @@ func (s *MemoryStore) GetDataPointCount(namespace, podName, container, resourceT
 func (s *MemoryStore) GetPredictionCount(namespace, podName, container, resourceType string) int {
 	s.mutex.RLock()
 	defer s.mutex.RUnlock()
-	
+
 	key := s.makeKey(namespace, podName, container, resourceType)
 	return len(s.predictions[key])
 }

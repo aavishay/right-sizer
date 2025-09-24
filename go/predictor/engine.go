@@ -25,13 +25,13 @@ import (
 
 // Engine coordinates multiple prediction algorithms and manages the prediction pipeline
 type Engine struct {
-	predictors  map[PredictionMethod]Predictor
-	store       PredictionStore
-	config      *Config
-	mutex       sync.RWMutex
-	isRunning   bool
-	stopChan    chan struct{}
-	waitGroup   sync.WaitGroup
+	predictors map[PredictionMethod]Predictor
+	store      PredictionStore
+	config     *Config
+	mutex      sync.RWMutex
+	isRunning  bool
+	stopChan   chan struct{}
+	waitGroup  sync.WaitGroup
 }
 
 // NewEngine creates a new prediction engine
@@ -39,7 +39,7 @@ func NewEngine(config *Config) (*Engine, error) {
 	if config == nil {
 		config = DefaultConfig()
 	}
-	
+
 	// Create store based on configuration
 	var store PredictionStore
 	switch config.StorageDriver {
@@ -48,28 +48,28 @@ func NewEngine(config *Config) (*Engine, error) {
 	default:
 		return nil, fmt.Errorf("unsupported storage driver: %s", config.StorageDriver)
 	}
-	
+
 	engine := &Engine{
 		predictors: make(map[PredictionMethod]Predictor),
 		store:      store,
 		config:     config,
 		stopChan:   make(chan struct{}),
 	}
-	
+
 	// Initialize enabled predictors
 	for _, method := range config.EnabledMethods {
 		if err := engine.addPredictor(method); err != nil {
 			return nil, fmt.Errorf("failed to add predictor %s: %w", method, err)
 		}
 	}
-	
+
 	return engine, nil
 }
 
 // addPredictor adds a predictor for the specified method
 func (e *Engine) addPredictor(method PredictionMethod) error {
 	var predictor Predictor
-	
+
 	switch method {
 	case PredictionMethodLinearRegression:
 		predictor = NewLinearRegressionPredictor()
@@ -80,7 +80,7 @@ func (e *Engine) addPredictor(method PredictionMethod) error {
 	default:
 		return fmt.Errorf("unsupported prediction method: %s", method)
 	}
-	
+
 	e.predictors[method] = predictor
 	return nil
 }
@@ -89,17 +89,17 @@ func (e *Engine) addPredictor(method PredictionMethod) error {
 func (e *Engine) Start(ctx context.Context) error {
 	e.mutex.Lock()
 	defer e.mutex.Unlock()
-	
+
 	if e.isRunning {
 		return fmt.Errorf("engine is already running")
 	}
-	
+
 	e.isRunning = true
-	
+
 	// Start cleanup routine
 	e.waitGroup.Add(1)
 	go e.cleanupRoutine(ctx)
-	
+
 	return nil
 }
 
@@ -107,15 +107,15 @@ func (e *Engine) Start(ctx context.Context) error {
 func (e *Engine) Stop() error {
 	e.mutex.Lock()
 	defer e.mutex.Unlock()
-	
+
 	if !e.isRunning {
 		return nil
 	}
-	
+
 	e.isRunning = false
 	close(e.stopChan)
 	e.waitGroup.Wait()
-	
+
 	return nil
 }
 
@@ -128,7 +128,7 @@ func (e *Engine) StoreDataPoint(namespace, podName, container, resourceType stri
 		PodName:   podName,
 		Container: container,
 	}
-	
+
 	return e.store.StoreHistoricalData(namespace, podName, container, resourceType, dataPoint)
 }
 
@@ -139,20 +139,20 @@ func (e *Engine) Predict(ctx context.Context, request PredictionRequest) (*Predi
 	if len(horizons) == 0 {
 		horizons = e.config.DefaultHorizons
 	}
-	
+
 	// Use all enabled methods if none specified
 	methods := request.Methods
 	if len(methods) == 0 {
 		methods = e.config.EnabledMethods
 	}
-	
+
 	// Get historical data
 	since := time.Now().Add(-e.config.HistoricalDataRetention)
 	historicalData, err := e.store.GetHistoricalData(request.Namespace, request.PodName, request.Container, request.ResourceType, since)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get historical data: %w", err)
 	}
-	
+
 	// Check if we have enough data
 	if len(historicalData.DataPoints) < e.config.MinDataPoints {
 		return &PredictionResponse{
@@ -162,19 +162,19 @@ func (e *Engine) Predict(ctx context.Context, request PredictionRequest) (*Predi
 			DataPoints:  len(historicalData.DataPoints),
 		}, nil
 	}
-	
+
 	// Generate predictions using multiple methods
 	var allPredictions []ResourcePrediction
 	var predictionErrors []error
-	
+
 	// Use context with timeout for prediction calculations
 	predCtx, cancel := context.WithTimeout(ctx, e.config.PredictionTimeout)
 	defer cancel()
-	
+
 	// Create a channel to collect predictions
 	predictionChan := make(chan []ResourcePrediction, len(methods))
 	errorChan := make(chan error, len(methods))
-	
+
 	// Start prediction goroutines
 	var wg sync.WaitGroup
 	for _, method := range methods {
@@ -182,11 +182,11 @@ func (e *Engine) Predict(ctx context.Context, request PredictionRequest) (*Predi
 		if !exists {
 			continue
 		}
-		
+
 		wg.Add(1)
 		go func(p Predictor, m PredictionMethod) {
 			defer wg.Done()
-			
+
 			// Check if context was cancelled
 			select {
 			case <-predCtx.Done():
@@ -194,31 +194,31 @@ func (e *Engine) Predict(ctx context.Context, request PredictionRequest) (*Predi
 				return
 			default:
 			}
-			
+
 			// Validate data for this predictor
 			if err := p.ValidateData(historicalData); err != nil {
 				errorChan <- fmt.Errorf("data validation failed for %s: %w", m, err)
 				return
 			}
-			
+
 			// Generate predictions
 			predictions, err := p.Predict(historicalData, horizons)
 			if err != nil {
 				errorChan <- fmt.Errorf("prediction failed for %s: %w", m, err)
 				return
 			}
-			
+
 			predictionChan <- predictions
 		}(predictor, method)
 	}
-	
+
 	// Close channels when all goroutines complete
 	go func() {
 		wg.Wait()
 		close(predictionChan)
 		close(errorChan)
 	}()
-	
+
 	// Collect predictions and errors
 	for {
 		select {
@@ -239,7 +239,7 @@ func (e *Engine) Predict(ctx context.Context, request PredictionRequest) (*Predi
 			}
 			// Continue collecting
 		}
-		
+
 		// Check if channels are closed
 		select {
 		case _, ok := <-predictionChan:
@@ -255,13 +255,13 @@ func (e *Engine) Predict(ctx context.Context, request PredictionRequest) (*Predi
 			}
 		default:
 		}
-		
+
 		if predictionChan == nil && errorChan == nil {
 			break
 		}
 	}
-	
-	collectResults:
+
+collectResults:
 	// Filter predictions by confidence threshold
 	var filteredPredictions []ResourcePrediction
 	for _, pred := range allPredictions {
@@ -269,7 +269,7 @@ func (e *Engine) Predict(ctx context.Context, request PredictionRequest) (*Predi
 			filteredPredictions = append(filteredPredictions, pred)
 		}
 	}
-	
+
 	// Sort predictions by confidence (highest first) and then by horizon
 	sort.Slice(filteredPredictions, func(i, j int) bool {
 		if filteredPredictions[i].Confidence != filteredPredictions[j].Confidence {
@@ -277,7 +277,7 @@ func (e *Engine) Predict(ctx context.Context, request PredictionRequest) (*Predi
 		}
 		return filteredPredictions[i].Horizon < filteredPredictions[j].Horizon
 	})
-	
+
 	// Store predictions
 	for _, prediction := range filteredPredictions {
 		if err := e.store.StorePrediction(request.Namespace, request.PodName, request.Container, request.ResourceType, prediction); err != nil {
@@ -285,14 +285,14 @@ func (e *Engine) Predict(ctx context.Context, request PredictionRequest) (*Predi
 			fmt.Printf("Failed to store prediction: %v\n", err)
 		}
 	}
-	
+
 	response := &PredictionResponse{
 		Request:     request,
 		Predictions: filteredPredictions,
 		Timestamp:   time.Now(),
 		DataPoints:  len(historicalData.DataPoints),
 	}
-	
+
 	return response, nil
 }
 
@@ -306,16 +306,16 @@ func (e *Engine) GetBestPrediction(ctx context.Context, namespace, podName, cont
 		Horizons:     []time.Duration{horizon},
 		Methods:      e.config.EnabledMethods,
 	}
-	
+
 	response, err := e.Predict(ctx, request)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	if len(response.Predictions) == 0 {
 		return nil, fmt.Errorf("no predictions available")
 	}
-	
+
 	// Return the prediction with highest confidence for the requested horizon
 	var bestPrediction *ResourcePrediction
 	for _, pred := range response.Predictions {
@@ -325,11 +325,11 @@ func (e *Engine) GetBestPrediction(ctx context.Context, namespace, podName, cont
 			}
 		}
 	}
-	
+
 	if bestPrediction == nil {
 		return nil, fmt.Errorf("no prediction found for horizon %v", horizon)
 	}
-	
+
 	return bestPrediction, nil
 }
 
@@ -346,10 +346,10 @@ func (e *Engine) GetStoredPredictions(namespace, podName, container, resourceTyp
 // cleanupRoutine runs periodic cleanup of old data
 func (e *Engine) cleanupRoutine(ctx context.Context) {
 	defer e.waitGroup.Done()
-	
+
 	ticker := time.NewTicker(time.Hour) // Cleanup every hour
 	defer ticker.Stop()
-	
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -370,22 +370,22 @@ func (e *Engine) cleanupRoutine(ctx context.Context) {
 func (e *Engine) GetStats() map[string]interface{} {
 	e.mutex.RLock()
 	defer e.mutex.RUnlock()
-	
+
 	stats := map[string]interface{}{
-		"isRunning":    e.isRunning,
-		"predictors":   len(e.predictors),
-		"methods":      make([]string, 0, len(e.predictors)),
-		"config":       e.config,
+		"isRunning":  e.isRunning,
+		"predictors": len(e.predictors),
+		"methods":    make([]string, 0, len(e.predictors)),
+		"config":     e.config,
 	}
-	
+
 	for method := range e.predictors {
 		stats["methods"] = append(stats["methods"].([]string), string(method))
 	}
-	
+
 	// Add store stats if available
 	if memoryStore, ok := e.store.(*MemoryStore); ok {
 		stats["store"] = memoryStore.GetStats()
 	}
-	
+
 	return stats
 }

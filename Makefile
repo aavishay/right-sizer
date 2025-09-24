@@ -229,20 +229,24 @@ build-all: ## Build binaries for all platforms
 ##@ Docker
 
 .PHONY: docker-build
-docker-build: ## Build Docker image for current architecture
-	@echo "$(BLUE)Building Docker image: $(DOCKER_IMAGE):$(DOCKER_TAG)$(NC)"
-	docker build \
+docker-build: ## Build multi-platform Docker image
+	@echo "$(BLUE)Building multi-platform Docker image: $(DOCKER_IMAGE):$(DOCKER_TAG)$(NC)"
+	docker buildx create --use --name right-sizer-builder 2>/dev/null || true
+	docker buildx build \
+		--platform $(DOCKER_PLATFORMS) \
 		--build-arg VERSION=$(VERSION) \
 		--build-arg GIT_COMMIT=$(GIT_COMMIT) \
 		--build-arg BUILD_DATE=$(BUILD_DATE) \
 		-t $(DOCKER_IMAGE):$(DOCKER_TAG) \
 		-t $(DOCKER_IMAGE):latest \
-		-f Dockerfile .
-	@echo "$(GREEN)Docker image built successfully$(NC)"
+		-f Dockerfile \
+		--load .
+	@echo "$(GREEN)Multi-platform Docker image built successfully$(NC)"
 
 .PHONY: docker-buildx
-docker-buildx: ## Build multi-platform Docker image
-	@echo "$(BLUE)Building multi-platform Docker image: $(DOCKER_IMAGE):$(DOCKER_TAG)$(NC)"
+docker-buildx: ## Build and push multi-platform Docker image
+	@echo "$(BLUE)Building and pushing multi-platform Docker image: $(DOCKER_IMAGE):$(DOCKER_TAG)$(NC)"
+	docker buildx create --use --name right-sizer-builder 2>/dev/null || true
 	docker buildx build \
 		--platform $(DOCKER_PLATFORMS) \
 		--build-arg VERSION=$(VERSION) \
@@ -560,15 +564,19 @@ mk-enable-metrics: ## Enable metrics-server addon in minikube
 	@echo "$(GREEN)metrics-server enabled (it may take ~30s to become Ready)$(NC)"
 
 .PHONY: mk-build-image
-mk-build-image: ## Build operator image inside minikube Docker daemon
-	@echo "$(BLUE)Building image inside minikube Docker daemon...$(NC)"
+mk-build-image: ## Build multi-platform operator image inside minikube Docker daemon
+	@echo "$(BLUE)Building multi-platform image inside minikube Docker daemon...$(NC)"
 	eval $$(minikube -p right-sizer docker-env) && \
-	  docker build -t right-sizer:test \
+	  docker buildx create --use --name minikube-builder --driver docker-container 2>/dev/null || true && \
+	  docker buildx build \
+	    --platform linux/amd64,linux/arm64 \
 	    --build-arg VERSION=$(VERSION) \
 	    --build-arg GIT_COMMIT=$(GIT_COMMIT) \
 	    --build-arg BUILD_DATE=$(BUILD_DATE) \
-	    -f Dockerfile .
-	@echo "$(GREEN)Image right-sizer:test built inside minikube$(NC)"
+	    -t right-sizer:test \
+	    -f Dockerfile \
+	    --load .
+	@echo "$(GREEN)Multi-platform image right-sizer:test built inside minikube$(NC)"
 
 .PHONY: mk-deploy
 mk-deploy: mk-start mk-build-image ## Deploy Helm chart using locally built image

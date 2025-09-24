@@ -1,0 +1,3 @@
+FROM gcr.io/distroless/static-debian12:nonroot
+COPY build/right-sizer-linux-amd64 /usr/local/bin/right-sizer
+ENTRYPOINT ["/usr/local/bin/right-sizer"]

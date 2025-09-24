@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -74,7 +75,7 @@ type AdaptiveRightSizer struct {
 	MetricsProvider metrics.Provider
 	OperatorMetrics *metrics.OperatorMetrics // Prometheus metrics recorder
 	AuditLogger     *audit.AuditLogger
-	Config          *config.Config // Configuration with feature flags
+	Config          *config.Config    // Configuration with feature flags
 	Predictor       *predictor.Engine // Resource prediction engine
 	Interval        time.Duration
 	InPlaceEnabled  bool       // Will be auto-detected
@@ -313,6 +314,12 @@ func (r *AdaptiveRightSizer) analyzeAllPods(ctx context.Context) ([]ResourceUpda
 
 		// Check namespace filters first
 		if !r.shouldProcessNamespace(pod.Namespace) {
+			continue
+		}
+
+		// Self-protection: Skip if this is the right-sizer pod itself
+		if r.isSelfPod(&pod) {
+			log.Printf("🛡️  Skipping self-pod %s/%s to prevent self-modification", pod.Namespace, pod.Name)
 			continue
 		}
 		if r.isSystemWorkload(pod.Namespace, pod.Name) {
@@ -1412,7 +1419,7 @@ func (r *AdaptiveRightSizer) calculateOptimalResourcesWithDecision(usage metrics
 // calculateOptimalResourcesWithPrediction calculates resources using both current usage and future predictions
 func (r *AdaptiveRightSizer) calculateOptimalResourcesWithPrediction(ctx context.Context, namespace, podName, containerName string, usage metrics.Metrics, decision ResourceScalingDecision) corev1.ResourceRequirements {
 	cfg := config.Get()
-	
+
 	// First, collect current usage data for predictions
 	if r.Predictor != nil {
 		// Store current metrics as historical data
@@ -1424,84 +1431,84 @@ func (r *AdaptiveRightSizer) calculateOptimalResourcesWithPrediction(ctx context
 			logger.Warn("Failed to store memory data point for prediction: %v", err)
 		}
 	}
-	
+
 	// Get predictions for future resource needs
 	var cpuPrediction, memoryPrediction *predictor.ResourcePrediction
 	if r.Predictor != nil {
 		// Get predictions for the next scheduling interval
 		predictionHorizon := r.Interval * 2 // Look ahead 2 intervals
-		
+
 		if pred, err := r.Predictor.GetBestPrediction(ctx, namespace, podName, containerName, "cpu", predictionHorizon); err == nil {
 			cpuPrediction = pred
 			logger.Debug("CPU prediction for %s/%s/%s: %.2f millicores (confidence: %.2f)", namespace, podName, containerName, pred.Value, pred.Confidence)
 		}
-		
+
 		if pred, err := r.Predictor.GetBestPrediction(ctx, namespace, podName, containerName, "memory", predictionHorizon); err == nil {
 			memoryPrediction = pred
 			logger.Debug("Memory prediction for %s/%s/%s: %.2f MB (confidence: %.2f)", namespace, podName, containerName, pred.Value, pred.Confidence)
 		}
 	}
-	
+
 	var cpuRequest, memRequest int64
-	
+
 	// CPU calculation with prediction enhancement
 	baseCpuRequest := r.calculateBaseCpuRequest(usage, decision, cfg)
 	cpuRequest = baseCpuRequest
-	
+
 	if cpuPrediction != nil && cpuPrediction.Confidence >= 0.6 { // Use hardcoded threshold for now
 		// Use prediction if confidence is high enough
 		predictedCpuRequest := int64(cpuPrediction.Value * cfg.CPURequestMultiplier)
-		
+
 		// Take the higher of current-based calculation and prediction-based calculation for safety
 		if predictedCpuRequest > cpuRequest {
 			cpuRequest = predictedCpuRequest
 			logger.Info("🔮 Using CPU prediction for %s/%s/%s: %d millicores (confidence: %.2f)", namespace, podName, containerName, cpuRequest, cpuPrediction.Confidence)
 		}
-		
+
 		// Update metrics with prediction information
 		if r.OperatorMetrics != nil {
 			r.OperatorMetrics.UpdateResourceTrendPrediction(namespace, podName, containerName, "cpu", r.Interval.String(), cpuPrediction.Value)
 		}
 	}
-	
+
 	// Memory calculation with prediction enhancement
 	baseMemRequest := r.calculateBaseMemoryRequest(usage, decision, cfg)
 	memRequest = baseMemRequest
-	
+
 	if memoryPrediction != nil && memoryPrediction.Confidence >= 0.6 { // Use hardcoded threshold for now
 		// Use prediction if confidence is high enough
 		predictedMemRequest := int64(memoryPrediction.Value * cfg.MemoryRequestMultiplier)
-		
+
 		// Take the higher of current-based calculation and prediction-based calculation for safety
 		if predictedMemRequest > memRequest {
 			memRequest = predictedMemRequest
 			logger.Info("🔮 Using memory prediction for %s/%s/%s: %d MB (confidence: %.2f)", namespace, podName, containerName, memRequest, memoryPrediction.Confidence)
 		}
-		
+
 		// Update metrics with prediction information
 		if r.OperatorMetrics != nil {
 			r.OperatorMetrics.UpdateResourceTrendPrediction(namespace, podName, containerName, "memory", r.Interval.String(), memoryPrediction.Value)
 		}
 	}
-	
+
 	// Apply minimum resource constraints
 	cpuRequest = r.applyMinimumCpuConstraints(usage, cpuRequest, cfg)
 	memRequest = r.applyMinimumMemoryConstraints(usage, memRequest, cfg)
-	
+
 	// Calculate limits
 	cpuLimit := int64(float64(cpuRequest)*cfg.CPULimitMultiplier) + cfg.CPULimitAddition
 	memLimit := int64(float64(memRequest)*cfg.MemoryLimitMultiplier) + cfg.MemoryLimitAddition
-	
+
 	// Apply maximum caps and ensure limits are not less than requests
 	cpuLimit = r.applyMaximumCpuLimits(cpuRequest, cpuLimit, cfg)
 	memLimit = r.applyMaximumMemoryLimits(memRequest, memLimit, cfg)
-	
+
 	// Handle QoS preservation if configured
 	if cfg.PreserveGuaranteedQoS && r.shouldMaintainGuaranteedQoS(cfg) {
 		cpuLimit = cpuRequest
 		memLimit = memRequest
 	}
-	
+
 	return corev1.ResourceRequirements{
 		Requests: corev1.ResourceList{
 			corev1.ResourceCPU:    *resource.NewMilliQuantity(cpuRequest, resource.DecimalSI),
@@ -1517,7 +1524,7 @@ func (r *AdaptiveRightSizer) calculateOptimalResourcesWithPrediction(ctx context
 // Helper methods for resource calculation
 func (r *AdaptiveRightSizer) calculateBaseCpuRequest(usage metrics.Metrics, decision ResourceScalingDecision, cfg *config.Config) int64 {
 	var cpuRequest int64
-	
+
 	if decision.CPU == ScaleUp {
 		cpuRequest = int64(usage.CPUMilli*cfg.CPURequestMultiplier) + cfg.CPURequestAddition
 	} else if decision.CPU == ScaleDown {
@@ -1525,13 +1532,13 @@ func (r *AdaptiveRightSizer) calculateBaseCpuRequest(usage metrics.Metrics, deci
 	} else {
 		cpuRequest = int64(usage.CPUMilli*cfg.CPURequestMultiplier) + cfg.CPURequestAddition
 	}
-	
+
 	return cpuRequest
 }
 
 func (r *AdaptiveRightSizer) calculateBaseMemoryRequest(usage metrics.Metrics, decision ResourceScalingDecision, cfg *config.Config) int64 {
 	var memRequest int64
-	
+
 	if decision.Memory == ScaleUp {
 		memRequest = int64(usage.MemMB*cfg.MemoryRequestMultiplier) + cfg.MemoryRequestAddition
 	} else if decision.Memory == ScaleDown {
@@ -1539,7 +1546,7 @@ func (r *AdaptiveRightSizer) calculateBaseMemoryRequest(usage metrics.Metrics, d
 	} else {
 		memRequest = int64(usage.MemMB*cfg.MemoryRequestMultiplier) + cfg.MemoryRequestAddition
 	}
-	
+
 	return memRequest
 }
 
@@ -1548,7 +1555,7 @@ func (r *AdaptiveRightSizer) applyMinimumCpuConstraints(usage metrics.Metrics, c
 	if usage.CPUMilli < 0.1 && cpuRequest < cfg.MinCPURequest {
 		cpuRequest = cfg.MinCPURequest
 	}
-	
+
 	// If we have real usage data, ensure we use at least the actual usage plus buffer
 	if usage.CPUMilli > 0.1 {
 		minBasedOnUsage := int64(usage.CPUMilli * 1.2) // 20% buffer
@@ -1556,7 +1563,7 @@ func (r *AdaptiveRightSizer) applyMinimumCpuConstraints(usage metrics.Metrics, c
 			cpuRequest = minBasedOnUsage
 		}
 	}
-	
+
 	return cpuRequest
 }
 
@@ -1564,14 +1571,14 @@ func (r *AdaptiveRightSizer) applyMinimumMemoryConstraints(usage metrics.Metrics
 	if usage.MemMB < 1 && memRequest < cfg.MinMemoryRequest {
 		memRequest = cfg.MinMemoryRequest
 	}
-	
+
 	if usage.MemMB > 1 {
 		minBasedOnUsage := int64(usage.MemMB * 1.2) // 20% buffer
 		if memRequest < minBasedOnUsage {
 			memRequest = minBasedOnUsage
 		}
 	}
-	
+
 	return memRequest
 }
 
@@ -1762,6 +1769,29 @@ func (r *AdaptiveRightSizer) shouldProcessNamespace(namespace string) bool {
 	return cfg.IsNamespaceIncluded(namespace)
 }
 
+// isSelfPod checks if the given pod is the right-sizer operator itself
+func (r *AdaptiveRightSizer) isSelfPod(pod *corev1.Pod) bool {
+	// Check if this pod has the right-sizer app label
+	if appLabel, exists := pod.Labels["app.kubernetes.io/name"]; exists && appLabel == "right-sizer" {
+		return true
+	}
+
+	// Fallback: Check if the pod name contains "right-sizer"
+	if strings.Contains(pod.Name, "right-sizer") {
+		// Additional check: ensure it's in the operator namespace
+		operatorNamespace := os.Getenv("OPERATOR_NAMESPACE")
+		if operatorNamespace != "" && pod.Namespace == operatorNamespace {
+			return true
+		}
+		// Fallback namespace check
+		if operatorNamespace == "" && (pod.Namespace == "right-sizer" || pod.Namespace == "default") {
+			return true
+		}
+	}
+
+	return false
+}
+
 // getQoSClass determines the QoS class of a pod
 func getQoSClass(pod *corev1.Pod) corev1.PodQOSClass {
 	requests := make(corev1.ResourceList)
@@ -1846,8 +1876,8 @@ func SetupAdaptiveRightSizer(mgr manager.Manager, provider metrics.Provider, aud
 	if cfg.PredictionEnabled {
 		predConfig := predictor.DefaultConfig()
 		predConfig.CollectionInterval = cfg.ResizeInterval // Align with resize interval
-		predConfig.ConfidenceThreshold = 0.6 // Default confidence threshold
-		
+		predConfig.ConfidenceThreshold = 0.6               // Default confidence threshold
+
 		predictorEngine, err = predictor.NewEngine(predConfig)
 		if err != nil {
 			logger.Warn("Failed to create prediction engine: %v", err)
@@ -1883,7 +1913,7 @@ func SetupAdaptiveRightSizer(mgr manager.Manager, provider metrics.Provider, aud
 					logger.Info("🔮 Prediction engine started")
 				}
 			}
-			
+
 			return rightsizer.Start(ctx)
 		})); err != nil {
 			log.Printf("Failed to add adaptive rightsizer to manager: %v", err)

@@ -19,6 +19,8 @@ package config
 import (
 	"errors"
 	"fmt"
+	"log"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -119,10 +121,10 @@ type Config struct {
 	PatchResizePolicy  bool // Automatically patch parent resources with resize policy
 
 	// Prediction configuration
-	PredictionEnabled           bool    // Enable resource prediction using historical data
-	PredictionConfidenceThreshold float64 // Minimum confidence threshold for using predictions (0-1)
-	PredictionHistoryDays       int     // Days of historical data to retain for predictions
-	PredictionMethods           []string // Enabled prediction methods (linear_regression, exponential_smoothing, simple_moving_average)
+	PredictionEnabled             bool     // Enable resource prediction using historical data
+	PredictionConfidenceThreshold float64  // Minimum confidence threshold for using predictions (0-1)
+	PredictionHistoryDays         int      // Days of historical data to retain for predictions
+	PredictionMethods             []string // Enabled prediction methods (linear_regression, exponential_smoothing, simple_moving_average)
 
 	// QoS preservation settings
 	PreserveGuaranteedQoS      bool // Preserve Guaranteed QoS class during resizing
@@ -302,6 +304,25 @@ func Load() *Config {
 
 	if Global == nil {
 		Global = GetDefaults()
+
+		// Self-protection: Always exclude the operator's own namespace
+		operatorNamespace := os.Getenv("OPERATOR_NAMESPACE")
+		if operatorNamespace == "" {
+			operatorNamespace = "right-sizer" // fallback default
+		}
+
+		// Add operator namespace to exclude list if not already present
+		found := false
+		for _, ns := range Global.NamespaceExclude {
+			if ns == operatorNamespace {
+				found = true
+				break
+			}
+		}
+		if !found {
+			Global.NamespaceExclude = append(Global.NamespaceExclude, operatorNamespace)
+			log.Printf("🛡️  Added operator namespace '%s' to exclude list for self-protection", operatorNamespace)
+		}
 	}
 	return Global
 }
@@ -415,6 +436,26 @@ func (c *Config) UpdateFromCRD(
 	}
 	if len(namespaceExclude) > 0 {
 		c.NamespaceExclude = namespaceExclude
+
+		// Self-protection: Ensure operator's own namespace is always excluded
+		operatorNamespace := os.Getenv("OPERATOR_NAMESPACE")
+		if operatorNamespace == "" {
+			operatorNamespace = "right-sizer" // fallback default
+		}
+
+		// Check if operator namespace is in the exclude list
+		found := false
+		for _, ns := range c.NamespaceExclude {
+			if ns == operatorNamespace {
+				found = true
+				break
+			}
+		}
+		// Add it if not found
+		if !found {
+			c.NamespaceExclude = append(c.NamespaceExclude, operatorNamespace)
+			log.Printf("🛡️  Preserved operator namespace '%s' in exclude list for self-protection", operatorNamespace)
+		}
 	}
 	if len(systemNamespaces) > 0 {
 		c.SystemNamespaces = systemNamespaces

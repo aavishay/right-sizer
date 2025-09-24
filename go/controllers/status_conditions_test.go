@@ -541,14 +541,14 @@ func TestRecordResizeEvent(t *testing.T) {
 		t.Errorf("Expected event to contain message %s", message)
 	}
 
-	// Check timestamp format (should be RFC3339)
-	parts := strings.Split(event, ":")
-	if len(parts) < 4 {
-		t.Errorf("Expected event to have at least 4 parts (type:reason:message:timestamp), got %d", len(parts))
+	// Check timestamp format (should be RFC3339, pipe-delimited)
+	parts := strings.Split(event, "|")
+	if len(parts) != 4 {
+		t.Errorf("Expected event to have exactly 4 parts (type|reason|message|timestamp), got %d", len(parts))
 	}
 
-	// Try to parse the timestamp part
-	timestampPart := parts[len(parts)-1]
+	// Parse the timestamp part (4th field)
+	timestampPart := parts[3]
 	if _, err := time.Parse(time.RFC3339, timestampPart); err != nil {
 		t.Errorf("Expected valid RFC3339 timestamp, but got parse error: %v", err)
 	}

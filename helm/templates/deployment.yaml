@@ -88,6 +88,37 @@ spec:
               value: {{ .Values.rightsizerConfig.operator.leaderElectionNamespace | default .Release.Namespace | quote }}
             - name: LEADER_ELECTION_ID
               value: {{ .Values.rightsizerConfig.operator.leaderElectionID | default "right-sizer-leader" | quote }}
+            # AIOPS / CAPABILITY CONFIGURATION
+            - name: AIOPS_ENABLED
+              value: {{ .Values.aiops.enabled | default true | quote }}
+            - name: AIOPS_ENGINE_DISPATCH_INTERVAL
+              value: {{ .Values.aiops.engine.dispatchInterval | default "5s" | quote }}
+            # Memory leak analyzer
+            - name: AIOPS_MEMORY_LEAK_ANALYZER
+              value: {{ .Values.aiops.analyzers.memoryLeak.enabled | default true | quote }}
+            - name: AIOPS_MEMORY_LEAK_MIN_RSS
+              value: {{ .Values.aiops.analyzers.memoryLeak.minRSSThreshold | default "64MiB" | quote }}
+            - name: AIOPS_MEMORY_LEAK_R2_THRESHOLD
+              value: {{ .Values.aiops.analyzers.memoryLeak.r2Threshold | default 0.55 | quote }}
+            - name: AIOPS_MEMORY_LEAK_MIN_SLOPE_MB_PER_MIN
+              value: {{ .Values.aiops.analyzers.memoryLeak.minSlopeMBPerMinute | default 0.2 | quote }}
+            # Incident store
+            - name: AIOPS_INCIDENT_RETENTION
+              value: {{ .Values.aiops.incidentStore.retention | default "24h" | quote }}
+            - name: AIOPS_INCIDENT_MAX
+              value: {{ .Values.aiops.incidentStore.maxIncidents | default 500 | quote }}
+            # Capability policy
+            - name: CAPABILITIES_MIN_MINOR
+              value: {{ .Values.capabilities.enforceMinimumMinor | default 33 | quote }}
+            - name: CAPABILITIES_FAIL_UNSUPPORTED
+              value: {{ .Values.capabilities.failOnUnsupported | default false | quote }}
+            # Narrative / LLM
+            - name: LLM_ENABLED
+              value: {{ ternary "true" "false" (.Values.aiops.narrative.llm.enabled) | quote }}
+            - name: LLM_MODEL
+              value: {{ .Values.aiops.narrative.llm.model | default "" | quote }}
+            - name: LLM_API_URL
+              value: {{ .Values.aiops.narrative.llm.apiURL | default "" | quote }}
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
           volumeMounts:

@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -189,6 +190,13 @@ func (r *InPlaceRightSizer) rightSizeAllPods(ctx context.Context) {
 
 		// Check namespace filters
 		if !r.shouldProcessNamespace(pod.Namespace) {
+			skippedCount++
+			continue
+		}
+
+		// Self-protection: Skip if this is the right-sizer pod itself
+		if r.isSelfPod(&pod) {
+			log.Printf("🛡️  Skipping self-pod %s/%s to prevent self-modification", pod.Namespace, pod.Name)
 			skippedCount++
 			continue
 		}
@@ -1013,6 +1021,29 @@ func (r *InPlaceRightSizer) shouldProcessNamespace(namespace string) bool {
 	// Check if namespace is in include list
 	for _, includeNs := range cfg.NamespaceInclude {
 		if namespace == includeNs {
+			return true
+		}
+	}
+
+	return false
+}
+
+// isSelfPod checks if the given pod is the right-sizer operator itself
+func (r *InPlaceRightSizer) isSelfPod(pod *corev1.Pod) bool {
+	// Check if this pod has the right-sizer app label
+	if appLabel, exists := pod.Labels["app.kubernetes.io/name"]; exists && appLabel == "right-sizer" {
+		return true
+	}
+
+	// Fallback: Check if the pod name contains "right-sizer"
+	if strings.Contains(pod.Name, "right-sizer") {
+		// Additional check: ensure it's in the operator namespace
+		operatorNamespace := os.Getenv("OPERATOR_NAMESPACE")
+		if operatorNamespace != "" && pod.Namespace == operatorNamespace {
+			return true
+		}
+		// Fallback namespace check
+		if operatorNamespace == "" && (pod.Namespace == "right-sizer" || pod.Namespace == "default") {
 			return true
 		}
 	}

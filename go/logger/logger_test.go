@@ -193,25 +193,17 @@ func TestLogger_FormatMessage_WithColor(t *testing.T) {
 		t.Skip("Skipping color test in CI environment")
 	}
 
-	// Mock terminal output by temporarily setting stdout to a pipe
-	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
+	// Force color mode explicitly (new logger behavior honors FORCE_LOG_COLOR)
+	os.Setenv("FORCE_LOG_COLOR", "1")
+	defer os.Unsetenv("FORCE_LOG_COLOR")
 
 	logger := &Logger{
-		level:  INFO,
+		level:  DEBUG, // ensure all levels permitted
 		logger: log.New(os.Stdout, "", 0),
 	}
 
-	// This should use colors when outputting to terminal
-	logger.formatMessage("TEST", "\033[31m", "test message")
-
-	w.Close()
-	os.Stdout = oldStdout
-
-	var buf bytes.Buffer
-	buf.ReadFrom(r)
-	output := buf.String()
+	// Directly capture formatted message (formatMessage returns the string; printing not required)
+	output := logger.formatMessage("TEST", "\033[31m", "test message")
 
 	// Should contain ANSI color codes
 	assert.Contains(t, output, "\033[31m")

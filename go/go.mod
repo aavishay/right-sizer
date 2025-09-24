@@ -1,6 +1,6 @@
 module right-sizer
 
-go 1.24.0
+go 1.25.0
 
 replace golang.org/x/tools => golang.org/x/tools v0.23.0
 

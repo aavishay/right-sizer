@@ -1,0 +1,112 @@
+# Right-Sizer Documentation
+
+This directory contains comprehensive documentation for the Right-Sizer Kubernetes operator.
+
+## 📖 Documentation Index
+
+### Getting Started
+- **[Installation Guide](installation-guide.md)** - Complete setup and deployment instructions
+- **[Troubleshooting K8s](troubleshooting-k8s.md)** - Kubernetes deployment issues and solutions
+
+### Development & Testing
+- **[GitHub Actions Testing](github-actions-testing.md)** - Local CI/CD testing with act
+- **[Act Testing Summary](act-testing-summary.md)** - Test results and validation status
+- **[Code Review Checklist](code-review-checklist.md)** - Comprehensive review guidelines
+- **[Coverage Improvements](coverage-improvements.md)** - Test coverage analysis and enhancements
+
+### Architecture & Implementation
+- **[Prediction System](prediction-system.md)** - AI/ML-based resource prediction architecture
+- **[Feature Flag Implementation](feature-flag-implementation.md)** - Feature gate system design
+- **[Resize Policy Implementation](resize-policy-implementation.md)** - Policy engine and resource sizing
+- **[Minikube Deployment](minikube-deployment.md)** - Local development environment setup
+
+### Project Management
+- **[Review Summary](review-summary.md)** - Code review status and focus areas
+- **[Changelog](changelog.md)** - Version history and release notes
+- **[Reorganization Summary](reorganization-summary.md)** - Repository structure changes and improvements
+- **[Self-Protection Fix](self-protection-fix.md)** - Fix for preventing operator from resizing itself
+
+## 🚀 Quick Navigation
+
+### For New Users
+1. Start with [Installation Guide](installation-guide.md)
+2. Review [Troubleshooting K8s](troubleshooting-k8s.md) for common issues
+3. Check [Minikube Deployment](minikube-deployment.md) for local testing
+
+### For Developers
+1. Review [Code Review Checklist](code-review-checklist.md)
+2. Set up [GitHub Actions Testing](github-actions-testing.md)
+3. Understand [Feature Flag Implementation](feature-flag-implementation.md)
+4. Study [Prediction System](prediction-system.md) architecture
+
+### For Reviewers
+1. Check [Review Summary](review-summary.md) for current status
+2. Use [Code Review Checklist](code-review-checklist.md) as guide
+3. Review [Coverage Improvements](coverage-improvements.md) for test status
+
+## 📁 Repository Structure
+
+```
+docs/
+├── README.md                           # This file
+├── installation-guide.md               # Setup and deployment
+├── troubleshooting-k8s.md             # Kubernetes issues
+├── github-actions-testing.md          # CI/CD testing guide
+├── act-testing-summary.md             # Test validation results
+├── code-review-checklist.md           # Review guidelines
+├── coverage-improvements.md           # Test coverage analysis
+├── prediction-system.md               # AI/ML architecture
+├── feature-flag-implementation.md     # Feature gates
+├── resize-policy-implementation.md    # Policy engine
+├── minikube-deployment.md             # Local development
+├── review-summary.md                  # Review status
+├── changelog.md                       # Version history
+├── reorganization-summary.md          # Structure changes
+└── self-protection-fix.md             # Self-protection implementation
+```
+
+## 🔧 Scripts & Tools
+
+The repository also includes helpful scripts in the `scripts/` directory:
+- **`scripts/test-github-actions.sh`** - GitHub Actions testing automation
+
+## 📋 Documentation Standards
+
+### File Naming Convention
+- Use lowercase with hyphens: `feature-name.md`
+- Be descriptive and specific
+- Group related content logically
+
+### Content Structure
+- Start with clear title and purpose
+- Include table of contents for long documents
+- Use consistent markdown formatting
+- Add examples and code snippets where helpful
+- Include troubleshooting sections
+
+### Maintenance
+- Keep documentation up-to-date with code changes
+- Review and update during code reviews
+- Version documentation with releases
+- Archive outdated information
+
+## 🤝 Contributing to Documentation
+
+1. **Follow the style guide** - Consistent formatting and structure
+2. **Update the index** - Add new documents to this README
+3. **Cross-reference** - Link related documents
+4. **Test examples** - Ensure all code examples work
+5. **Review process** - Documentation changes go through PR review
+
+## 📞 Support
+
+For questions about the documentation:
+- Check the relevant troubleshooting guide first
+- Review the code review checklist for process questions
+- Consult the installation guide for setup issues
+- Use the GitHub Actions testing guide for CI/CD questions
+
+---
+
+*Last updated: September 2024*
+*Documentation version: 1.0*

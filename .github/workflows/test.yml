@@ -1,0 +1,80 @@
+name: Test
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  GO_VERSION: "1.25"
+
+jobs:
+  test:
+    name: Test Job
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Read VERSION file
+        id: version
+        run: |
+          VERSION=$(cat VERSION)
+          echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
+          echo "Found version: $VERSION"
+
+      - name: Generate build date
+        id: build_date
+        run: |
+          BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          echo "BUILD_DATE=${BUILD_DATE}" >> $GITHUB_OUTPUT
+          echo "Build date: $BUILD_DATE"
+
+      - name: Check environment
+        run: |
+          echo "Running on: $(uname -a)"
+          echo "Current directory: $(pwd)"
+          echo "Files in current directory:"
+          ls -la
+          echo "Go version environment: $GO_VERSION"
+          echo "Git commit: $GITHUB_SHA"
+          echo "Event name: $GITHUB_EVENT_NAME"
+          echo "Repository: $GITHUB_REPOSITORY"
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Verify Go installation
+        run: |
+          go version
+          go env GOVERSION
+
+      - name: Run Go tests
+        run: |
+          cd go
+          go test -v ./...
+
+      - name: Build Go binary
+        run: |
+          cd go
+          go build -o ../right-sizer-test main.go
+          cd ..
+          ls -la right-sizer-test
+          ./right-sizer-test --version || echo "Binary built successfully"
+
+      - name: Verify Helm chart
+        run: |
+          if command -v helm &> /dev/null; then
+            helm version
+            helm lint helm/
+          else
+            echo "Helm not installed, skipping chart validation"
+          fi
+
+      - name: Test summary
+        run: |
+          echo "✅ All tests completed successfully!"
+          echo "Version: ${{ steps.version.outputs.VERSION }}"
+          echo "Build date: ${{ steps.build_date.outputs.BUILD_DATE }}"

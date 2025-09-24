@@ -1,0 +1,52 @@
+# Build stage - using specific ARM64 base image
+FROM golang:1.25-alpine AS builder
+
+# Install build dependencies
+RUN apk add --no-cache git ca-certificates tzdata
+
+# Set working directory
+WORKDIR /build
+
+# Copy go mod files
+COPY go/go.mod go/go.sum ./
+
+# Download dependencies
+RUN go mod download && go mod verify
+
+# Copy source code
+COPY go/ ./
+
+# Build arguments
+ARG VERSION=dev
+ARG BUILD_DATE
+ARG GIT_COMMIT
+
+# Build the binary specifically for ARM64
+ENV CGO_ENABLED=0
+ENV GOOS=linux
+ENV GOARCH=arm64
+
+RUN go build -ldflags="-w -s \
+    -X 'main.Version=${VERSION}' \
+    -X 'main.BuildDate=${BUILD_DATE}' \
+    -X 'main.GitCommit=${GIT_COMMIT}'" \
+    -o right-sizer \
+    .
+
+# Runtime stage
+FROM gcr.io/distroless/static-debian12:nonroot
+
+# Copy binary from builder
+COPY --from=builder /build/right-sizer /usr/local/bin/right-sizer
+
+# Copy timezone data
+COPY --from=builder /usr/share/zoneinfo /usr/share/zoneinfo
+
+# Set user
+USER 65532:65532
+
+# Expose ports
+EXPOSE 8080 8081 9090
+
+# Set entrypoint
+ENTRYPOINT ["/usr/local/bin/right-sizer"]

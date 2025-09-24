@@ -1,98 +1,185 @@
 # Changelog
 
-All notable changes to this project will be documented in this file.
+All notable changes to the Right-Sizer project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.1.19] - 2025-01-13
+## [0.2.0] - 2025-09-24
 
-### Changed
-- Updated version to 0.1.19 across all components
-- Synchronized dashboard version with main operator version
+### 🎉 Major Release - ARM64 Support & Enhanced Testing
 
-### Updated
-- All documentation and examples updated to use version 0.1.19
-- Helm charts updated to version 0.1.19
-- Docker image tags updated to 0.1.19
-- Package.json version updated to 0.1.19
-- OpenAPI specification version updated to 0.1.19
-
-## [0.1.16] - 2024-12-20
-
-### Changed
-- Refactored metrics API to be generic instead of dashboard-specific
-- Renamed `UpdateDashboardMetrics` to `UpdateMetrics` throughout codebase
-- Reorganized project structure with better example and deployment organization
-- Updated all test fixtures to use generic names instead of frontend-specific terminology
-- Improved Helm chart structure and removed obsolete CRD files from helm/crds/
-- Enhanced retry logic with case-insensitive pattern matching
-- Moved test workloads to `examples/deploy/` directory
-- Moved Helm values examples to `examples/` directory
+This release marks a significant milestone with full ARM64 architecture support, comprehensive CI/CD testing framework, and improved deployment experience for Minikube users.
 
 ### Added
-- Comprehensive documentation in `docs/` directory:
-  - `HELM_CLEANUP_SUMMARY.md` - Helm chart cleanup documentation
-  - `MINIKUBE_DEPLOYMENT.md` - Minikube deployment guide
-  - `RESIZE_POLICY_IMPLEMENTATION.md` - Resize policy implementation details
-  - `api/openapi.yaml` - OpenAPI specification
-- New configuration and feature documentation:
-  - `CONFIG_SIMPLIFICATION_PROPOSAL.md` - Configuration simplification proposal
-  - `FEATURE_FLAG_IMPLEMENTATION.md` - Feature flag implementation guide
-  - `RENAME_SUMMARY.md` - Summary of naming changes
-  - `CLEANUP_SUMMARY.md` - Comprehensive cleanup documentation
-- New deployment and utility scripts:
-  - `scripts/check-coverage.sh` - Test coverage checker
-  - `scripts/deploy-no-metrics.sh` - Deployment without metrics server
-  - `scripts/deploy-rbac.sh` - RBAC deployment script
-  - `scripts/helm-package.sh` - Helm chart packaging
-  - `scripts/minimal-deploy.sh` - Minimal deployment script
-  - `scripts/monitor-deployment.sh` - Deployment monitoring
-  - `scripts/quick-deploy.sh` - Quick deployment script
-  - `scripts/test-all.sh` - Comprehensive test runner
-- Comprehensive test coverage:
-  - `go/admission/webhook_test.go` - Webhook tests
-  - `go/api/server_test.go` - API server tests
-  - `go/controllers/resize_policy_test.go` - Resize policy tests
-  - `go/controllers/resize_test.go` - Resize functionality tests
-  - `go/logger/logger_test.go` - Logger tests
-  - `go/metrics/operator_metrics_test.go` - Metrics tests
-  - `go/policy/engine_test.go` - Policy engine tests
-  - `go/retry/retry_test.go` - Retry logic tests
-- Docker build variants:
-  - `Dockerfile.minimal` - Minimal image variant
-  - `Dockerfile.simple` - Simple build variant
-- `.helmignore` for better Helm chart packaging
-- Comprehensive examples in `examples/deploy/` directory
 
-### Removed
-- All dashboard and frontend-related references from code and documentation
-- Dashboard-specific metrics and API comments
-- Frontend JavaScript file from archive directory
-- Obsolete Helm CRD files:
-  - `helm/crds/rightsizerconfigs.yaml`
-  - `helm/crds/rightsizerpolicies.yaml`
+#### 🏗️ Architecture Support
+- **Full ARM64/AARCH64 Support**: Native support for Apple Silicon (M1/M2/M3) and ARM-based servers
+- **Multi-platform Docker Images**: Automatic building for both `linux/amd64` and `linux/arm64`
+- **Platform-specific Deployment Scripts**: Dedicated `deploy-arm64.sh` for ARM64 systems
+- **Cross-platform Compatibility**: Unified codebase working seamlessly across architectures
+
+#### 📚 Documentation
+- **Comprehensive CI Testing Guide** (`docs/ci-testing/README.md`): Complete testing documentation
+- **Quick Start Guide** (`docs/ci-testing/QUICK_START.md`): Fast onboarding for developers
+- **Advanced Testing Guide** (`docs/ci-testing/ADVANCED_TESTING.md`): Complex testing scenarios
+- **IDE Setup Guide** (`docs/ci-testing/IDE_SETUP.md`): Configuration for popular IDEs
+- **ARM64 Deployment Guide** (`docs/ARM64_DEPLOYMENT_SUCCESS.md`): ARM-specific deployment instructions
+- **Metrics Server Guide** (`docs/METRICS_SERVER_DEPLOYMENT.md`): Metrics integration documentation
+- **Minikube Deployment Guide**: Enhanced with multi-platform support
+
+#### 🚀 Deployment Improvements
+- **Quick Deploy Scripts**: One-command deployment with `deploy-minikube-quick.sh`
+- **Wrapper Script**: Simplified `deploy.sh` for common operations
+- **Metrics Server Automation**: `scripts/deploy-metrics-server.sh` for automatic setup
+- **Test Workload Templates**: Ready-to-use test deployments in `test-workload.yaml`
+
+#### 🧪 Testing Framework
+- **Chaos Testing**: Resilience testing under adverse conditions
+- **Performance Regression Testing**: Automated performance benchmarking
+- **Multi-cluster Testing**: Cross-cluster consistency validation
+- **Compliance Testing**: Kubernetes specification compliance checks
+- **Mutation Testing**: Code quality validation through mutation analysis
+- **Contract Testing**: API contract validation with Pact
+- **Load Testing**: Stress testing with configurable scenarios
+- **Security Testing**: Vulnerability scanning and penetration testing
+
+#### 🛠️ CI/CD Enhancements
+- **Pre-commit Hooks**: Early detection with comprehensive checks
+- **GitHub Actions Workflows**: Updated for Go 1.25 and multi-platform builds
+- **Coverage Reporting**: Automated coverage with HTML reports
+- **Benchmark Testing**: Performance tracking with benchstat
+- **Integration Testing**: Full Kubernetes integration test suite
+
+### Changed
+
+#### 🔧 Technical Updates
+- **Go Version**: Upgraded from 1.23 to 1.25 across all components
+- **Docker Build Process**: Migrated to buildx for multi-platform support
+- **Makefile Targets**: Enhanced with multi-platform build targets
+- **Helm Charts**: Updated to version 0.2.0 with improved defaults
+- **Base Images**: Updated to latest secure base images
+
+#### 📊 Metrics Integration
+- **Metrics Server**: Improved integration with automatic deployment
+- **Resource Monitoring**: Enhanced resource usage tracking
+- **Optimization Logic**: Better recommendation algorithms
+- **Self-protection**: Validated and documented self-protection mechanisms
 
 ### Fixed
-- Retry logic now properly handles "context deadline exceeded" errors
-- Fixed timing precision issues in retry tests
-- Improved error handling with proper randomization factor support
-- Applied trailing whitespace and end-of-file formatting fixes
-- Test stability improvements with better assertions
+
+#### 🐛 Bug Fixes
+- **ARM64 Exec Format Error**: Resolved binary architecture mismatch issues
+- **Multi-platform Build**: Fixed buildx compatibility with Minikube
+- **Metrics Collection**: Improved reliability of metrics gathering
+- **Resource Calculations**: More accurate resource recommendations
+- **Pod Resize Logic**: Better handling of edge cases
 
 ### Security
-- Updated `.gitignore` to properly exclude build artifacts
-- Improved pre-commit hooks configuration for better code quality
 
-## [0.1.15] - 2024-12-19
+- **Go 1.25**: Latest Go version with security patches
+- **Distroless Images**: Using minimal attack surface containers
+- **Non-root User**: Running as user 65532 for enhanced security
+- **Security Scanning**: Integrated vulnerability scanning in CI
+- **RBAC**: Minimal required permissions documented
 
-### Fixed
-- Corrected Helm template syntax in service.yaml
-- Removed mock data from optimization events API
+### Performance
 
-### Added
-- Test workloads for better testing capabilities
+- **Build Time**: Reduced Docker build time with better caching
+- **Image Size**: Optimized image size (~35.9MB)
+- **Startup Time**: Faster operator initialization
+- **Memory Usage**: Reduced memory footprint
+- **CPU Efficiency**: Optimized resource calculation algorithms
 
-## [0.1.14] - 2024-12-18
+### Testing Coverage
 
-_Previous releases not documented in this file. See git history for details._
+- **Unit Tests**: Comprehensive coverage for all packages
+- **Integration Tests**: Full Kubernetes API integration testing
+- **E2E Tests**: End-to-end testing with real workloads
+- **Compliance Tests**: Kubernetes specification compliance validation
+- **Performance Tests**: Automated benchmark suite
+- **Security Tests**: Vulnerability and penetration testing
+
+### Developer Experience
+
+- **IDE Support**: Configuration for VS Code, GoLand, Vim, Emacs, Sublime
+- **Debugging**: Enhanced debugging capabilities with Delve
+- **Local Development**: Improved Minikube development workflow
+- **Documentation**: Extensive guides and troubleshooting resources
+- **Scripts**: Automation scripts for common tasks
+
+### Known Issues
+
+- **Minikube on Windows**: Some users may need to adjust Docker Desktop settings
+- **Metrics Delay**: Initial metrics may take 30-60 seconds to appear
+- **Stress Test Image**: The `progrium/stress` image may not be available in all regions
+
+### Migration Guide
+
+To upgrade from 0.1.x to 0.2.0:
+
+1. **Update Helm Repository**:
+   ```bash
+   helm repo update
+   ```
+
+2. **Backup Current Configuration**:
+   ```bash
+   helm get values right-sizer -n right-sizer > values-backup.yaml
+   ```
+
+3. **Upgrade to 0.2.0**:
+   ```bash
+   helm upgrade right-sizer right-sizer/right-sizer \
+     --version 0.2.0 \
+     --namespace right-sizer \
+     -f values-backup.yaml
+   ```
+
+4. **For ARM64 Systems**:
+   ```bash
+   # Use the dedicated ARM64 deployment script
+   ./deploy-arm64.sh
+   ```
+
+### Contributors
+
+Special thanks to all contributors who made this release possible:
+- ARM64 architecture support and testing
+- Comprehensive CI/CD framework implementation
+- Documentation improvements
+- Testing enhancements
+- Bug fixes and optimizations
+
+### Compatibility Matrix
+
+| Component | Version | Notes |
+|-----------|---------|-------|
+| Kubernetes | 1.33+ | In-place resize support required |
+| Go | 1.25 | Build requirement |
+| Helm | 3.0+ | Deployment tool |
+| Docker | 20.10+ | With buildx support |
+| Minikube | 1.30+ | Local development |
+| Metrics Server | 0.6+ | Resource metrics |
+
+---
+
+## [0.1.20] - 2025-09-24
+
+### Changed
+- Pre-release version used for testing 0.2.0 features
+
+## [0.1.19] - 2025-09-23
+
+### Initial Release
+- Core Right-Sizer operator functionality
+- Basic Kubernetes pod resource optimization
+- Helm chart deployment
+- Docker image distribution
+- Basic documentation
+
+---
+
+[0.2.0]: https://github.com/aavishay/right-sizer/releases/tag/v0.2.0
+[0.1.20]: https://github.com/aavishay/right-sizer/releases/tag/v0.1.20
+[0.1.19]: https://github.com/aavishay/right-sizer/releases/tag/v0.1.19

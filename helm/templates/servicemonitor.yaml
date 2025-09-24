@@ -1,0 +1,54 @@
+{{- /*
+Optional ServiceMonitor for Prometheus Operator.
+Enable via:
+  serviceMonitor:
+    enabled: true
+    interval: 30s
+    scrapeTimeout: 10s
+    path: /metrics
+    scheme: http
+    namespace: ""                # If empty uses .Release.Namespace
+    labels:                      # Extra labels merged into metadata.labels
+      release: monitoring
+    honorLabels: false
+    metricRelabelings: []        # Standard Prometheus relabel configs
+    relabelings: []              # Target relabel configs
+*/ -}}
+{{- if .Values.serviceMonitor.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "right-sizer.fullname" . }}
+  labels:
+    {{- include "right-sizer.labels" . | nindent 4 }}
+    {{- with .Values.serviceMonitor.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  {{- /*
+      Select the Service created by the chart's service.yaml (it shares selector labels).
+  */ -}}
+  selector:
+    matchLabels:
+      {{- include "right-sizer.selectorLabels" . | nindent 6 }}
+  namespaceSelector:
+    matchNames:
+      - {{ default .Release.Namespace .Values.serviceMonitor.namespace }}
+  endpoints:
+    - port: metrics
+      path: {{ .Values.serviceMonitor.path | default "/metrics" | quote }}
+      interval: {{ .Values.serviceMonitor.interval | default "30s" | quote }}
+      scrapeTimeout: {{ .Values.serviceMonitor.scrapeTimeout | default "10s" | quote }}
+      honorLabels: {{ .Values.serviceMonitor.honorLabels | default false }}
+      {{- with .Values.serviceMonitor.scheme }}
+      scheme: {{ . | quote }}
+      {{- end }}
+      {{- with .Values.serviceMonitor.metricRelabelings }}
+      metricRelabelings:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.serviceMonitor.relabelings }}
+      relabelings:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

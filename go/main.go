@@ -22,6 +22,7 @@ import (
 	"os/signal"
 	"runtime"
 	"strconv"
+	"sync"
 	"syscall"
 	"time"
 
@@ -47,6 +48,13 @@ import (
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/server"
+
+	"right-sizer/internal/aiops"
+	narrative "right-sizer/internal/aiops/narratives"
+	"right-sizer/internal/platform"
+
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
 // Build-time variables set via ldflags
@@ -58,6 +66,13 @@ var (
 
 // Health server is handled by the controller-runtime manager
 // which provides /healthz and /readyz endpoints automatically
+
+var (
+	// Metrics variables initialized once
+	capabilityGauge    *prometheus.GaugeVec
+	clusterVersionInfo *prometheus.GaugeVec
+	registerOnce       sync.Once
+)
 
 func main() {
 	// Print startup banner
@@ -134,18 +149,62 @@ func main() {
 			logger.Info("   Server Platform: %s", serverVersion.Platform)
 			logger.Info("   Server Go Version: %s", serverVersion.GoVersion)
 
-			// Runtime Kubernetes version requirement check (minimum recommended: 1.33)
+			// Cluster capability & version evaluation (minimum supported: 1.33)
 			var majorInt, minorInt int
 			fmt.Sscanf(serverVersion.Major, "%d", &majorInt)
 			fmt.Sscanf(serverVersion.Minor, "%d", &minorInt)
 			if majorInt == 1 && minorInt < 33 {
-				logger.Warn("   ⚠️  Detected Kubernetes %s (<1.33). In-place resize features may be limited or disabled.", serverVersion.GitVersion)
-				logger.Warn("      Some features (e.g., reliable in-place CPU/memory adjustments) require 1.33+.")
+				logger.Warn("   ⚠️  Detected Kubernetes %s (<1.33). Operator entering degraded mode (advanced features disabled).", serverVersion.GitVersion)
 			} else {
-				logger.Info("   ✅ Kubernetes version satisfies recommended minimum (1.33+)")
+				logger.Info("   ✅ Kubernetes version satisfies minimum (>=1.33)")
 			}
 
-			// Parse version for feature detection
+			// Dynamic capability detection (uses discovery API)
+			capDetector := platform.NewDetector(clientset)
+			caps, capErr := capDetector.Detect(context.Background())
+			if capErr != nil {
+				logger.Warn("   ⚠️  Capability detection partial: %v", capErr)
+			} else {
+				logger.Info("   Capabilities: %s", caps.Summary())
+				if !caps.Supported && caps.VersionWarning != "" {
+					logger.Warn("   ⚠️  %s", caps.VersionWarning)
+				}
+			}
+
+			// Expose capability metrics early so they are present when /metrics is scraped.
+			// We register here unconditionally; metrics server startup (later) will expose them.
+			registerOnce.Do(func() {
+				capabilityGauge = promauto.NewGaugeVec(prometheus.GaugeOpts{
+					Name: "right_sizer_capability_enabled",
+					Help: "Detected cluster capability (1=enabled, 0=disabled).",
+				}, []string{"capability"})
+				clusterVersionInfo = promauto.NewGaugeVec(prometheus.GaugeOpts{
+					Name: "right_sizer_cluster_version_info",
+					Help: "Cluster version info (value always 1).",
+				}, []string{"version", "minor"})
+			})
+
+			if clusterVersionInfo != nil {
+				clusterVersionInfo.WithLabelValues(caps.RawVersion, fmt.Sprintf("%d", caps.Minor)).Set(1)
+			}
+			if capabilityGauge != nil {
+				setCap := func(name string, v bool) {
+					if v {
+						capabilityGauge.WithLabelValues(name).Set(1)
+					} else {
+						capabilityGauge.WithLabelValues(name).Set(0)
+					}
+				}
+				setCap("ephemeral_containers", caps.EphemeralContainers)
+				setCap("pod_resize", caps.PodResize)
+				setCap("metrics_server", caps.MetricsServerAvailable)
+				setCap("dynamic_resource_allocation", caps.DynamicResourceAllocation)
+				setCap("in_place_vertical_scaling", caps.InPlacePodVerticalScaling)
+				setCap("memory_qos", caps.MemoryQoS)
+				setCap("supported_version", caps.Supported)
+			}
+
+			// (Retain API version log for continuity)
 			versionInfo := version.Info{
 				Major:      serverVersion.Major,
 				Minor:      serverVersion.Minor,
@@ -497,6 +556,20 @@ func main() {
 	defer healthCheckCancel()
 	healthChecker.StartPeriodicHealthChecks(healthCheckCtx)
 	logger.Info("🔍 Started periodic health checks")
+
+	// Initialize and start the AIOps Engine
+	logger.Info("🤖 Initializing AIOps Engine...")
+	llmConfig := narrative.LLMConfig{
+		APIKey:    os.Getenv("LLM_API_KEY"),
+		APIURL:    os.Getenv("LLM_API_URL"),
+		ModelName: os.Getenv("LLM_MODEL_NAME"),
+	}
+	if llmConfig.APIKey != "" {
+		aiopsEngine := aiops.NewEngine(clientset, provider, llmConfig)
+		go aiopsEngine.Start(ctx)
+	} else {
+		logger.Info("🤖 AIOps Engine disabled: LLM_API_KEY environment variable not set.")
+	}
 
 	// Start manager in a goroutine
 	managerDone := make(chan error, 1)

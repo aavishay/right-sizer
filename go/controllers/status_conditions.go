@@ -284,14 +284,15 @@ func UpdateResizeProgress(pod *corev1.Pod, containerName string, resourceType co
 	SetPodResizeInProgress(pod, reason, message)
 }
 
-// RecordResizeEvent records a resize event with timestamp for debugging
+// RecordResizeEvent records a resize event with a UTC RFC3339 timestamp.
+// Uses '|' as a safe delimiter to avoid collisions with ':' inside RFC3339 timestamps.
 func RecordResizeEvent(pod *corev1.Pod, eventType, reason, message string) {
-	// In a real implementation, this would use the Kubernetes event recorder
-	// For now, we'll just add an annotation with the latest event
+	// In a real implementation, this would use the Kubernetes event recorder.
+	// For now, we store the latest event in an annotation.
 	if pod.Annotations == nil {
 		pod.Annotations = make(map[string]string)
 	}
 
-	timestamp := time.Now().Format(time.RFC3339)
-	pod.Annotations["right-sizer.io/last-resize-event"] = eventType + ":" + reason + ":" + message + ":" + timestamp
+	timestamp := time.Now().UTC().Format(time.RFC3339)
+	pod.Annotations["right-sizer.io/last-resize-event"] = eventType + "|" + reason + "|" + message + "|" + timestamp
 }

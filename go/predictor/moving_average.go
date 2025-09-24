@@ -54,7 +54,7 @@ func (p *SimpleMovingAveragePredictor) ValidateData(data HistoricalData) error {
 	if len(data.DataPoints) < p.minDataPoints {
 		return fmt.Errorf("insufficient data points: need at least %d, got %d", p.minDataPoints, len(data.DataPoints))
 	}
-	
+
 	// Check for valid timestamps and values
 	for i, dp := range data.DataPoints {
 		if dp.Timestamp.IsZero() {
@@ -64,7 +64,7 @@ func (p *SimpleMovingAveragePredictor) ValidateData(data HistoricalData) error {
 			return fmt.Errorf("invalid value at index %d: %f", i, dp.Value)
 		}
 	}
-	
+
 	return nil
 }
 
@@ -73,41 +73,41 @@ func (p *SimpleMovingAveragePredictor) Predict(data HistoricalData, horizons []t
 	if err := p.ValidateData(data); err != nil {
 		return nil, fmt.Errorf("data validation failed: %w", err)
 	}
-	
+
 	// Sort data points by timestamp
 	sortedData := make([]DataPoint, len(data.DataPoints))
 	copy(sortedData, data.DataPoints)
 	sort.Slice(sortedData, func(i, j int) bool {
 		return sortedData[i].Timestamp.Before(sortedData[j].Timestamp)
 	})
-	
+
 	// Calculate moving average and variance
 	movingAverage, variance := p.calculateMovingAverage(sortedData)
-	
+
 	// Calculate confidence based on variance and data availability
 	confidence := p.calculateConfidence(variance, movingAverage, len(sortedData))
-	
+
 	// Generate predictions for each horizon
 	predictions := make([]ResourcePrediction, 0, len(horizons))
-	
+
 	for _, horizon := range horizons {
 		// For simple moving average, the prediction is constant (the current average)
 		predictedValue := movingAverage
-		
+
 		// Ensure prediction is non-negative for resource values
 		if predictedValue < 0 {
 			predictedValue = 0
 		}
-		
+
 		// Calculate confidence interval based on variance
 		confidenceInterval := p.calculateConfidenceInterval(predictedValue, variance, len(sortedData))
-		
+
 		prediction := ResourcePrediction{
-			Value:      predictedValue,
-			Confidence: confidence,
-			Horizon:    horizon,
-			Timestamp:  time.Now(),
-			Method:     PredictionMethodSimpleMovingAverage,
+			Value:              predictedValue,
+			Confidence:         confidence,
+			Horizon:            horizon,
+			Timestamp:          time.Now(),
+			Method:             PredictionMethodSimpleMovingAverage,
 			ConfidenceInterval: confidenceInterval,
 			Metadata: map[string]interface{}{
 				"movingAverage": movingAverage,
@@ -117,10 +117,10 @@ func (p *SimpleMovingAveragePredictor) Predict(data HistoricalData, horizons []t
 				"actualWindow":  min(p.windowSize, len(sortedData)),
 			},
 		}
-		
+
 		predictions = append(predictions, prediction)
 	}
-	
+
 	return predictions, nil
 }
 
@@ -129,30 +129,30 @@ func (p *SimpleMovingAveragePredictor) calculateMovingAverage(dataPoints []DataP
 	if len(dataPoints) == 0 {
 		return 0, 0
 	}
-	
+
 	// Use the most recent windowSize points, or all points if we have fewer
 	windowSize := min(p.windowSize, len(dataPoints))
 	startIndex := len(dataPoints) - windowSize
-	
+
 	var sum float64
 	for i := startIndex; i < len(dataPoints); i++ {
 		sum += dataPoints[i].Value
 	}
 	average = sum / float64(windowSize)
-	
+
 	// Calculate variance
 	var sumSquaredDiffs float64
 	for i := startIndex; i < len(dataPoints); i++ {
 		diff := dataPoints[i].Value - average
 		sumSquaredDiffs += diff * diff
 	}
-	
+
 	if windowSize > 1 {
 		variance = sumSquaredDiffs / float64(windowSize-1)
 	} else {
 		variance = 0
 	}
-	
+
 	return average, variance
 }
 
@@ -170,16 +170,16 @@ func (p *SimpleMovingAveragePredictor) calculateConfidence(variance, average flo
 		// If average is 0, use moderate confidence
 		baseConfidence = 0.6
 	}
-	
+
 	// Adjust confidence based on number of data points
 	dataPointFactor := math.Min(1.0, float64(dataPoints)/10.0) // Saturate at 10 points
-	
+
 	// Adjust confidence based on window size vs available data
 	windowFactor := float64(min(p.windowSize, dataPoints)) / float64(p.windowSize)
-	
+
 	// Combined confidence score
 	confidence := baseConfidence * (0.3 + 0.4*dataPointFactor + 0.3*windowFactor)
-	
+
 	// Ensure confidence is between 0 and 1
 	return math.Max(0, math.Min(1, confidence))
 }
@@ -195,10 +195,10 @@ func (p *SimpleMovingAveragePredictor) calculateConfidenceInterval(predictedValu
 			Percentage: 95.0,
 		}
 	}
-	
+
 	// Use standard error for confidence interval
 	standardError := math.Sqrt(variance / float64(dataPoints))
-	
+
 	// Use t-distribution for small samples, normal for large samples
 	var tValue float64
 	if dataPoints < 30 {
@@ -206,9 +206,9 @@ func (p *SimpleMovingAveragePredictor) calculateConfidenceInterval(predictedValu
 	} else {
 		tValue = 1.96 // Normal distribution
 	}
-	
+
 	margin := tValue * standardError
-	
+
 	return &ConfidenceInterval{
 		Lower:      math.Max(0, predictedValue-margin), // Resource values can't be negative
 		Upper:      predictedValue + margin,

@@ -99,6 +99,10 @@ func (l *Logger) formatMessage(level string, color string, format string, args .
 	if fileInfo, _ := os.Stdout.Stat(); (fileInfo.Mode() & os.ModeCharDevice) != 0 {
 		useColor = true
 	}
+	// Force color if explicitly requested (e.g., tests or forced CI rendering)
+	if !useColor && os.Getenv("FORCE_LOG_COLOR") == "1" {
+		useColor = true
+	}
 
 	if useColor {
 		return fmt.Sprintf("%s %s[%s]%s %s", timestamp, color, level, colorReset, message)

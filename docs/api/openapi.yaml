@@ -5,7 +5,7 @@ info:
     The Right-Sizer Operator API provides endpoints for monitoring, configuration, and management
     of Kubernetes pod resource optimization. This API enables real-time metrics access, optimization
     event tracking, and health monitoring of the Right-Sizer operator.
-  version: 0.1.19
+  version: 0.2.0
   contact:
     name: Right-Sizer Contributors
     email: maintainers@right-sizer.dev
@@ -368,7 +368,7 @@ components:
         version:
           type: string
           description: Operator version
-          example: "0.1.19"
+          example: "0.2.0"
 
     ReadinessResponse:
       type: object

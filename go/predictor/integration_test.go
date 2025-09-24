@@ -28,34 +28,34 @@ func TestPredictionEngineWithRealisticData(t *testing.T) {
 	config := DefaultConfig()
 	config.MinDataPoints = 5
 	config.ConfidenceThreshold = 0.3 // Lower threshold for testing
-	
+
 	engine, err := NewEngine(config)
 	if err != nil {
 		t.Fatalf("Failed to create prediction engine: %v", err)
 	}
-	
+
 	ctx := context.Background()
 	err = engine.Start(ctx)
 	if err != nil {
 		t.Fatalf("Failed to start prediction engine: %v", err)
 	}
 	defer engine.Stop()
-	
+
 	// Simulate a web application workload with daily patterns
 	namespace := "default"
 	podName := "webapp-123"
 	container := "app"
-	
+
 	fmt.Printf("🔮 Testing Prediction Engine with Realistic Workload Patterns\n")
 	fmt.Printf("============================================================\n\n")
-	
+
 	// Simulate 48 hours of data with a daily pattern
 	baseTime := time.Now().Add(-48 * time.Hour)
-	
+
 	// Pattern: Low usage at night (50-100), medium during day (200-300), peaks at lunch/evening (400-500)
 	for hour := 0; hour < 48; hour++ {
 		timestamp := baseTime.Add(time.Duration(hour) * time.Hour)
-		
+
 		// CPU pattern (millicores)
 		var cpuUsage float64
 		hourOfDay := hour % 24
@@ -75,28 +75,28 @@ func TestPredictionEngineWithRealisticData(t *testing.T) {
 		default: // Night wind-down
 			cpuUsage = 150 - float64(hourOfDay-21)*30 // 150-60
 		}
-		
+
 		// Memory pattern (MB) - more stable but follows similar pattern
 		memoryUsage := cpuUsage * 2.5 // Memory roughly 2.5x CPU usage
-		
+
 		// Add some realistic noise
 		cpuUsage += float64((hour*17)%20) - 10    // +/- 10 millicores
 		memoryUsage += float64((hour*23)%30) - 15 // +/- 15 MB
-		
+
 		// Store data points
 		err = engine.StoreDataPoint(namespace, podName, container, "cpu", cpuUsage, timestamp)
 		if err != nil {
 			t.Errorf("Failed to store CPU data point at hour %d: %v", hour, err)
 		}
-		
+
 		err = engine.StoreDataPoint(namespace, podName, container, "memory", memoryUsage, timestamp)
 		if err != nil {
 			t.Errorf("Failed to store memory data point at hour %d: %v", hour, err)
 		}
 	}
-	
+
 	fmt.Printf("📊 Stored 48 hours of realistic workload data\n\n")
-	
+
 	// Test different prediction horizons
 	horizons := []time.Duration{
 		1 * time.Hour,
@@ -104,7 +104,7 @@ func TestPredictionEngineWithRealisticData(t *testing.T) {
 		12 * time.Hour,
 		24 * time.Hour,
 	}
-	
+
 	// Test CPU predictions
 	fmt.Printf("🖥️  CPU Predictions:\n")
 	for _, horizon := range horizons {
@@ -113,16 +113,16 @@ func TestPredictionEngineWithRealisticData(t *testing.T) {
 			fmt.Printf("   %8s: No prediction available (%v)\n", horizon, err)
 			continue
 		}
-		
-		fmt.Printf("   %8s: %6.1f millicores (confidence: %.2f, method: %s)\n", 
+
+		fmt.Printf("   %8s: %6.1f millicores (confidence: %.2f, method: %s)\n",
 			horizon, prediction.Value, prediction.Confidence, prediction.Method)
-		
+
 		if prediction.ConfidenceInterval != nil {
 			fmt.Printf("            Range: %.1f - %.1f millicores (%.0f%% confidence)\n",
 				prediction.ConfidenceInterval.Lower, prediction.ConfidenceInterval.Upper, prediction.ConfidenceInterval.Percentage)
 		}
 	}
-	
+
 	fmt.Printf("\n💾 Memory Predictions:\n")
 	for _, horizon := range horizons {
 		prediction, err := engine.GetBestPrediction(ctx, namespace, podName, container, "memory", horizon)
@@ -130,16 +130,16 @@ func TestPredictionEngineWithRealisticData(t *testing.T) {
 			fmt.Printf("   %8s: No prediction available (%v)\n", horizon, err)
 			continue
 		}
-		
-		fmt.Printf("   %8s: %6.1f MB (confidence: %.2f, method: %s)\n", 
+
+		fmt.Printf("   %8s: %6.1f MB (confidence: %.2f, method: %s)\n",
 			horizon, prediction.Value, prediction.Confidence, prediction.Method)
-		
+
 		if prediction.ConfidenceInterval != nil {
 			fmt.Printf("            Range: %.1f - %.1f MB (%.0f%% confidence)\n",
 				prediction.ConfidenceInterval.Lower, prediction.ConfidenceInterval.Upper, prediction.ConfidenceInterval.Percentage)
 		}
 	}
-	
+
 	// Test prediction request with multiple horizons and methods
 	fmt.Printf("\n🔬 Detailed Prediction Analysis:\n")
 	request := PredictionRequest{
@@ -150,20 +150,20 @@ func TestPredictionEngineWithRealisticData(t *testing.T) {
 		Horizons:     horizons,
 		Methods:      []PredictionMethod{PredictionMethodLinearRegression, PredictionMethodExponentialSmoothing, PredictionMethodSimpleMovingAverage},
 	}
-	
+
 	response, err := engine.Predict(ctx, request)
 	if err != nil {
 		t.Errorf("Failed to get predictions: %v", err)
 	} else {
 		fmt.Printf("   Data Points Used: %d\n", response.DataPoints)
 		fmt.Printf("   Total Predictions: %d\n", len(response.Predictions))
-		
+
 		for _, pred := range response.Predictions {
 			fmt.Printf("   %s (%s): %.1f millicores (confidence: %.2f)\n",
 				pred.Horizon, pred.Method, pred.Value, pred.Confidence)
 		}
 	}
-	
+
 	// Test historical data retrieval
 	fmt.Printf("\n📈 Historical Data Summary:\n")
 	since := time.Now().Add(-24 * time.Hour)
@@ -174,27 +174,27 @@ func TestPredictionEngineWithRealisticData(t *testing.T) {
 		fmt.Printf("   Data Points (last 24h): %d\n", len(historicalData.DataPoints))
 		fmt.Printf("   Min Value: %.1f millicores\n", historicalData.MinValue)
 		fmt.Printf("   Max Value: %.1f millicores\n", historicalData.MaxValue)
-		
+
 		if len(historicalData.DataPoints) > 0 {
 			latest := historicalData.DataPoints[len(historicalData.DataPoints)-1]
 			fmt.Printf("   Latest Value: %.1f millicores at %s\n", latest.Value, latest.Timestamp.Format("15:04"))
 		}
 	}
-	
+
 	// Test engine statistics
 	fmt.Printf("\n📊 Engine Statistics:\n")
 	stats := engine.GetStats()
 	fmt.Printf("   Running: %v\n", stats["isRunning"])
 	fmt.Printf("   Predictors: %v\n", stats["predictors"])
 	fmt.Printf("   Methods: %v\n", stats["methods"])
-	
+
 	if storeStats, ok := stats["store"]; ok {
 		storeStatsMap := storeStats.(map[string]interface{})
 		fmt.Printf("   Total Resources: %v\n", storeStatsMap["totalResources"])
 		fmt.Printf("   Total Data Points: %v\n", storeStatsMap["totalDataPoints"])
 		fmt.Printf("   Total Predictions: %v\n", storeStatsMap["totalPredictions"])
 	}
-	
+
 	fmt.Printf("\n✅ Prediction engine test completed successfully!\n")
 	fmt.Printf("\n💡 Key Insights:\n")
 	fmt.Printf("   - The prediction engine successfully processed 48 hours of realistic workload data\n")

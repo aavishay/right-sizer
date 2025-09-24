@@ -21,12 +21,12 @@ import (
 
 // ResourcePrediction represents a prediction for a resource (CPU or Memory)
 type ResourcePrediction struct {
-	Value              float64               `json:"value"`              // Predicted value
-	Confidence         float64               `json:"confidence"`         // Confidence score (0-1)
-	Horizon            time.Duration         `json:"horizon"`            // How far into the future this prediction is for
-	Timestamp          time.Time             `json:"timestamp"`          // When this prediction was made
-	Method             PredictionMethod      `json:"method"`             // Which algorithm was used
-	ConfidenceInterval *ConfidenceInterval   `json:"confidenceInterval"` // Statistical confidence bounds
+	Value              float64                `json:"value"`              // Predicted value
+	Confidence         float64                `json:"confidence"`         // Confidence score (0-1)
+	Horizon            time.Duration          `json:"horizon"`            // How far into the future this prediction is for
+	Timestamp          time.Time              `json:"timestamp"`          // When this prediction was made
+	Method             PredictionMethod       `json:"method"`             // Which algorithm was used
+	ConfidenceInterval *ConfidenceInterval    `json:"confidenceInterval"` // Statistical confidence bounds
 	Metadata           map[string]interface{} `json:"metadata"`           // Additional metadata about the prediction
 }
 
@@ -41,11 +41,11 @@ type ConfidenceInterval struct {
 type PredictionMethod string
 
 const (
-	PredictionMethodLinearRegression    PredictionMethod = "linear_regression"
+	PredictionMethodLinearRegression     PredictionMethod = "linear_regression"
 	PredictionMethodExponentialSmoothing PredictionMethod = "exponential_smoothing"
-	PredictionMethodSeasonal            PredictionMethod = "seasonal"
-	PredictionMethodEnsemble            PredictionMethod = "ensemble"
-	PredictionMethodSimpleMovingAverage PredictionMethod = "simple_moving_average"
+	PredictionMethodSeasonal             PredictionMethod = "seasonal"
+	PredictionMethodEnsemble             PredictionMethod = "ensemble"
+	PredictionMethodSimpleMovingAverage  PredictionMethod = "simple_moving_average"
 )
 
 // DataPoint represents a single historical data point
@@ -68,12 +68,12 @@ type HistoricalData struct {
 
 // PredictionRequest represents a request for resource prediction
 type PredictionRequest struct {
-	Namespace    string        `json:"namespace"`
-	PodName      string        `json:"podName"`
-	Container    string        `json:"container"`
-	ResourceType string        `json:"resourceType"` // "cpu" or "memory"
-	Horizons     []time.Duration `json:"horizons"`     // Multiple prediction horizons
-	Methods      []PredictionMethod `json:"methods"`    // Which algorithms to use
+	Namespace    string             `json:"namespace"`
+	PodName      string             `json:"podName"`
+	Container    string             `json:"container"`
+	ResourceType string             `json:"resourceType"` // "cpu" or "memory"
+	Horizons     []time.Duration    `json:"horizons"`     // Multiple prediction horizons
+	Methods      []PredictionMethod `json:"methods"`      // Which algorithms to use
 }
 
 // PredictionResponse represents the response containing multiple predictions
@@ -86,26 +86,26 @@ type PredictionResponse struct {
 
 // PredictionAccuracy represents accuracy metrics for a prediction
 type PredictionAccuracy struct {
-	Method             PredictionMethod `json:"method"`
-	MeanAbsoluteError  float64          `json:"meanAbsoluteError"`
-	MeanSquaredError   float64          `json:"meanSquaredError"`
-	MeanAbsolutePercentageError float64 `json:"meanAbsolutePercentageError"`
-	R2Score            float64          `json:"r2Score"`
-	LastEvaluated      time.Time        `json:"lastEvaluated"`
-	SampleSize         int              `json:"sampleSize"`
+	Method                      PredictionMethod `json:"method"`
+	MeanAbsoluteError           float64          `json:"meanAbsoluteError"`
+	MeanSquaredError            float64          `json:"meanSquaredError"`
+	MeanAbsolutePercentageError float64          `json:"meanAbsolutePercentageError"`
+	R2Score                     float64          `json:"r2Score"`
+	LastEvaluated               time.Time        `json:"lastEvaluated"`
+	SampleSize                  int              `json:"sampleSize"`
 }
 
 // Predictor interface defines the contract for prediction algorithms
 type Predictor interface {
 	// Predict generates resource predictions based on historical data
 	Predict(data HistoricalData, horizons []time.Duration) ([]ResourcePrediction, error)
-	
+
 	// GetMethod returns the prediction method this predictor implements
 	GetMethod() PredictionMethod
-	
+
 	// GetMinDataPoints returns the minimum number of data points required
 	GetMinDataPoints() int
-	
+
 	// ValidateData checks if the historical data is suitable for this predictor
 	ValidateData(data HistoricalData) error
 }
@@ -114,16 +114,16 @@ type Predictor interface {
 type PredictionStore interface {
 	// StoreHistoricalData stores a new data point
 	StoreHistoricalData(namespace, podName, container, resourceType string, dataPoint DataPoint) error
-	
+
 	// GetHistoricalData retrieves historical data for a resource
 	GetHistoricalData(namespace, podName, container, resourceType string, since time.Time) (HistoricalData, error)
-	
+
 	// StorePrediction stores a prediction result
 	StorePrediction(namespace, podName, container, resourceType string, prediction ResourcePrediction) error
-	
+
 	// GetPredictions retrieves stored predictions
 	GetPredictions(namespace, podName, container, resourceType string, since time.Time) ([]ResourcePrediction, error)
-	
+
 	// CleanupOldData removes old historical data and predictions
 	CleanupOldData(olderThan time.Time) error
 }
@@ -133,20 +133,20 @@ type Config struct {
 	// Data retention
 	HistoricalDataRetention time.Duration `json:"historicalDataRetention"` // How long to keep historical data
 	PredictionRetention     time.Duration `json:"predictionRetention"`     // How long to keep predictions
-	
+
 	// Data collection
 	CollectionInterval time.Duration `json:"collectionInterval"` // How often to collect data points
 	MinDataPoints      int           `json:"minDataPoints"`      // Minimum data points for predictions
-	
+
 	// Prediction settings
 	DefaultHorizons     []time.Duration    `json:"defaultHorizons"`     // Default prediction horizons
 	EnabledMethods      []PredictionMethod `json:"enabledMethods"`      // Which prediction methods to use
 	ConfidenceThreshold float64            `json:"confidenceThreshold"` // Minimum confidence for using predictions
-	
+
 	// Performance
 	MaxConcurrentPredictions int           `json:"maxConcurrentPredictions"` // Limit concurrent prediction calculations
 	PredictionTimeout        time.Duration `json:"predictionTimeout"`        // Timeout for prediction calculations
-	
+
 	// Storage
 	StorageDriver string `json:"storageDriver"` // "memory", "prometheus", etc.
 }
@@ -154,10 +154,10 @@ type Config struct {
 // DefaultConfig returns a sensible default configuration
 func DefaultConfig() *Config {
 	return &Config{
-		HistoricalDataRetention: 7 * 24 * time.Hour,    // 7 days
-		PredictionRetention:     24 * time.Hour,        // 1 day
-		CollectionInterval:      1 * time.Minute,       // 1 minute
-		MinDataPoints:          10,                     // At least 10 data points
+		HistoricalDataRetention: 7 * 24 * time.Hour, // 7 days
+		PredictionRetention:     24 * time.Hour,     // 1 day
+		CollectionInterval:      1 * time.Minute,    // 1 minute
+		MinDataPoints:           10,                 // At least 10 data points
 		DefaultHorizons: []time.Duration{
 			5 * time.Minute,
 			15 * time.Minute,
@@ -173,6 +173,6 @@ func DefaultConfig() *Config {
 		ConfidenceThreshold:      0.6, // 60% confidence minimum
 		MaxConcurrentPredictions: 10,
 		PredictionTimeout:        30 * time.Second,
-		StorageDriver:           "memory",
+		StorageDriver:            "memory",
 	}
 }

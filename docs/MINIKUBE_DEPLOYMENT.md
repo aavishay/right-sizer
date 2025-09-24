@@ -8,8 +8,9 @@ Before starting, ensure you have the following tools installed:
 
 - **Minikube** (v1.30+): [Installation Guide](https://minikube.sigs.k8s.io/docs/start/)
 - **kubectl** (v1.25+): [Installation Guide](https://kubernetes.io/docs/tasks/tools/)
-- **Docker** (v20.10+): [Installation Guide](https://docs.docker.com/get-docker/)
+- **Docker** (v20.10+) with buildx support: [Installation Guide](https://docs.docker.com/get-docker/)
 - **Helm** (v3.0+): [Installation Guide](https://helm.sh/docs/intro/install/)
+- **Go** (v1.25+): Required for building from source
 - **Git**: For cloning the repository
 
 ### System Requirements
@@ -33,14 +34,44 @@ cd right-sizer
 
 The script will:
 - ✅ Check prerequisites
-- ✅ Create/configure Minikube cluster with Kubernetes 1.33
+- ✅ Create/configure Minikube cluster with Kubernetes 1.33+
 - ✅ Enable in-place pod resizing feature
 - ✅ Install metrics server
-- ✅ Build and load Docker images
-- ✅ Deploy Right-Sizer operator
+- ✅ Build multi-platform Docker images (linux/amd64, linux/arm64)
+- ✅ Deploy Right-Sizer operator with Go 1.25
 - ✅ Deploy Right-Sizer dashboard (from separate repository)
 - ✅ Create test workloads
 - ✅ Set up port forwarding
+
+## 🌐 Multi-Platform Support
+
+Right-Sizer now supports multi-platform Docker images for both **linux/amd64** and **linux/arm64** architectures. This ensures compatibility across different hardware platforms, including:
+- Intel/AMD-based systems (x86_64)
+- Apple Silicon Macs (M1/M2/M3)
+- ARM-based servers and cloud instances
+
+### Building Multi-Platform Images
+
+```bash
+# Using Make (recommended)
+make docker-build  # Builds multi-platform image locally
+
+# Or use the quick deploy script
+./deploy-minikube-quick.sh  # Automatically builds multi-platform
+```
+
+### Verifying Platform Support
+
+```bash
+# Check the image platforms
+docker buildx imagetools inspect right-sizer:local
+
+# Output will show:
+# MediaType: application/vnd.docker.distribution.manifest.list.v2+json
+# Manifests:
+#   - Platform: linux/amd64
+#   - Platform: linux/arm64
+```
 
 ## 📖 Manual Deployment Steps
 

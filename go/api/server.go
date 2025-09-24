@@ -75,7 +75,7 @@ type Server struct {
 	metricsClient   metricsclient.Interface
 	operatorMetrics *metrics.OperatorMetrics
 	predictor       *predictor.Engine // Resource prediction engine
-	optimizationOps atomic.Uint64    // counts optimization actions applied
+	optimizationOps atomic.Uint64     // counts optimization actions applied
 }
 
 // MetricSample stores a historical aggregate sample for time range filtering
@@ -191,9 +191,9 @@ func (s *Server) registerEndpoints() {
 	http.HandleFunc("/api/metrics/live", s.handleMetricsLive)       // NEW: live JSON cluster summary
 
 	// Prediction endpoints
-	http.HandleFunc("/api/predictions", s.handlePredictions)                   // NEW: get predictions for resources
-	http.HandleFunc("/api/predictions/historical", s.handleHistoricalData)    // NEW: get historical data
-	http.HandleFunc("/api/predictions/stats", s.handlePredictionStats)        // NEW: prediction engine stats
+	http.HandleFunc("/api/predictions", s.handlePredictions)               // NEW: get predictions for resources
+	http.HandleFunc("/api/predictions/historical", s.handleHistoricalData) // NEW: get historical data
+	http.HandleFunc("/api/predictions/stats", s.handlePredictionStats)     // NEW: prediction engine stats
 
 	// Optimization events
 	http.HandleFunc("/api/optimization-events", s.handleOptimizationEvents)
@@ -208,8 +208,99 @@ func (s *Server) registerEndpoints() {
 	http.HandleFunc("/api/v1/pods", s.handlePodsV1)
 	http.HandleFunc("/apis/v1/pods", s.handlePodsRedirect)
 
+	// System / support (version & capability baseline)
+	http.HandleFunc("/api/system/support", s.handleSystemSupport)
+
+	// AIOps incidents (basic placeholder listing)
+	http.HandleFunc("/api/aiops/incidents", s.handleIncidents)
+
 	// Health check
 	http.HandleFunc("/health", s.handleHealthCheck)
+}
+
+// handleSystemSupport returns a minimal support policy payload.
+// Future enhancement: enrich with dynamically detected capabilities.
+func (s *Server) handleSystemSupport(w http.ResponseWriter, r *http.Request) {
+	disc := s.clientset.Discovery()
+
+	info := map[string]any{
+		"supportedMinVersion": "1.33",
+		"policy":              "Right-Sizer supports Kubernetes 1.33 and above.",
+		"status":              "ok",
+	}
+
+	// Cluster version
+	if sv, err := disc.ServerVersion(); err == nil {
+		info["clusterVersion"] = sv.GitVersion
+		info["clusterMajor"] = sv.Major
+		info["clusterMinor"] = sv.Minor
+	} else {
+		info["clusterVersionError"] = err.Error()
+	}
+
+	// Capability discovery (best-effort)
+	caps := map[string]bool{}
+	if groups, resources, _ := disc.ServerGroupsAndResources(); len(groups) > 0 || len(resources) > 0 {
+		groupSet := map[string]struct{}{}
+		for _, g := range groups {
+			groupSet[g.Name] = struct{}{}
+		}
+		if _, ok := groupSet["metrics.k8s.io"]; ok {
+			caps["metricsServer"] = true
+		}
+		if _, ok := groupSet["resource.k8s.io"]; ok {
+			caps["dynamicResourceAllocation"] = true
+		}
+		for _, rl := range resources {
+			if rl == nil {
+				continue
+			}
+			for _, rsc := range rl.APIResources {
+				switch strings.ToLower(rsc.Name) {
+				case "pods/ephemeralcontainers":
+					caps["ephemeralContainers"] = true
+				case "pods/resize":
+					caps["podResize"] = true
+				}
+			}
+		}
+	}
+	info["capabilities"] = caps
+	info["timestamp"] = time.Now().UTC()
+
+	// Supported flag (parse minor)
+	if minorStr, ok := info["clusterMinor"].(string); ok {
+		minor := 0
+		for i := 0; i < len(minorStr); i++ {
+			if minorStr[i] < '0' || minorStr[i] > '9' {
+				break
+			}
+			minor = minor*10 + int(minorStr[i]-'0')
+		}
+		info["supported"] = (minor >= 33)
+	}
+
+	s.writeJSONResponse(w, info)
+}
+
+// handleIncidents lists (placeholder) incidents with basic query echoing until
+// the incident store is fully integrated with the API server.
+func (s *Server) handleIncidents(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	limit := q.Get("limit")
+	if limit == "" {
+		limit = "50"
+	}
+	resp := map[string]any{
+		"items":     []any{},
+		"count":     0,
+		"filters":   map[string]any{"type": q.Get("type"), "severity": q.Get("severity"), "limit": limit},
+		"status":    "not_implemented",
+		"message":   "Incident store integration pending; endpoint currently returns no data.",
+		"version":   "v1alpha0",
+		"timestamp": time.Now().UTC(),
+	}
+	s.writeJSONResponse(w, resp)
 }
 
 // handlePodCount handles /api/pods/count endpoint
@@ -1220,7 +1311,7 @@ func (s *Server) handleHistoricalData(w http.ResponseWriter, r *http.Request) {
 	podName := r.URL.Query().Get("pod")
 	container := r.URL.Query().Get("container")
 	resourceType := r.URL.Query().Get("type") // "cpu" or "memory"
-	sinceParam := r.URL.Query().Get("since")   // duration like "24h", "7d"
+	sinceParam := r.URL.Query().Get("since")  // duration like "24h", "7d"
 
 	if namespace == "" || podName == "" || container == "" || resourceType == "" {
 		http.Error(w, "Missing required parameters: namespace, pod, container, type", http.StatusBadRequest)
