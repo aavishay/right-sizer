@@ -325,7 +325,7 @@ rightsizerConfig:
 If you continue to experience issues:
 
 1. **Check Documentation**
-   - [Installation Guide](./INSTALLATION_GUIDE.md)
+   - [Installation Guide](./installation-guide.md)
    - [Configuration Reference](./docs/configuration.md)
    - [API Documentation](./docs/api/README.md)
 
