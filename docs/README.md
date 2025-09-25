@@ -48,21 +48,30 @@ This directory contains comprehensive documentation for the Right-Sizer Kubernet
 
 ```
 docs/
-├── README.md                           # This file
-├── installation-guide.md               # Setup and deployment
-├── troubleshooting-k8s.md             # Kubernetes issues
+├── README.md                           # This file - Documentation index
+├── installation-guide.md               # Setup and deployment instructions
+├── troubleshooting-k8s.md             # Kubernetes deployment issues
 ├── github-actions-testing.md          # CI/CD testing guide
 ├── act-testing-summary.md             # Test validation results
 ├── code-review-checklist.md           # Review guidelines
 ├── coverage-improvements.md           # Test coverage analysis
 ├── prediction-system.md               # AI/ML architecture
-├── feature-flag-implementation.md     # Feature gates
-├── resize-policy-implementation.md    # Policy engine
-├── minikube-deployment.md             # Local development
-├── review-summary.md                  # Review status
+├── feature-flag-implementation.md     # Feature gates system
+├── resize-policy-implementation.md    # Policy engine design
+├── minikube-deployment.md             # Local development setup
+├── review-summary.md                  # Code review status
 ├── changelog.md                       # Version history
-├── reorganization-summary.md          # Structure changes
-└── self-protection-fix.md             # Self-protection implementation
+├── reorganization-summary.md          # Repository structure changes
+├── self-protection-fix.md             # Self-protection implementation
+├── ARM64_DEPLOYMENT_SUCCESS.md        # ARM64 deployment guide
+├── METRICS_SERVER_DEPLOYMENT.md       # Metrics server setup
+├── ci-testing/                        # CI/CD testing guides
+│   ├── README.md                      # CI testing overview
+│   ├── QUICK_START.md                 # Quick testing guide
+│   ├── ADVANCED_TESTING.md            # Advanced testing scenarios
+│   └── IDE_SETUP.md                   # IDE configuration
+└── releases/                          # Release documentation
+    └── v0.2.0.md                      # v0.2.0 release notes
 ```
 
 ## 🔧 Scripts & Tools

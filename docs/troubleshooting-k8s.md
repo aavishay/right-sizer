@@ -325,9 +325,9 @@ rightsizerConfig:
 If you continue to experience issues:
 
 1. **Check Documentation**
-   - [Installation Guide](./INSTALLATION_GUIDE.md)
-   - [Configuration Reference](./docs/configuration.md)
-   - [API Documentation](./docs/api/README.md)
+   - [Installation Guide](./installation-guide.md)
+   - [Configuration Reference](../README.md#⚙️-configuration)
+   - [API Documentation](./api/openapi.yaml)
 
 2. **Search Existing Issues**
    - GitHub Issues: https://github.com/aavishay/right-sizer/issues

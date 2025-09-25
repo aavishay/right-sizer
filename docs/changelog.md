@@ -38,12 +38,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Comprehensive documentation in `docs/` directory:
 
-  - `MINIKUBE_DEPLOYMENT.md` - Minikube deployment guide
-  - `RESIZE_POLICY_IMPLEMENTATION.md` - Resize policy implementation details
+  - `minikube-deployment.md` - Minikube deployment guide
+  - `resize-policy-implementation.md` - Resize policy implementation details
   - `api/openapi.yaml` - OpenAPI specification
 - New configuration and feature documentation:
 
-  - `FEATURE_FLAG_IMPLEMENTATION.md` - Feature flag implementation guide
+  - `feature-flag-implementation.md` - Feature flag implementation guide
   - `RENAME_SUMMARY.md` - Summary of naming changes
 
 - New deployment and utility scripts:
@@ -118,5 +118,5 @@ _Previous releases not documented in this file. See git history for details._
   - docs/HELM_CLEANUP_SUMMARY.md
   - docs/ACTIONS_MONITORING.md
   - examples/k8s-compliance-testing/README.md
-- Rationale: Consolidated to a Helm‑only deployment model and reduced outdated narrative docs. Core retained docs now live in README.md, INSTALLATION_GUIDE.md, RESIZE_POLICY_IMPLEMENTATION.md, FEATURE_FLAG_IMPLEMENTATION.md, TROUBLESHOOTING_K8S.md, and relevant files under docs/.
+- Rationale: Consolidated to a Helm‑only deployment model and reduced outdated narrative docs. Core retained docs now live in README.md, installation-guide.md, resize-policy-implementation.md, feature-flag-implementation.md, troubleshooting-k8s.md, and relevant files under docs/.
 - No functional changes to operator logic; purely documentation hygiene.

@@ -8,7 +8,7 @@ Right-Sizer is a Kubernetes operator that monitors pod resource usage and automa
 
 ## Prerequisites
 
-- Kubernetes 1.19+
+- Kubernetes 1.33+
 - Helm 3.2.0+
 - Metrics Server installed in the cluster (for resource usage data)
 

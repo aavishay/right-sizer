@@ -418,9 +418,9 @@ minikube ssh -p right-sizer-cluster -- docker images
 ## 📚 Additional Resources
 
 - [Right-Sizer Documentation](../README.md)
-- [Configuration Guide](./CONFIGURATION.md)
+- [Configuration Guide](../README.md#%EF%B8%8F-configuration)
 - [API Documentation](./api/openapi.yaml)
-- [Troubleshooting Guide](./TROUBLESHOOTING.md)
+- [Troubleshooting Guide](./troubleshooting-k8s.md)
 - [Examples](../examples/)
 
 ## 💡 Tips for Local Development
@@ -435,7 +435,7 @@ minikube ssh -p right-sizer-cluster -- docker images
 
 If you encounter issues:
 
-1. Check the [FAQ](./FAQ.md)
+1. Check the [FAQ](../README.md#-frequently-asked-questions)
 2. Review [GitHub Issues](https://github.com/aavishay/right-sizer/issues)
 3. Join our [Community Slack](#)
 4. Contact maintainers at maintainers@right-sizer.dev
