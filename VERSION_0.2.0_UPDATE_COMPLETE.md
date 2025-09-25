@@ -59,7 +59,7 @@ All components of the Right-Sizer project have been successfully updated to vers
 - Helm Chart via OCI Registry
 - Docker Hub multi-arch images
 - Minikube deployment scripts
-- Kubernetes 1.19+ compatibility
+- Kubernetes 1.33+ compatibility
 
 ## Next Steps
 
