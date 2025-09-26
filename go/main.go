@@ -32,6 +32,7 @@ import (
 	"right-sizer/audit"
 	"right-sizer/config"
 	"right-sizer/controllers"
+	"right-sizer/dashboard"
 	"right-sizer/health"
 	"right-sizer/logger"
 	"right-sizer/metrics"
@@ -385,6 +386,22 @@ func main() {
 	logger.Info("Using default metrics-server provider (can be changed via RightSizerConfig CRD)")
 	provider = metrics.NewMetricsServerProvider(mgr.GetClient())
 	healthChecker.UpdateComponentStatus("metrics-provider", true, "Metrics provider initialized")
+
+	// Initialize dashboard client for reporting cluster status and metrics
+	dashboardClient := dashboard.NewClient()
+	if dashboardClient.IsEnabled() {
+		// Start heartbeat reporting every 5 minutes
+		reportingInterval := 5 * time.Minute
+		if envInterval := os.Getenv("REPORTING_INTERVAL"); envInterval != "" {
+			if parsed, err := time.ParseDuration(envInterval); err == nil {
+				reportingInterval = parsed
+			}
+		}
+		dashboardClient.StartHeartbeat(reportingInterval)
+		healthChecker.UpdateComponentStatus("dashboard-client", true, "Dashboard client initialized")
+	} else {
+		healthChecker.UpdateComponentStatus("dashboard-client", false, "Dashboard reporting disabled")
+	}
 
 	// Initialize retry configuration
 	retryConfig := retry.Config{

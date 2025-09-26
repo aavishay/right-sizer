@@ -46,6 +46,15 @@ helm install right-sizer ./helm
 
 The following table lists the configurable parameters of the Right-Sizer chart and their default values.
 
+### 🔒 Security Notice
+
+**IMPORTANT**: API tokens and other sensitive credentials are now managed through Kubernetes Secrets for enhanced security.
+
+- **Never commit actual tokens to values.yaml or version control**
+- Use `--set-string dashboard.apiToken.value=$TOKEN` during installation
+- Or pre-create secrets and reference them with `dashboard.apiToken.existingSecret`
+- See [SECRETS.md](./SECRETS.md) for detailed secret management guidance
+
 ### Global Parameters
 
 | Parameter | Description | Default |

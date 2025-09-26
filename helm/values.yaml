@@ -57,6 +57,50 @@ tolerations: []
 
 affinity: {}
 
+# Dashboard integration settings (secure configuration)
+dashboard:
+  # Dashboard API URL
+  url: ""
+
+  # API Token configuration (secure)
+  apiToken:
+    # Create a new secret for the API token
+    create: false
+    # Provide the token value (will be stored in a Secret)
+    # WARNING: Do not commit actual tokens to version control!
+    # Use --set dashboard.apiToken.value=xxx or external secret management
+    value: ""
+    # Generate a random token (useful for initial setup)
+    generateRandom: false
+    # Use an existing secret
+    existingSecret: ""
+    # Key in the existing secret
+    key: "api-token"
+    # Additional annotations for the secret
+    annotations: {}
+      # external-secrets.io/secret-store-ref: "my-secret-store"
+
+  # Cluster identification
+  cluster:
+    # Create a secret for cluster credentials
+    secretCreate: false
+    # Use an existing secret for cluster credentials
+    existingSecret: ""
+    # Cluster ID (unique identifier)
+    id: ""
+    # Cluster name (human-readable)
+    name: ""
+    # Keys in the existing secret
+    idKey: "cluster-id"
+    nameKey: "cluster-name"
+    # Additional annotations for the cluster secret
+    annotations: {}
+
+# Global configuration
+global:
+  # Cluster name fallback (if not specified in dashboard.cluster)
+  clusterName: ""
+
 # RightSizerConfig CRD configuration
 rightsizerConfig:
   # Create a default RightSizerConfig resource
@@ -140,7 +184,7 @@ rightsizerConfig:
     dashboard:
       enabled: false # Enable sending to centralized dashboard
       url: "" # Dashboard API URL
-      apiToken: "" # API token for authentication (use secret in production)
+      apiToken: "" # DEPRECATED - use dashboard.apiToken configuration below
       tlsVerify: true # Verify TLS certificates
       timeoutSeconds: 30 # Request timeout
 
@@ -156,8 +200,8 @@ rightsizerConfig:
   multiTenancy:
     enabled: false # Enable multi-tenant features
     organizationId: "" # Organization identifier
-    clusterId: "" # Unique cluster identifier
-    clusterName: "" # Human-readable cluster name
+    clusterId: "" # DEPRECATED - use dashboard.cluster configuration below
+    clusterName: "" # DEPRECATED - use dashboard.cluster configuration below
     environment: "production" # Environment label (dev, staging, production)
     region: "" # Cloud region or datacenter
     labels: {} # Additional labels for cluster identification
