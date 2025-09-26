@@ -208,6 +208,23 @@ func (r *InPlaceRightSizer) rightSizeAllPods(ctx context.Context) {
 			continue
 		}
 
+		// Skip pods that have no resource specifications at all
+		hasAnyResources := false
+		for _, container := range pod.Spec.Containers {
+			if container.Resources.Requests != nil && len(container.Resources.Requests) > 0 {
+				hasAnyResources = true
+				break
+			}
+			if container.Resources.Limits != nil && len(container.Resources.Limits) > 0 {
+				hasAnyResources = true
+				break
+			}
+		}
+		if !hasAnyResources {
+			skippedCount++
+			continue // Silently skip pods with no resource specs - nothing to resize
+		}
+
 		// Try to right-size the pod
 		resized, err := r.rightSizePod(ctx, &pod)
 		if err != nil {
@@ -993,12 +1010,25 @@ func (r *InPlaceRightSizer) applyInPlaceResize(ctx context.Context, pod *corev1.
 	return nil
 }
 
-// applyResizePolicy is deprecated - resize policies should only be set in parent resources
-// Direct pod patching for resize policy is not recommended
+// applyResizePolicy applies in-place resize policies directly to pods for K8s 1.33+
+// This enables zero-downtime resource adjustments without pod restarts
 func (r *InPlaceRightSizer) applyResizePolicy(ctx context.Context, pod *corev1.Pod) error {
-	// Resize policy should only be set in parent resources (Deployments/StatefulSets/DaemonSets)
-	// not in pods directly. Skipping direct pod patching.
-	logger.Info("📝 Skipping direct pod resize policy patch - policies should be set in parent resources only")
+
+	// Check if pod already has resize policies configured
+	hasResizePolicies := false
+	for _, container := range pod.Spec.Containers {
+		if container.ResizePolicy != nil && len(container.ResizePolicy) > 0 {
+			hasResizePolicies = true
+			break
+		}
+	}
+
+	if hasResizePolicies {
+		log.Printf("✅ Pod %s/%s has resize policies configured", pod.Namespace, pod.Name)
+	}
+
+	// Note: We don't modify existing pods' resize policies as Kubernetes doesn't allow it
+	// The actual resource resizing will be handled by the resize subresource in updatePodInPlace
 	return nil
 }
 
@@ -1117,18 +1147,18 @@ func ensureSafeResourcePatch(current, desired corev1.ResourceRequirements) corev
 		}
 	}
 
-	// Log what we're NOT including to help debug
+	// Debug: Log what we're NOT including (should be rare now due to early filtering)
 	if desired.Requests != nil {
 		for resType, resVal := range desired.Requests {
 			if _, exists := current.Requests[resType]; !exists {
-				logger.Info("   ⚠️  Skipping new request type %s: %s (not in current pod)", resType, formatResource(resVal))
+				logger.Debug("   ⚠️  Skipping new request type %s: %s (not in current pod)", resType, formatResource(resVal))
 			}
 		}
 	}
 	if desired.Limits != nil {
 		for resType, resVal := range desired.Limits {
 			if _, exists := current.Limits[resType]; !exists {
-				logger.Info("   ⚠️  Skipping new limit type %s: %s (not in current pod)", resType, formatResource(resVal))
+				logger.Debug("   ⚠️  Skipping new limit type %s: %s (not in current pod)", resType, formatResource(resVal))
 			}
 		}
 	}

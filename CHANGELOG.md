@@ -139,7 +139,7 @@ To upgrade from 0.1.x to 0.2.0:
 4. **For ARM64 Systems**:
    ```bash
    # Use the dedicated ARM64 deployment script
-   ./deploy-arm64.sh
+   ./scripts/deploy-arm64.sh
    ```
 
 ### Contributors

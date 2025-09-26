@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: test-resize
+  namespace: demo
+  labels:
+    app: test-resize
+spec:
+  containers:
+  - name: busybox
+    image: busybox:1.35
+    command: ["sh", "-c", "while true; do sleep 30; done"]
+    resources:
+      requests:
+        cpu: 500m
+        memory: 512Mi
+      limits:
+        cpu: 1000m
+        memory: 1Gi
+    # Pre-configure resize policy to allow in-place resize
+    resizePolicy:
+    - resourceName: cpu
+      restartPolicy: NotRequired
+    - resourceName: memory
+      restartPolicy: NotRequired

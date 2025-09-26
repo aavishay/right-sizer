@@ -333,6 +333,22 @@ func (r *AdaptiveRightSizer) analyzeAllPods(ctx context.Context) ([]ResourceUpda
 			}
 		}
 
+		// Skip pods that have no resource specifications at all
+		hasAnyResources := false
+		for _, container := range pod.Spec.Containers {
+			if container.Resources.Requests != nil && len(container.Resources.Requests) > 0 {
+				hasAnyResources = true
+				break
+			}
+			if container.Resources.Limits != nil && len(container.Resources.Limits) > 0 {
+				hasAnyResources = true
+				break
+			}
+		}
+		if !hasAnyResources {
+			continue // Silently skip pods with no resource specs - nothing to resize
+		}
+
 		// Get metrics for this specific pod
 		podMetrics, err := r.MetricsProvider.FetchPodMetrics(pod.Namespace, pod.Name)
 		if err != nil {
@@ -720,12 +736,23 @@ func (r *AdaptiveRightSizer) updatePodInPlace(ctx context.Context, update Resour
 		Value interface{} `json:"value"`
 	}
 
-	// Skip direct pod patching for resize policy
-	// Resize policy should only be set in parent resources (Deployments/StatefulSets/DaemonSets)
-	log.Printf("📝 Skipping direct pod resize policy patch - policies should be set in parent resources only")
+	// Check resize policy compatibility for K8s 1.33+ in-place resize
+
+	// Check if pod has resize policies (optimal but not required for K8s 1.33+)
+	hasResizePolicies := false
+	for _, container := range pod.Spec.Containers {
+		if container.ResizePolicy != nil && len(container.ResizePolicy) > 0 {
+			hasResizePolicies = true
+			break
+		}
+	}
+
+	if hasResizePolicies {
+		log.Printf("✅ Pod %s/%s has resize policies configured", update.Namespace, update.Name)
+	}
 
 	// Refresh pod state after policy update
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(200 * time.Millisecond) // Slightly longer wait for policy application
 	if err := r.Client.Get(ctx, types.NamespacedName{
 		Namespace: update.Namespace,
 		Name:      update.Name,
@@ -1999,18 +2026,18 @@ func ensureSafeResourcePatchAdaptive(current, desired corev1.ResourceRequirement
 		}
 	}
 
-	// Log what we're NOT including to help debug
+	// Debug: Log what we're NOT including (should be rare now due to early filtering)
 	if desired.Requests != nil {
 		for resType, resVal := range desired.Requests {
 			if _, exists := current.Requests[resType]; !exists {
-				logger.Info("   ⚠️  Skipping new request type %s: %s (not in current pod)", resType, formatResource(resVal))
+				logger.Debug("   ⚠️  Skipping new request type %s: %s (not in current pod)", resType, formatResource(resVal))
 			}
 		}
 	}
 	if desired.Limits != nil {
 		for resType, resVal := range desired.Limits {
 			if _, exists := current.Limits[resType]; !exists {
-				logger.Info("   ⚠️  Skipping new limit type %s: %s (not in current pod)", resType, formatResource(resVal))
+				logger.Debug("   ⚠️  Skipping new limit type %s: %s (not in current pod)", resType, formatResource(resVal))
 			}
 		}
 	}
