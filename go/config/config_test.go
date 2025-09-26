@@ -188,8 +188,8 @@ func TestUpdateFromCRD(t *testing.T) {
 		t.Errorf("Expected 2 included namespaces, got %d", len(cfg.NamespaceInclude))
 	}
 
-	if len(cfg.NamespaceExclude) != 1 {
-		t.Errorf("Expected 1 excluded namespace, got %d", len(cfg.NamespaceExclude))
+	if len(cfg.NamespaceExclude) != 2 {
+		t.Errorf("Expected 2 excluded namespaces (including self-protection), got %d", len(cfg.NamespaceExclude))
 	}
 
 	if len(cfg.SystemNamespaces) != 2 {
