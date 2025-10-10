@@ -183,7 +183,7 @@ metadata:
   name: right-sizer
 rules:
 - apiGroups: [""]
-  resources: ["pods", "pods/status"]
+  resources: ["pods", "pods/status", "nodes"]
   verbs: ["get", "list", "watch", "update", "patch"]
 - apiGroups: ["apps"]
   resources: ["deployments", "statefulsets", "daemonsets"]
@@ -297,13 +297,13 @@ spec:
   dryRun: true
   defaultMode: balanced
   resizeInterval: "30s"
-  globalConstraints:
+  defaultResourceStrategy:
     cpu:
-      min: "10m"
-      max: "2000m"
+      minRequest: "10m"
+      maxLimit: "2000m"
     memory:
-      min: "10Mi"
-      max: "2Gi"
+      minRequest: "10Mi"
+      maxLimit: "2Gi"
   metricsConfig:
     provider: metrics-server
   observabilityConfig:
@@ -329,23 +329,18 @@ metadata:
   namespace: $NAMESPACE
 spec:
   enabled: true
-  namespaceSelector:
-    include:
+  targetRef:
+    namespaces:
     - $NAMESPACE
-  workloadSelector:
-    types:
-    - Deployment
-    labels:
-      test: "true"
-  scalingPolicy:
+    kind: Deployment
+    labelSelector:
+      matchLabels:
+        test: "true"
+  resourceStrategy:
     cpu:
       targetUtilization: 70
-      scaleUpThreshold: 80
-      scaleDownThreshold: 50
     memory:
       targetUtilization: 75
-      scaleUpThreshold: 85
-      scaleDownThreshold: 60
 EOF
 
 # Wait for policy to be processed
@@ -421,7 +416,7 @@ wait_for_condition "kubectl get deployment $DEPLOYMENT_NAME -n $NAMESPACE -o jso
 
 # Get new pod name
 NEW_POD_NAME=$(kubectl get pods -n $NAMESPACE -l app=right-sizer -o jsonpath='{.items[0].metadata.name}')
-test_step "Operator recovered after restart" "[ '$NEW_POD_NAME' != '$POD_NAME' ]"
+test_step "Operator recovered after restart" "[ \"$NEW_POD_NAME\" != \"$POD_NAME\" ]"
 
 # Final Summary
 print_header "Test Summary"
