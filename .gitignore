@@ -1,1 +1,54 @@
-tests/test-minikube-deployment.sh
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+go/right-sizer
+right-sizer
+bin/
+go/bin/
+
+# Test binary, built with `go test -c`
+*.test
+go/controllers.test
+
+# Output of the go coverage tool
+*.out
+coverage.html
+coverage.out
+go/coverage.html
+go/coverage.out
+
+# Build artifacts
+build/
+dist/
+archive/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Backup files
+*.bak
+Makefile.bak
+
+# Helm
+charts/*.tgz
+
+# Temporary files
+tmp/
+temp/
+*.tmp
