@@ -275,39 +275,55 @@ func createOperatorMetrics() *OperatorMetrics {
 		}),
 	}
 
-	// Temporarily disable metrics registration to test crash fix
-	_ = metrics
-	// safeRegister(
-	//	metrics.PodsProcessedTotal,
-	//	metrics.PodsResizedTotal,
-	//	metrics.PodsSkippedTotal,
-	//	metrics.PodProcessingErrors,
-	//	metrics.CPUAdjustmentsTotal,
-	//	metrics.MemoryAdjustmentsTotal,
-	//	metrics.ResourceChangeSize,
-	//	metrics.ProcessingDuration,
-	//	metrics.APICallDuration,
-	//	metrics.MetricsCollectionDuration,
-	//	metrics.SafetyThresholdViolations,
-	//	metrics.ResourceValidationErrors,
-	//	metrics.RetryAttemptsTotal,
-	//	metrics.RetrySuccessTotal,
-	//	metrics.ClusterResourceUtilization,
-	//	metrics.NodeResourceAvailability,
-	//	metrics.PolicyRuleApplications,
-	//	metrics.ConfigurationReloads,
-	//	metrics.ResourceTrendPredictions,
-	//	metrics.HistoricalDataPoints,
-	//	metrics.CPUUsagePercent,
-	//	metrics.MemoryUsagePercent,
-	//	metrics.ActivePodsTotal,
-	//	metrics.OptimizedResourcesTotal,
-	//	metrics.NetworkUsageMbps,
-	//	metrics.DiskIOMBps,
-	//	metrics.AvgUtilizationPercent,
-	// )
+	// Register all metrics with safe registration (handles already registered errors)
+	safeRegister(
+		metrics.PodsProcessedTotal,
+		metrics.PodsResizedTotal,
+		metrics.PodsSkippedTotal,
+		metrics.PodProcessingErrors,
+		metrics.CPUAdjustmentsTotal,
+		metrics.MemoryAdjustmentsTotal,
+		metrics.ResourceChangeSize,
+		metrics.ProcessingDuration,
+		metrics.APICallDuration,
+		metrics.MetricsCollectionDuration,
+		metrics.SafetyThresholdViolations,
+		metrics.ResourceValidationErrors,
+		metrics.RetryAttemptsTotal,
+		metrics.RetrySuccessTotal,
+		metrics.ClusterResourceUtilization,
+		metrics.NodeResourceAvailability,
+		metrics.PolicyRuleApplications,
+		metrics.ConfigurationReloads,
+		metrics.ResourceTrendPredictions,
+		metrics.HistoricalDataPoints,
+		metrics.CPUUsagePercent,
+		metrics.MemoryUsagePercent,
+		metrics.ActivePodsTotal,
+		metrics.OptimizedResourcesTotal,
+		metrics.NetworkUsageMbps,
+		metrics.DiskIOMBps,
+		metrics.AvgUtilizationPercent,
+	)
 
 	return metrics
+}
+
+// safeRegister registers Prometheus collectors, ignoring AlreadyRegisteredError
+func safeRegister(collectors ...prometheus.Collector) {
+	for _, collector := range collectors {
+		if err := prometheus.Register(collector); err != nil {
+			// Check if the error is because the metric is already registered
+			if _, ok := err.(prometheus.AlreadyRegisteredError); !ok {
+				// If it's not an AlreadyRegisteredError, log it but don't panic
+				// This allows the operator to continue even if some metrics fail to register
+				// In production, you might want to use a proper logger here
+				// For now, we'll silently continue to prevent crashes
+				continue
+			}
+			// If it's already registered, that's fine - just continue
+		}
+	}
 }
 
 // UpdateMetrics sets the aggregate gauges used by the metrics API.

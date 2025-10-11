@@ -1918,6 +1918,7 @@ func SetupAdaptiveRightSizer(mgr manager.Manager, provider metrics.Provider, aud
 		ClientSet:       clientSet,
 		RestConfig:      restConfig,
 		MetricsProvider: provider,
+		OperatorMetrics: metrics.NewOperatorMetrics(),
 		AuditLogger:     auditLogger,
 		Config:          cfg,
 		Predictor:       predictorEngine,
@@ -1926,8 +1927,6 @@ func SetupAdaptiveRightSizer(mgr manager.Manager, provider metrics.Provider, aud
 		resizeCache:     make(map[string]*ResizeDecisionCache),
 		cacheExpiry:     5 * time.Minute, // Cache entries for 5 minutes
 	}
-	// Temporarily disable metrics to avoid registration panic
-	rightsizer.OperatorMetrics = nil
 
 	// Start the rightsizer
 	go func() {

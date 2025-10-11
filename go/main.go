@@ -115,8 +115,7 @@ func main() {
 	logger.Info("   API Machinery: v0.34.0")
 
 	// Initialize enhanced components
-	// operatorMetrics := metrics.NewOperatorMetrics() // Temporarily disabled to test crash fix
-	var operatorMetrics *metrics.OperatorMetrics = nil
+	operatorMetrics := metrics.NewOperatorMetrics()
 
 	// Initialize health checker
 	healthChecker := health.NewOperatorHealthChecker()
