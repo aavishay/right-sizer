@@ -10,7 +10,7 @@
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED)](https://www.docker.com)
 [![Test Coverage](https://img.shields.io/badge/Coverage-Report-brightgreen)](./build/coverage/coverage.html)
 [![API Docs](https://img.shields.io/badge/API-OpenAPI%203.0-orange)](./docs/api/openapi.yaml)
-[![CI/CD](https://github.com/aavishay/right-sizer/actions/workflows/test-coverage.yml/badge.svg)](https://github.com/aavishay/right-sizer/actions/workflows/test-coverage.yml)
+[![CI/CD](https://github.com/aavishay/right-sizer/actions/workflows/test.yml/badge.svg)](https://github.com/aavishay/right-sizer/actions/workflows/test.yml)
 
 **Intelligent Kubernetes Resource Optimization with Zero Downtime**
 
