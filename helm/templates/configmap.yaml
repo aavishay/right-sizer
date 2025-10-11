@@ -1,9 +1,9 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ include "right-sizer.fullname" . }}-config
+  name: {{ include "rightsizer.fullname" . }}-config
   labels:
-    {{- include "right-sizer.labels" . | nindent 4 }}
+    {{- include "rightsizer.labels" . | nindent 4 }}
 data:
   config.yaml: |
     # Right-Sizer Operator Configuration
@@ -11,7 +11,7 @@ data:
       namespace: {{ .Release.Namespace }}
       leaderElection: {{ .Values.rightsizerConfig.operator.leaderElection | default true }}
       leaderElectionNamespace: {{ .Values.rightsizerConfig.operator.leaderElectionNamespace | default .Release.Namespace | quote }}
-      leaderElectionID: {{ .Values.rightsizerConfig.operator.leaderElectionID | default "right-sizer-leader" | quote }}
+      leaderElectionID: {{ .Values.rightsizerConfig.operator.leaderElectionID | default "rightsizer-leader" | quote }}
       leaderElectionLeaseDuration: {{ .Values.rightsizerConfig.operator.leaderElectionLeaseDuration | default "15s" | quote }}
       leaderElectionRenewDeadline: {{ .Values.rightsizerConfig.operator.leaderElectionRenewDeadline | default "10s" | quote }}
       leaderElectionRetryPeriod: {{ .Values.rightsizerConfig.operator.leaderElectionRetryPeriod | default "2s" | quote }}

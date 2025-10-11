@@ -164,7 +164,6 @@ spec:
     UpdateResizePolicy: false # Update resize policy for in-place resizing (disabled by default)
     EnablePredictiveScaling: false # Disable predictive features
     EnableCostOptimization: false # Disable cost optimization
-    EnableMultiCluster: false # Single cluster only
     EnableAutoLearning: false # No auto-learning
     EnableWorkloadProfiling: false # No profiling
     EnableAdvancedScheduling: false # No advanced scheduling

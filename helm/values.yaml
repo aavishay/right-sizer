@@ -361,9 +361,11 @@ rightsizerConfig:
   featureGates:
     updateResizePolicy: false # Update resize policy for in-place pod resizing (K8s 1.33+)
     enablePredictiveScaling: false # ML-based predictive scaling
-    enableCostOptimization: false # Cost-aware resource optimization
-    enableMultiCluster: false # Multi-cluster support
-    enableAutoLearning: false # Auto-learn optimal resource patterns
+    # -- Cost-aware resource optimization
+    enableCostOptimization: false
+
+    # -- Auto-learn optimal resource patterns
+    enableAutoLearning: false
     enableWorkloadProfiling: false # Profile workload patterns
     enableAdvancedScheduling: false # Advanced scheduling optimizations
 

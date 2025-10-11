@@ -18,8 +18,8 @@ spec:
       requestAddition: 10 # Add this many millicores to request
       limitMultiplier: 2.0 # Multiply request by this to get limit
       limitAddition: 0 # Add this many millicores to limit
-      minRequest: 10 # Minimum CPU request in millicores
-      maxLimit: 4000 # Maximum CPU limit in millicores
+      minRequest: "10m" # Minimum CPU request in millicores
+      maxLimit: "4000m" # Maximum CPU limit in millicores
       scaleUpThreshold: 0.8 # Scale up when usage exceeds 80%
       scaleDownThreshold: 0.3 # Scale down when usage is below 30%
     memory:
@@ -27,8 +27,8 @@ spec:
       requestAddition: 64 # Add this many MB to request
       limitMultiplier: 2.0 # Multiply request by this to get limit
       limitAddition: 0 # Add this many MB to limit
-      minRequest: 64 # Minimum memory request in MB
-      maxLimit: 8192 # Maximum memory limit in MB
+      minRequest: "64Mi" # Minimum memory request in MB
+      maxLimit: "8192Mi" # Maximum memory limit in MB
       scaleUpThreshold: 0.8 # Scale up when usage exceeds 80%
       scaleDownThreshold: 0.3 # Scale down when usage is below 30%
     historyWindow: "7d" # How much historical data to consider
@@ -41,8 +41,6 @@ spec:
     minChangeThreshold: 10 # Minimum % change required to trigger update
     maxMemoryGB: 32 # Maximum memory limit in GB
     maxCPUCores: 16 # Maximum CPU limit in cores
-    preventOOMKill: true # Prevent changes that might cause OOM
-    respectPodDisruptionBudget: true # Respect PDB during updates
 
   # Metrics configuration
   metricsConfig:
@@ -58,7 +56,7 @@ spec:
   observabilityConfig:
     logLevel: "info" # Options: debug, info, warn, error
     logFormat: "json" # Options: json, text
-    enableAuditLogging: true # Log all resource changes
+    enableAuditLog: true # Log all resource changes
     enableMetricsExport: true # Export Prometheus metrics
     metricsPort: 9090 # Port for metrics endpoint
     enableTracing: false # Enable OpenTelemetry tracing
@@ -129,53 +127,26 @@ spec:
       team: "platform"
       rightsizer: "enabled"
 
-  # Notification configuration
-  notificationConfig:
-    enableNotifications: true # Enable notifications globally
-
-    # Slack notifications
-    slackConfig:
-      webhookURL: "https://hooks.slack.com/services/YOUR/WEBHOOK/URL"
-      channel: "#right-sizer-alerts"
-      username: "RightSizer Bot"
-      iconEmoji: ":robot:"
-      notifyOnSuccess: false # Notify on successful resizing
-      notifyOnFailure: true # Notify on failures
-      notifyOnDryRun: false # Notify for dry-run actions
-
-    # Email notifications
-    emailConfig:
-      smtpHost: "smtp.gmail.com"
-      smtpPort: 587
-      smtpUsername: "notifications@example.com"
-      smtpPasswordSecret: "smtp-password-secret" # K8s secret name
-      from: "rightsizer@example.com"
-      to:
-        - "ops-team@example.com"
-        - "platform@example.com"
-        - "devops@example.com"
-      subject: "RightSizer Alert - Resource Optimization"
-
-    # Webhook notifications
-    webhookConfig:
-      - url: "https://your-webhook.example.com/alerts"
-        method: "POST"
-        headers:
-          Authorization: "Bearer YOUR_TOKEN"
-          Content-Type: "application/json"
-          X-Custom-Header: "custom-value"
-        retryCount: 3
-        retryDelay: "5s"
-
   # Feature gates for experimental features
   featureGates:
     UpdateResizePolicy: false # Update resize policy for in-place pod resizing (K8s 1.27+, disabled by default)
     EnablePredictiveScaling: false # ML-based predictive scaling
     EnableCostOptimization: false # Cost-aware resource optimization
-    EnableMultiCluster: false # Multi-cluster support
     EnableAutoLearning: false # Auto-learn optimal resource patterns
     EnableWorkloadProfiling: false # Profile workload patterns
     EnableAdvancedScheduling: false # Advanced scheduling optimizations
+
+---
+# Example of a minimal configuration for comparison
+apiVersion: rightsizer.io/v1alpha1
+kind: RightSizerConfig
+metadata:
+  name: right-sizer-config-minimal
+spec:
+  enabled: true
+  defaultMode: "balanced"
+  resizeInterval: "5m"
+  dryRun: false
 
 ---
 # Example of a minimal configuration for comparison

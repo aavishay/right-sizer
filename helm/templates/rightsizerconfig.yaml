@@ -2,9 +2,9 @@
 apiVersion: rightsizer.io/v1alpha1
 kind: RightSizerConfig
 metadata:
-  name: {{ include "right-sizer.fullname" . }}-config
+  name: {{ include "rightsizer.fullname" . }}-config
   labels:
-    {{- include "right-sizer.labels" . | nindent 4 }}
+    {{- include "rightsizer.labels" . | nindent 4 }}
 spec:
   # Core configuration
   enabled: {{ .Values.rightsizerConfig.enabled | default true }}
@@ -75,7 +75,7 @@ spec:
     enableTracing: false
     enableProfiling: false
     profilingPort: 6060
-    auditLogPath: "/var/log/right-sizer/audit.log"
+    auditLogPath: "/var/log/rightsizer/audit.log"
     {{- with .Values.rightsizerConfig.observability }}
     {{- if .tracingEndpoint }}
     tracingEndpoint: {{ .tracingEndpoint | quote }}
@@ -97,7 +97,7 @@ spec:
   operatorConfig:
     leaderElection: true
     leaderElectionNamespace: {{ .Release.Namespace | quote }}
-    leaderElectionID: "right-sizer-leader"
+    leaderElectionID: "rightsizer-leader"
     leaderElectionLeaseDuration: "15s"
     leaderElectionRenewDeadline: "10s"
     leaderElectionRetryPeriod: "2s"
@@ -249,7 +249,6 @@ spec:
     UpdateResizePolicy: {{ .Values.rightsizerConfig.featureGates.updateResizePolicy | default false }}
     EnablePredictiveScaling: {{ .Values.rightsizerConfig.featureGates.enablePredictiveScaling | default false }}
     EnableCostOptimization: {{ .Values.rightsizerConfig.featureGates.enableCostOptimization | default false }}
-    EnableMultiCluster: {{ .Values.rightsizerConfig.featureGates.enableMultiCluster | default false }}
     EnableAutoLearning: {{ .Values.rightsizerConfig.featureGates.enableAutoLearning | default false }}
     EnableWorkloadProfiling: {{ .Values.rightsizerConfig.featureGates.enableWorkloadProfiling | default false }}
     EnableAdvancedScheduling: {{ .Values.rightsizerConfig.featureGates.enableAdvancedScheduling | default false }}
