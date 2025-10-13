@@ -161,6 +161,12 @@ type Config struct {
 
 	// Configuration source tracking
 	ConfigSource string // "default" or "crd"
+
+	// Cluster identity
+	ClusterID string // Unique cluster identifier used for events/metrics (from env CLUSTER_ID, default: cluster-unknown)
+	ClusterName string // Human-readable cluster name (env CLUSTER_NAME, default: default-cluster)
+	Environment string // Environment label (env ENVIRONMENT, e.g., prod/staging/dev, default: unknown)
+	Version     string // Operator version for gRPC/info responses (from build or env OPERATOR_VERSION)
 }
 
 // Global config instance with thread-safe access
@@ -171,7 +177,7 @@ var (
 
 // GetDefaults returns a new Config with default values
 func GetDefaults() *Config {
-	return &Config{
+	c := &Config{
 		// Default resource sizing values
 		CPURequestMultiplier:    1.2,
 		MemoryRequestMultiplier: 1.2,
@@ -294,6 +300,33 @@ func GetDefaults() *Config {
 		// Mark as default configuration
 		ConfigSource: "default",
 	}
+
+	// Derive cluster ID from environment; fall back if unset
+	clusterId := os.Getenv("CLUSTER_ID")
+	if strings.TrimSpace(clusterId) == "" {
+		clusterId = "cluster-unknown"
+	}
+	c.ClusterID = clusterId
+
+	clusterName := os.Getenv("CLUSTER_NAME")
+	if strings.TrimSpace(clusterName) == "" {
+		clusterName = "default-cluster"
+	}
+	c.ClusterName = clusterName
+
+	environment := os.Getenv("ENVIRONMENT")
+	if strings.TrimSpace(environment) == "" {
+		environment = "unknown"
+	}
+	c.Environment = environment
+
+	version := os.Getenv("OPERATOR_VERSION")
+	if strings.TrimSpace(version) == "" {
+		version = "dev"
+	}
+	c.Version = version
+
+	return c
 }
 
 // Load initializes the configuration with defaults

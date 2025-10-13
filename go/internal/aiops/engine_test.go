@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	narrative "right-sizer/internal/aiops/narratives"
 	"right-sizer/metrics"
 )
 
@@ -17,7 +18,9 @@ func (m *mockMetricsProvider) FetchPodMetrics(namespace, podName string) (metric
 
 // TestEngineStartStop ensures the AIOps engine starts goroutines without panic and stops cleanly.
 func TestEngineStartStop(t *testing.T) {
-	engine := NewEngine(&mockMetricsProvider{})
+	engine := NewEngine(nil, &mockMetricsProvider{}, narrative.LLMConfig{})
+	// Disable OOM listener for unit test (no Kubernetes client available)
+	engine.oomListener = nil
 
 	ctx, cancel := context.WithCancel(context.Background())
 	go engine.Start(ctx)

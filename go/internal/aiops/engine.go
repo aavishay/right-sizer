@@ -123,9 +123,14 @@ func (e *Engine) makeAnalyzerDispatch(an core.Analyzer) core.Handler {
 }
 
 // Start runs the AIOps engine until context cancellation.
+
 func (e *Engine) Start(ctx context.Context) {
 	log.Println("[AIOPS] Engine starting (OOM listener + bus dispatch + sampler)...")
-	go e.oomListener.Start(ctx)
+	if e.oomListener != nil { // allow tests to disable without nil panic
+		go e.oomListener.Start(ctx)
+	} else {
+		log.Println("[AIOPS] OOM listener disabled (nil) - skipping")
+	}
 	go e.eventIngestLoop(ctx)
 	go e.samplingLoop(ctx)
 	<-ctx.Done()
