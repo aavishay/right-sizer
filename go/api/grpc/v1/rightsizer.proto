@@ -1,0 +1,189 @@
+syntax = "proto3";
+
+package rightsizer.v1;
+
+option go_package = "right-sizer/api/grpc/v1;pb";
+
+import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
+
+// RightSizer service definition
+service RightSizerService {
+  // Get cluster information
+  rpc GetClusterInfo(google.protobuf.Empty) returns (ClusterInfo);
+
+  // Get metrics
+  rpc GetMetrics(MetricsRequest) returns (MetricsResponse);
+
+  // Stream events
+  rpc StreamEvents(EventStreamRequest) returns (stream EventStreamResponse);
+
+  // Execute remediation action
+  rpc ExecuteAction(ActionRequest) returns (ActionResponse);
+
+  // Get action status
+  rpc GetActionStatus(ActionStatusRequest) returns (ActionStatusResponse);
+
+  // Health check
+  rpc HealthCheck(google.protobuf.Empty) returns (HealthResponse);
+}
+
+// Cluster information
+message ClusterInfo {
+  string cluster_id = 1;
+  string name = 2;
+  string environment = 3;
+  string version = 4;
+  repeated string capabilities = 5;
+  ClusterStatus status = 6;
+}
+
+enum ClusterStatus {
+  CLUSTER_STATUS_UNKNOWN = 0;
+  CLUSTER_STATUS_HEALTHY = 1;
+  CLUSTER_STATUS_DEGRADED = 2;
+  CLUSTER_STATUS_UNHEALTHY = 3;
+}
+
+// Metrics
+message MetricsRequest {
+  MetricType type = 1;
+  google.protobuf.Timestamp since = 2;
+  string namespace = 3;
+  string pod_name = 4;
+}
+
+enum MetricType {
+  METRIC_TYPE_ALL = 0;
+  METRIC_TYPE_RESOURCE = 1;
+  METRIC_TYPE_PERFORMANCE = 2;
+  METRIC_TYPE_USAGE = 3;
+}
+
+message MetricsResponse {
+  repeated Metric metrics = 1;
+  google.protobuf.Timestamp timestamp = 2;
+}
+
+message Metric {
+  string name = 1;
+  double value = 2;
+  string unit = 3;
+  google.protobuf.Timestamp timestamp = 4;
+  map<string, string> labels = 5;
+}
+
+// Events
+message EventStreamRequest {
+  repeated EventType event_types = 1;
+  repeated string namespaces = 2;
+  repeated string pod_names = 3;
+  repeated Severity severities = 4;
+  repeated string tags = 5;
+}
+
+enum EventType {
+  EVENT_TYPE_ALL = 0;
+  EVENT_TYPE_POD_CREATED = 1;
+  EVENT_TYPE_POD_DELETED = 2;
+  EVENT_TYPE_POD_OOM_KILLED = 3;
+  EVENT_TYPE_RESOURCE_EXHAUSTION = 4;
+}
+
+message EventStreamResponse {
+  Event event = 1;
+}
+
+message Event {
+  string id = 1;
+  string type = 2;
+  string cluster_id = 3;
+  string namespace = 4;
+  string resource_name = 5;
+  Severity severity = 6;
+  string message = 7;
+  google.protobuf.Timestamp timestamp = 8;
+  map<string, string> details = 9;
+  repeated string tags = 10;
+  string correlation_id = 11;
+}
+
+enum Severity {
+  SEVERITY_INFO = 0;
+  SEVERITY_WARNING = 1;
+  SEVERITY_ERROR = 2;
+  SEVERITY_CRITICAL = 3;
+}
+
+// Actions
+message ActionRequest {
+  Action action = 1;
+}
+
+message ActionResponse {
+  bool success = 1;
+  string message = 2;
+  string action_id = 3;
+}
+
+message ActionStatusRequest {
+  string action_id = 1;
+}
+
+message ActionStatusResponse {
+  ActionStatus status = 1;
+  string result = 2;
+  string error = 3;
+  google.protobuf.Timestamp updated_at = 4;
+}
+
+message Action {
+  string id = 1;
+  string type = 2;
+  ActionTarget target = 3;
+  map<string, string> parameters = 4;
+  RiskLevel risk = 5;
+  string reason = 6;
+  Priority priority = 7;
+  int32 timeout_seconds = 8;
+}
+
+message ActionTarget {
+  string namespace = 1;
+  string name = 2;
+  string kind = 3;
+  string container = 4;
+}
+
+enum ActionStatus {
+  ACTION_STATUS_PENDING = 0;
+  ACTION_STATUS_RUNNING = 1;
+  ACTION_STATUS_COMPLETED = 2;
+  ACTION_STATUS_FAILED = 3;
+  ACTION_STATUS_CANCELLED = 4;
+}
+
+enum RiskLevel {
+  RISK_LEVEL_LOW = 0;
+  RISK_LEVEL_MEDIUM = 1;
+  RISK_LEVEL_HIGH = 2;
+}
+
+enum Priority {
+  PRIORITY_LOW = 0;
+  PRIORITY_MEDIUM = 1;
+  PRIORITY_HIGH = 2;
+  PRIORITY_CRITICAL = 3;
+}
+
+// Health
+message HealthResponse {
+  HealthStatus status = 1;
+  map<string, HealthStatus> checks = 2;
+}
+
+enum HealthStatus {
+  HEALTH_STATUS_UNKNOWN = 0;
+  HEALTH_STATUS_SERVING = 1;
+  HEALTH_STATUS_NOT_SERVING = 2;
+}
