@@ -163,7 +163,7 @@ type Config struct {
 	ConfigSource string // "default" or "crd"
 
 	// Cluster identity
-	ClusterID string // Unique cluster identifier used for events/metrics (from env CLUSTER_ID, default: cluster-unknown)
+	ClusterID   string // Unique cluster identifier used for events/metrics (from env CLUSTER_ID, default: cluster-unknown)
 	ClusterName string // Human-readable cluster name (env CLUSTER_NAME, default: default-cluster)
 	Environment string // Environment label (env ENVIRONMENT, e.g., prod/staging/dev, default: unknown)
 	Version     string // Operator version for gRPC/info responses (from build or env OPERATOR_VERSION)
