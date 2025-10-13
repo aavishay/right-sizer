@@ -1,0 +1,42 @@
+# Local values for right-sizer deployment using locally built image
+# This overrides the default values.yaml for local minikube deployment
+
+image:
+  repository: right-sizer
+  pullPolicy: Never  # Use Never for local images in minikube
+  tag: "0.2.1"
+
+# Development settings
+config:
+  logLevel: "debug"
+  dryRun: false
+
+# Resource settings for local development
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+# Enable all features for testing
+features:
+  enablePrediction: true
+  enableAIOps: true
+  enableDashboard: true
+  enableWebhook: true
+
+# Metrics configuration
+metricsPort: 9090
+
+# Service configuration
+service:
+  type: ClusterIP
+  port: 8082
+
+# Additional development annotations
+podAnnotations:
+  version: "0.2.1"
+  buildDate: "2025-10-13"
+  environment: "development"
