@@ -1,9 +1,9 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ include "rightsizer.fullname" . }}-config
+  name: {{ include "right-sizer.fullname" . }}-config
   labels:
-    {{- include "rightsizer.labels" . | nindent 4 }}
+    {{- include "right-sizer.labels" . | nindent 4 }}
 data:
   config.yaml: |
     # Right-Sizer Operator Configuration

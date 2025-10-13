@@ -1,7 +1,7 @@
 {{/*
 Expand the name of the chart.
 */}}
-{{- define "rightsizer.name" -}}
+{{- define "right-sizer.name" -}}
 {{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
@@ -10,7 +10,7 @@ Create a default fully qualified app name.
 We truncate at 63 chars because some Kubernetes name fields are limited to this (by the DNS naming spec).
 If release name contains chart name it will be used as a full name.
 */}}
-{{- define "rightsizer.fullname" -}}
+{{- define "right-sizer.fullname" -}}
 {{- if .Values.fullnameOverride }}
 {{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" }}
 {{- else }}
@@ -26,16 +26,16 @@ If release name contains chart name it will be used as a full name.
 {{/*
 Create chart name and version as used by the chart label.
 */}}
-{{- define "rightsizer.chart" -}}
+{{- define "right-sizer.chart" -}}
 {{- printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
 {{/*
 Common labels
 */}}
-{{- define "rightsizer.labels" -}}
-helm.sh/chart: {{ include "rightsizer.chart" . }}
-{{ include "rightsizer.selectorLabels" . }}
+{{- define "right-sizer.labels" -}}
+helm.sh/chart: {{ include "right-sizer.chart" . }}
+{{ include "right-sizer.selectorLabels" . }}
 {{- if .Chart.AppVersion }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 {{- end }}
@@ -45,17 +45,17 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{/*
 Selector labels
 */}}
-{{- define "rightsizer.selectorLabels" -}}
-app.kubernetes.io/name: {{ include "rightsizer.name" . }}
+{{- define "right-sizer.selectorLabels" -}}
+app.kubernetes.io/name: {{ include "right-sizer.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
 {{/*
 Create the name of the service account to use
 */}}
-{{- define "rightsizer.serviceAccountName" -}}
+{{- define "right-sizer.serviceAccountName" -}}
 {{- if .Values.serviceAccount.create }}
-{{- default (include "rightsizer.fullname" .) .Values.serviceAccount.name }}
+{{- default (include "right-sizer.fullname" .) .Values.serviceAccount.name }}
 {{- else }}
 {{- default "default" .Values.serviceAccount.name }}
 {{- end }}

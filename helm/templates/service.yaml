@@ -1,9 +1,9 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "rightsizer.fullname" . }}
+  name: {{ include "right-sizer.fullname" . }}
   labels:
-    {{- include "rightsizer.labels" . | nindent 4 }}
+    {{- include "right-sizer.labels" . | nindent 4 }}
 spec:
   type: {{ .Values.service.type }}
   ports:
@@ -20,4 +20,4 @@ spec:
       protocol: TCP
       name: api
   selector:
-    {{- include "rightsizer.selectorLabels" . | nindent 4 }}
+    {{- include "right-sizer.selectorLabels" . | nindent 4 }}

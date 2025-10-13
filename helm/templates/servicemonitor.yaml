@@ -18,9 +18,9 @@ Enable via:
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
-  name: {{ include "rightsizer.fullname" . }}
+  name: {{ include "right-sizer.fullname" . }}
   labels:
-    {{- include "rightsizer.labels" . | nindent 4 }}
+    {{- include "right-sizer.labels" . | nindent 4 }}
     {{- with .Values.serviceMonitor.labels }}
     {{- toYaml . | nindent 4 }}
     {{- end }}
@@ -30,7 +30,7 @@ spec:
   */ -}}
   selector:
     matchLabels:
-      {{- include "rightsizer.selectorLabels" . | nindent 6 }}
+      {{- include "right-sizer.selectorLabels" . | nindent 6 }}
   namespaceSelector:
     matchNames:
       - {{ default .Release.Namespace .Values.serviceMonitor.namespace }}

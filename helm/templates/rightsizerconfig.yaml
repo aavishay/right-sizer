@@ -1,10 +1,10 @@
 {{- if .Values.rightsizerConfig.create }}
-apiVersion: rightsizer.io/v1alpha1
+apiVersion: right-sizer.io/v1alpha1
 kind: RightSizerConfig
 metadata:
-  name: {{ include "rightsizer.fullname" . }}-config
+  name: {{ include "right-sizer.fullname" . }}-config
   labels:
-    {{- include "rightsizer.labels" . | nindent 4 }}
+    {{- include "right-sizer.labels" . | nindent 4 }}
 spec:
   # Core configuration
   enabled: {{ .Values.rightsizerConfig.enabled | default true }}
@@ -87,7 +87,7 @@ spec:
     enableAdmissionController: false
     admissionWebhookPort: 8443
     requireAnnotation: false
-    annotationKey: "rightsizer.io/enable"
+    annotationKey: "right-sizer.io/enable"
     enableMutatingWebhook: false
     enableValidatingWebhook: false
     tlsCertDir: "/tmp/certs"

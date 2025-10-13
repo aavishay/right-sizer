@@ -1,14 +1,14 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "rightsizer.fullname" . }}
+  name: {{ include "right-sizer.fullname" . }}
   labels:
-    {{- include "rightsizer.labels" . | nindent 4 }}
+    {{- include "right-sizer.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.replicaCount }}
   selector:
     matchLabels:
-      {{- include "rightsizer.selectorLabels" . | nindent 6 }}
+      {{- include "right-sizer.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       annotations:
@@ -16,9 +16,9 @@ spec:
         {{- toYaml . | nindent 8 }}
         {{- end }}
       labels:
-        {{- include "rightsizer.selectorLabels" . | nindent 8 }}
+        {{- include "right-sizer.selectorLabels" . | nindent 8 }}
     spec:
-      serviceAccountName: {{ include "rightsizer.serviceAccountName" . }}
+      serviceAccountName: {{ include "right-sizer.serviceAccountName" . }}
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
@@ -124,7 +124,7 @@ spec:
             - name: DASHBOARD_API_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.dashboard.apiToken.existingSecret | default (printf "%s-dashboard" (include "rightsizer.fullname" .)) }}
+                  name: {{ .Values.dashboard.apiToken.existingSecret | default (printf "%s-dashboard" (include "right-sizer.fullname" .)) }}
                   key: {{ .Values.dashboard.apiToken.key | default "api-token" }}
             {{- end }}
             {{- if .Values.dashboard.url }}
@@ -135,12 +135,12 @@ spec:
             - name: CLUSTER_ID
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.dashboard.cluster.existingSecret | default (printf "%s-cluster" (include "rightsizer.fullname" .)) }}
+                  name: {{ .Values.dashboard.cluster.existingSecret | default (printf "%s-cluster" (include "right-sizer.fullname" .)) }}
                   key: {{ .Values.dashboard.cluster.idKey | default "cluster-id" }}
             - name: CLUSTER_NAME
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.dashboard.cluster.existingSecret | default (printf "%s-cluster" (include "rightsizer.fullname" .)) }}
+                  name: {{ .Values.dashboard.cluster.existingSecret | default (printf "%s-cluster" (include "right-sizer.fullname" .)) }}
                   key: {{ .Values.dashboard.cluster.nameKey | default "cluster-name" }}
             {{- else }}
             {{- if .Values.dashboard.cluster.id }}
@@ -165,7 +165,7 @@ spec:
       volumes:
         - name: config
           configMap:
-            name: {{ include "rightsizer.fullname" . }}-config
+            name: {{ include "right-sizer.fullname" . }}-config
             optional: true
       {{- with .Values.nodeSelector }}
       nodeSelector:
