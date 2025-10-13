@@ -9,6 +9,8 @@ This directory contains comprehensive documentation for the Right-Sizer Kubernet
 - **[Troubleshooting K8s](troubleshooting-k8s.md)** - Kubernetes deployment issues and solutions
 
 ### Development & Testing
+- **[Testing Guide](TESTING_GUIDE.md)** - Comprehensive testing documentation (unit, integration, E2E)
+- **[Runtime Testing Guide](RUNTIME_TESTING_GUIDE.md)** - Runtime testing and validation procedures
 - **[GitHub Actions Testing](github-actions-testing.md)** - Local CI/CD testing with act
 - **[Act Testing Summary](act-testing-summary.md)** - Test results and validation status
 - **[Code Review Checklist](code-review-checklist.md)** - Comprehensive review guidelines
@@ -34,10 +36,11 @@ This directory contains comprehensive documentation for the Right-Sizer Kubernet
 3. Check [Minikube Deployment](minikube-deployment.md) for local testing
 
 ### For Developers
-1. Review [Code Review Checklist](code-review-checklist.md)
-2. Set up [GitHub Actions Testing](github-actions-testing.md)
-3. Understand [Feature Flag Implementation](feature-flag-implementation.md)
-4. Study [Prediction System](prediction-system.md) architecture
+1. Start with [Testing Guide](TESTING_GUIDE.md) for comprehensive testing
+2. Review [Code Review Checklist](code-review-checklist.md)
+3. Set up [GitHub Actions Testing](github-actions-testing.md)
+4. Understand [Feature Flag Implementation](feature-flag-implementation.md)
+5. Study [Prediction System](prediction-system.md) architecture
 
 ### For Reviewers
 1. Check [Review Summary](review-summary.md) for current status
@@ -49,6 +52,8 @@ This directory contains comprehensive documentation for the Right-Sizer Kubernet
 ```
 docs/
 ├── README.md                           # This file - Documentation index
+├── TESTING_GUIDE.md                   # Comprehensive testing documentation
+├── RUNTIME_TESTING_GUIDE.md           # Runtime testing procedures
 ├── installation-guide.md               # Setup and deployment instructions
 ├── troubleshooting-k8s.md             # Kubernetes deployment issues
 ├── github-actions-testing.md          # CI/CD testing guide
@@ -117,5 +122,5 @@ For questions about the documentation:
 
 ---
 
-*Last updated: September 2024*
-*Documentation version: 1.0*
+*Last updated: October 2024*
+*Documentation version: 1.1*

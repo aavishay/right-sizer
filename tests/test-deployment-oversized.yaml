@@ -1,0 +1,60 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: oversized-app
+  namespace: test-rightsizer
+  labels:
+    app: oversized-app
+    test: rightsizer
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: oversized-app
+  template:
+    metadata:
+      labels:
+        app: oversized-app
+        test: rightsizer
+      annotations:
+        rightsizer.io/enable: "true"
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:alpine
+        ports:
+        - containerPort: 80
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "200m"
+        # Add a simple health check
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 5
+          periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: oversized-app
+  namespace: test-rightsizer
+spec:
+  selector:
+    app: oversized-app
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 80
+  type: ClusterIP
