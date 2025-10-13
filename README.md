@@ -3,7 +3,7 @@
 # 🎯 Right-Sizer Operator
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
-[![Version](https://img.shields.io/badge/Version-0.2.2-green.svg)](https://github.com/aavishay/right-sizer/releases)
+[![Version](https://img.shields.io/badge/Version-0.2.1-green.svg)](https://github.com/aavishay/right-sizer/releases)
 [![Kubernetes](https://img.shields.io/badge/Kubernetes-1.33%2B-326ce5)](https://kubernetes.io)
 [![Go Version](https://img.shields.io/badge/Go-1.25-00ADD8)](https://golang.org)
 [![Helm](https://img.shields.io/badge/Helm-3.0%2B-0F1689)](https://helm.sh)
@@ -39,10 +39,10 @@ helm repo update
 helm install right-sizer right-sizer/right-sizer \
   --namespace right-sizer \
   --create-namespace \
-  --version 0.2.2
+  --version 0.2.1
 
 # Quick Install (Docker)
-docker pull aavishay/right-sizer:0.2.2  # Specific version
+docker pull aavishay/right-sizer:0.2.1  # Specific version
 docker pull aavishay/right-sizer:latest # Latest version
 ```
 
@@ -178,13 +178,13 @@ helm repo update
 
 # Install with default configuration
 helm install right-sizer right-sizer/right-sizer \
-  --version 0.2.2 \
+  --version 0.2.1 \
   --namespace right-sizer \
   --create-namespace
 
 # Or install with custom values
 helm install right-sizer right-sizer/right-sizer \
-  --version 0.2.2 \
+  --version 0.2.1 \
   --namespace right-sizer \
   --create-namespace \
   -f custom-values.yaml
@@ -201,8 +201,8 @@ cd right-sizer
 helm install right-sizer ./helm \
   --namespace right-sizer \
   --create-namespace \
-  --set image.tag=0.2.2 \
-  --version 0.2.2
+  --set image.tag=0.2.1 \
+  --version 0.2.1
 ```
 
 #### Option C: Local Development with Custom Build
@@ -236,10 +236,10 @@ helm install right-sizer ./helm \
 helm search repo right-sizer --versions
 
 # Install specific version
-helm install right-sizer right-sizer/right-sizer --version 0.2.2
+helm install right-sizer right-sizer/right-sizer --version 0.2.1
 
 # Or install from OCI registry
-helm install right-sizer oci://registry-1.docker.io/aavishay/right-sizer --version 0.2.2
+helm install right-sizer oci://registry-1.docker.io/aavishay/right-sizer --version 0.2.1
 ```
 
 #### Docker Image Tags
@@ -283,7 +283,7 @@ For detailed testing documentation, see the [Testing Guide](./docs/TESTING_GUIDE
 
 ```bash
 # Pull specific version
-docker pull aavishay/right-sizer:0.2.2
+docker pull aavishay/right-sizer:0.2.1
 docker pull aavishay/right-sizer:latest
 docker pull aavishay/right-sizer:main
 ```
@@ -304,20 +304,20 @@ helm install right-sizer right-sizer/right-sizer -f values.yaml
 ```bash
 # Development - Aggressive optimization
 helm install right-sizer right-sizer/right-sizer \
-  --version 0.2.2 \
+  --version 0.2.1 \
   --set rightsizerConfig.mode=aggressive \
   --set rightsizerConfig.operationalConfig.resizeInterval=30s
 
 # Production - Conservative with dry-run
 helm install right-sizer right-sizer/right-sizer \
-  --version 0.2.2 \
+  --version 0.2.1 \
   --set rightsizerConfig.mode=conservative \
   --set rightsizerConfig.dryRun=true \
   --set rightsizerConfig.operationalConfig.resizeInterval=10m
 
 # Cost Optimization Focus
 helm install right-sizer right-sizer/right-sizer \
-  --version 0.2.2 \
+  --version 0.2.1 \
   --set rightsizerConfig.mode=balanced \
   --set rightsizerConfig.globalConstraints.maxChangePercentage=30
 ```
@@ -355,7 +355,7 @@ kubectl apply -f examples/rightsizerconfig-full.yaml
 ```bash
 # Upgrade to latest version
 helm repo update
-helm upgrade right-sizer right-sizer/right-sizer --version 0.2.2
+helm upgrade right-sizer right-sizer/right-sizer --version 0.2.1
 
 # Uninstall
 helm uninstall right-sizer -n right-sizer
@@ -520,7 +520,7 @@ helm repo update
 helm install right-sizer right-sizer/right-sizer \
   --namespace right-sizer \
   --create-namespace \
-  --version 0.2.2
+  --version 0.2.1
 
 # OCI Registry Deployment
 helm install right-sizer oci://registry-1.docker.io/aavishay/right-sizer \
