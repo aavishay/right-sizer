@@ -8,7 +8,7 @@
 [![Go Version](https://img.shields.io/badge/Go-1.25-00ADD8)](https://golang.org)
 [![Helm](https://img.shields.io/badge/Helm-3.0%2B-0F1689)](https://helm.sh)
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED)](https://www.docker.com)
-[![Test Coverage](https://img.shields.io/badge/Coverage-Report-brightgreen)](./build/coverage/coverage.html)
+[![Test Coverage](https://img.shields.io/badge/Coverage-Report-brightgreen)](#-testing)
 [![API Docs](https://img.shields.io/badge/API-OpenAPI%203.0-orange)](./docs/api/openapi.yaml)
 [![CI/CD](https://github.com/aavishay/right-sizer/actions/workflows/test.yml/badge.svg)](https://github.com/aavishay/right-sizer/actions/workflows/test.yml)
 
@@ -61,7 +61,6 @@ docker pull aavishay/right-sizer:latest # Latest version
 - [Examples](#-examples)
 - [Performance & Limitations](#-performance--limitations)
 - [Monitoring & Observability](#-monitoring--observability)
-- [FAQ](#-frequently-asked-questions)
 - [Troubleshooting](#-troubleshooting)
 - [Contributing](#-contributing)
 - [Support](#-support)

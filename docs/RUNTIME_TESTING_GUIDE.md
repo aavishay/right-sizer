@@ -518,7 +518,7 @@ Expected performance characteristics:
 
 - [Architecture Review](./ARCHITECTURE_REVIEW.md)
 - [Implementation Status](./IMPLEMENTATION_STATUS.md)
-- [Immediate Action Plan](./IMMEDIATE_ACTION_PLAN.md)
+- [Quick Access Guide](./QUICK_ACCESS_GUIDE.md)
 - [Troubleshooting Guide](./troubleshooting-k8s.md)
 
 ---
