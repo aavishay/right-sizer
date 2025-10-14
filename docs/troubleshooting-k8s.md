@@ -326,7 +326,7 @@ If you continue to experience issues:
 
 1. **Check Documentation**
    - [Installation Guide](./installation-guide.md)
-   - [Configuration Reference](../README.md#⚙️-configuration)
+   - [Configuration Reference](../README.md#️-configuration)
    - [API Documentation](./api/openapi.yaml)
 
 2. **Search Existing Issues**
