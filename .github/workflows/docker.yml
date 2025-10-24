@@ -10,6 +10,9 @@ env:
   REGISTRY: docker.io
   IMAGE_NAME: aavishay/right-sizer
 
+permissions:
+  security-events: write
+
 jobs:
   docker-build-and-push:
     name: Docker Build and Push
