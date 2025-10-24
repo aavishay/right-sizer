@@ -28,6 +28,20 @@ jobs:
           helm lint helm/
           helm template test helm/
 
+      - name: Scan Helm chart with Trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: "config"
+          scan-ref: "helm/"
+          format: "sarif"
+          output: "trivy-helm-results.sarif"
+
+      - name: Upload Trivy scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: "trivy-helm-results.sarif"
+
   helm-publish:
     name: Publish Helm Chart
     runs-on: ubuntu-latest

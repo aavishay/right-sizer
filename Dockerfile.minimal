@@ -14,8 +14,9 @@ RUN CGO_ENABLED=0 go build -o operator minimal-operator.go
 
 # Final image
 FROM alpine:3.18
-RUN apk add --no-cache ca-certificates
-RUN adduser -D -s /bin/sh appuser
+RUN apk add --no-cache ca-certificates=20230506-r0 && \
+    adduser -D -s /bin/sh appuser && \
+    mkdir -p /app
 
 COPY --from=builder /build/operator /app/operator
 RUN chmod +x /app/operator

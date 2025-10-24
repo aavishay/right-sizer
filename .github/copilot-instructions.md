@@ -3,16 +3,26 @@
 Concise, project-specific guidance to be productive quickly. Focus on actual patterns in this repo (Go 1.25 Kubernetes operator). Keep changes small, align with existing structure, and validate with tests.
 
 ### 1. Big Picture
-Right-Sizer is a Kubernetes operator that performs zero-downtime in-place pod resource resizing (CPU & memory) for K8s 1.33+. Core loop: controllers watch CRDs (`RightSizerConfig`, `RightSizerPolicy`) + Pods → collect metrics (Metrics Server / Prometheus) → compute sizing (adaptive + prediction) → apply two-step in-place resize with `resizePolicy: NotRequired` (CPU first, then memory). Prediction subsystem augments decisions conservatively (only increases if prediction > current calculation with sufficient confidence).
+Right-Sizer is a Kubernetes operator that performs zero-downtime in-place pod resource resizing (CPU & memory) for K8s 1.33+. Core loop: controllers watch CRDs (`RightSizerConfig`, `RightSizerPolicy`) + Pods → collect metrics (Metrics Server / Prometheus) → compute sizing (adaptive + prediction) → apply two-step in-place resize with `resizePolicy: NotRequired` (CPU first, then memory).
+
+**Event-Driven Architecture**: The system has evolved to include a comprehensive event-driven foundation (`events/`) with WebSocket streaming, gRPC API, and remediation engine. Events flow: K8s Events → Event-Driven Controller → Event Bus → {Dashboard, Remediation, Audit}.
+
+**Multi-API Integration**: Exposes WebSocket (8082), gRPC (9090), and REST/Prometheus (8080) endpoints for dashboard integration and external tooling. The `api/grpc/` directory contains full service definitions for cluster information, metrics querying, and action execution.
+
+Prediction subsystem augments decisions conservatively (only increases if prediction > current calculation with sufficient confidence).
 
 ### 2. Key Directories & Roles
-- `go/main.go`: Bootstrap, capability detection (pods/resize, metrics), controller & webhook setup, leader election.
-- `go/config/`: Global config (singleton `Load()`), CRD override precedence: CRD > env > defaults. Add new fields here and update controller logic.
-- `go/controllers/`: Reconciliation + resizing logic (`adaptive_rightsizer.go`, `inplace_rightsizer.go`). Large file = many responsibilities—follow existing helper patterns when extending.
+- `go/main.go`: Bootstrap, capability detection (pods/resize, metrics), controller & webhook setup, leader election. Comprehensive startup with gRPC/WebSocket servers.
+- `go/config/`: Global config (singleton `Load()`), CRD override precedence: CRD > env > defaults. Thread-safe with `sync.RWMutex`. Add new fields here and update controller logic.
+- `go/controllers/`: Reconciliation + resizing logic (`adaptive_rightsizer.go` 2000+ lines, `inplace_rightsizer.go`, `event_driven_controller.go`). Large files = many responsibilities—follow existing helper patterns when extending.
+- `go/events/`: Event-driven foundation with `types.go` (event taxonomy), `bus.go` (subscription system), `streaming.go` (WebSocket API).
+- `go/api/grpc/`: Full gRPC service definitions and server implementation for external integrations.
+- `go/remediation/`: Action framework for automated pod restarts, resource updates, scaling operations.
 - `go/policy/`: Policy evaluation & priority resolution.
 - `go/metrics/`: Provider abstraction; default metrics-server, optional Prometheus.
-- `go/predictor/`: Pluggable algorithms (linear regression, exponential smoothing, moving average) with confidence thresholds.
+- `go/predictor/`: Pluggable algorithms (linear regression, exponential smoothing, moving average) with confidence thresholds and memory store.
 - `go/admission/`: Webhooks (validation/mutation) that can inject resize policies.
+- `go/audit/`, `go/validation/`, `go/retry/`, `go/health/`: Supporting subsystems with focused responsibilities.
 - `helm/`: Deployment artifacts (CRDs in `helm/crds/`). Keep CRD schema changes synchronized.
 
 ### 3. Resource Resize Pattern (Do Not Break)
@@ -28,10 +38,13 @@ Expose new metrics using Prometheus client but register defensively (see `regist
 In adaptive calculations: only adopt prediction result when `prediction.Confidence >= cfg.PredictionConfidenceThreshold` and predicted value > base. Never downscale purely on prediction. If adding algorithms, implement strategy interface, add name to `PredictionMethods`, update confidence logic and tests.
 
 ### 7. Testing Workflow
-- Unit tests: `go test -v ./...` from `go/`.
-- Coverage: `go test -cover ./...` (HTML in `build/coverage/coverage.html`).
-- E2E (local minikube): use Makefile targets `mk-start`, `mk-build-image`, `mk-deploy`, `mk-test` for rapid cycle.
-Add tests near implementation file (`controllers/resize_policy_test.go`, `controllers/resize_test.go`). For large controller changes, isolate logic into small pure functions first and test them separately.
+- **Unit tests**: `go test -v ./...` from `go/` directory.
+- **Coverage**: `go test -cover ./...` (HTML output in `build/coverage/coverage.html`).
+- **E2E (minikube rapid cycle)**: `make mk-start mk-build-image mk-deploy mk-enable-metrics mk-policy mk-test` - builds multiplatform image, deploys to minikube with demo workload.
+- **Cleanup**: `make mk-clean` (resources) or `make mk-destroy` (full teardown).
+- **Local build**: `make build` produces binaries in `build/` directory with proper version ldflags.
+
+**Test Structure**: Add tests near implementation files (`controllers/*_test.go`, `predictor/predictor_test.go`). Controllers have comprehensive test coverage including edge cases (`guaranteed_qos_test.go`, `memory_limit_edge_cases_test.go`, `self_protection_test.go`). For large controller changes, isolate logic into small pure functions first and test them separately.
 
 ### 8. Safe Change Checklist (Internal Pattern)
 1. Update config struct & defaults.
@@ -71,6 +84,12 @@ Binary version comes from ldflags (`main.Version`). If changing build info field
 
 ### 17. When Unsure
 Search similar patterns in `adaptive_rightsizer.go` before creating new abstractions. Prefer extraction (ResourceCalculator style) to duplicating blocks. Ask (via PR description) if changing public CRD fields or resize semantics.
+
+### 18. Version & Release Management
+Binary version controlled by `VERSION` file (currently 0.2.1) and injected via Makefile ldflags (`main.Version`, `main.GitCommit`, `main.BuildDate`). Multi-platform Docker builds use buildx with linux/amd64,linux/arm64. Helm chart versioning tracks operator version. Update VERSION file for releases and ensure CRD compatibility.
+
+### 19. Event-Driven Development Patterns
+When extending event functionality: follow `events/types.go` taxonomy, implement handlers in `remediation/`, stream via `events/streaming.go` WebSocket API. Event correlation uses unique IDs; maintain backward compatibility for dashboard integration. gRPC service extensions go in `api/grpc/` with proto-first development.
 
 ---
 Questions or unclear conventions? Surface them early—maintainers favor small iterative PRs over large rewrites.

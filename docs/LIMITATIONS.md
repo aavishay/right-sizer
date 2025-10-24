@@ -55,11 +55,11 @@ The memory decrease handling is implemented in:
 currentMemLimit := currentResources.Limits.Memory()
 newMemLimit := update.NewResources.Limits.Memory()
 
-memoryLimitDecreased := currentMemLimit != nil && newMemLimit != nil && 
+memoryLimitDecreased := currentMemLimit != nil && newMemLimit != nil &&
                         currentMemLimit.Cmp(*newMemLimit) > 0
 
 if memoryLimitDecreased {
-    log.Printf("⚠️  Cannot decrease memory for pod %s/%s", 
+    log.Printf("⚠️  Cannot decrease memory for pod %s/%s",
                update.Namespace, update.Name)
     // Keep current memory values, apply CPU changes only
 }
@@ -179,10 +179,10 @@ spec:
     memory:
       # Set high scale-down threshold to prevent decreases
       scaleDownThreshold: 0.1  # Only decrease if usage < 10%
-      
+
       # Or use conservative mode
   defaultMode: conservative  # Less aggressive with decreases
-  
+
   globalConstraints:
     # Prevent any memory decreases
     preventMemoryDecrease: true  # Future feature (not yet implemented)
@@ -451,5 +451,5 @@ A: No, Right-Sizer detects this limitation and skips the memory decrease. Your p
 
 ---
 
-**Last Updated:** 2024  
+**Last Updated:** 2024
 **Applies to:** Right-Sizer v0.2.0+, Kubernetes 1.33+

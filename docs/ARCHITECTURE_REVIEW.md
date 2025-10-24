@@ -1,8 +1,8 @@
 # Right-Sizer Operator - Architecture Review
 
-**Version:** 0.2.0  
-**Review Date:** 2024  
-**Reviewer:** Architecture Analysis  
+**Version:** 0.2.0
+**Review Date:** 2024
+**Reviewer:** Architecture Analysis
 
 ---
 

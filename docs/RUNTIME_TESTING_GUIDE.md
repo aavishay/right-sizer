@@ -523,5 +523,5 @@ Expected performance characteristics:
 
 ---
 
-**Last Updated:** 2024  
+**Last Updated:** 2024
 **Test Script:** `scripts/test-metrics-fix.sh`

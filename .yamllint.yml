@@ -1,0 +1,71 @@
+extends: default
+
+rules:
+  # Allow longer lines for readability in configs
+  line-length:
+    max: 130
+    level: warning
+
+  # Use 2 spaces for indentation (common in YAML)
+  indentation:
+    spaces: 2
+    indent-sequences: true
+    check-multi-line-strings: false
+
+  # Allow empty values in mappings
+  empty-values:
+    forbid-in-block-mappings: false
+    forbid-in-flow-mappings: false
+
+  # Be more lenient with comments
+  comments:
+    require-starting-space: false
+    min-spaces-from-content: 1
+
+  # Allow trailing spaces in empty lines
+  empty-lines:
+    max-start: 2
+    max-end: 1
+    max: 2
+
+  # Allow hyphens in names
+  hyphens:
+    max-spaces-after: 1
+
+  # Allow truthy values
+  truthy:
+    allowed-values: ["true", "false", "yes", "no", "on", "off"]
+    check-keys: false
+
+  # Allow brackets in flow style
+  brackets:
+    max-spaces-inside: 1
+    min-spaces-inside: 0
+
+  # Allow commas in flow style
+  commas:
+    max-spaces-after: 1
+    max-spaces-before: 0
+    min-spaces-after: 1
+
+  # Allow colons
+  colons:
+    max-spaces-after: 1
+    max-spaces-before: 0
+
+  # Allow document start/end markers
+  document-start: disable
+  document-end: disable
+
+  # Allow octal values
+  octal-values:
+    forbid-implicit-octal: false
+    forbid-explicit-octal: false
+
+  # Allow quoted strings
+  quoted-strings: disable
+
+  # Allow anchors and aliases
+  anchors:
+    forbid-undeclared-aliases: true
+    forbid-duplicated-anchors: true

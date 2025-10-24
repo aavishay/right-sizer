@@ -25,16 +25,23 @@ serviceAccount:
 
 podAnnotations: {}
 
-podSecurityContext: {}
-  # fsGroup: 2000
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65534
+  runAsGroup: 65534
+  fsGroup: 65534
+  seccompProfile:
+    type: RuntimeDefault
 
-securityContext: {}
-  # capabilities:
-  #   drop:
-  #   - ALL
-  # readOnlyRootFilesystem: true
-  # runAsNonRoot: true
-  # runAsUser: 1000
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 65534
+  runAsGroup: 65534
+  capabilities:
+    drop:
+      - ALL
 
 service:
   type: ClusterIP
@@ -78,7 +85,7 @@ dashboard:
     key: "api-token"
     # Additional annotations for the secret
     annotations: {}
-      # external-secrets.io/secret-store-ref: "my-secret-store"
+    # external-secrets.io/secret-store-ref: "my-secret-store"
 
   # Cluster identification
   cluster:
