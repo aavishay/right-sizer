@@ -16,7 +16,7 @@ ARG BUILD_DATE
 ARG GIT_COMMIT
 
 # Install build dependencies
-RUN apk add --no-cache git=2.40.1-r0 ca-certificates=20230506-r0 tzdata=2023c-r0
+RUN apk add --no-cache git ca-certificates tzdata
 
 WORKDIR /build
 
