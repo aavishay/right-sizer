@@ -33,82 +33,82 @@ repos:
         exclude: go/go\.(mod|sum)$
 
   - repo: local
-  hooks:
-    - id: go-fmt
-      name: Format Go code
-      entry: bash -c "cd go && go fmt ./..."
-      language: system
-      files: go/.*\.go$
-      pass_filenames: false
-    - id: go-vet
-      name: Run go vet
-      entry: bash -c "cd go && go vet ./..."
-      language: system
-      files: go/.*\.go$
-      pass_filenames: false
-    - id: go-mod-tidy
-      name: Tidy Go modules
-      entry: bash -c "cd go && go mod tidy"
-      language: system
-      files: go/go\.mod$
-      pass_filenames: false
-    - id: golangci-lint
-      name: Run golangci-lint
-      entry: bash -c "cd go && $(go env GOPATH)/bin/golangci-lint run ./..."
-      language: system
-      files: go/.*\.go$
-      pass_filenames: false
-    - id: go-test
-      name: Run Go tests with race detection
-      entry: bash -c "cd go && go test -race -v ./..."
-      language: system
-      files: go/.*\.go$
-      pass_filenames: false
-    - id: go-test-coverage
-      name: Run Go tests with coverage
-      entry: ./scripts/check-coverage.sh
-      language: system
-      files: go/.*\.go$
-      pass_filenames: false
-    - id: go-build
-      name: Build Go binary
-      entry: bash -c "cd go && go build ./..."
-      language: system
-      files: go/.*\.go$
-      pass_filenames: false
-    - id: go-security-scan
-      name: Run Go security scan
-      entry: bash -c "cd go && $(go env GOPATH)/bin/govulncheck ./..."
-      language: system
-      files: go/go\.(mod|sum)$
-      pass_filenames: false
-    - id: helm-lint
-      name: Lint Helm charts
-      entry: bash -c "helm lint helm"
-      language: system
-      files: helm/.*$
-      pass_filenames: false
-    - id: check-go-mod
-      name: Check Go module
-      entry: bash -c "cd go && go mod verify"
-      language: system
-      files: go/go\.(mod|sum)$
-      pass_filenames: false
-    - id: go-integration-test
-      name: Run Go integration tests
-      entry: bash -c "cd go && go test -tags=integration ./..."
-      language: system
-      files: go/.*\.go$
-      pass_filenames: false
-    - id: gosec
-      name: Run gosec security scanner
-      entry: bash -c "cd go && gosec -fmt json ./..."
-      language: system
-      files: go/.*\.go$
-      pass_filenames: false
-    - id: hadolint
-      name: Lint Dockerfiles with Hadolint
-      entry: docker run --rm hadolint/hadolint
-      language: system
-      files: Dockerfile.*$
-      pass_filenames: true
+    hooks:
+      - id: go-fmt
+        name: Format Go code
+        entry: bash -c "cd go && go fmt ./..."
+        language: system
+        files: go/.*\.go$
+        pass_filenames: false
+      - id: go-vet
+        name: Run go vet
+        entry: bash -c "cd go && go vet ./..."
+        language: system
+        files: go/.*\.go$
+        pass_filenames: false
+      - id: go-mod-tidy
+        name: Tidy Go modules
+        entry: bash -c "cd go && go mod tidy"
+        language: system
+        files: go/go\.mod$
+        pass_filenames: false
+      - id: golangci-lint
+        name: Run golangci-lint
+        entry: bash -c "cd go && $(go env GOPATH)/bin/golangci-lint run ./..."
+        language: system
+        files: go/.*\.go$
+        pass_filenames: false
+      - id: go-test
+        name: Run Go tests with race detection
+        entry: bash -c "cd go && go test -race -v ./..."
+        language: system
+        files: go/.*\.go$
+        pass_filenames: false
+      - id: go-test-coverage
+        name: Run Go tests with coverage
+        entry: ./scripts/check-coverage.sh
+        language: system
+        files: go/.*\.go$
+        pass_filenames: false
+      - id: go-build
+        name: Build Go binary
+        entry: bash -c "cd go && go build ./..."
+        language: system
+        files: go/.*\.go$
+        pass_filenames: false
+      - id: go-security-scan
+        name: Run Go security scan
+        entry: bash -c "cd go && $(go env GOPATH)/bin/govulncheck ./..."
+        language: system
+        files: go/go\.(mod|sum)$
+        pass_filenames: false
+      - id: helm-lint
+        name: Lint Helm charts
+        entry: bash -c "helm lint helm"
+        language: system
+        files: helm/.*$
+        pass_filenames: false
+      - id: check-go-mod
+        name: Check Go module
+        entry: bash -c "cd go && go mod verify"
+        language: system
+        files: go/go\.(mod|sum)$
+        pass_filenames: false
+      - id: go-integration-test
+        name: Run Go integration tests
+        entry: bash -c "cd go && go test -tags=integration ./..."
+        language: system
+        files: go/.*\.go$
+        pass_filenames: false
+      - id: gosec
+        name: Run gosec security scanner
+        entry: bash -c "cd go && gosec -fmt json ./..."
+        language: system
+        files: go/.*\.go$
+        pass_filenames: false
+      - id: hadolint
+        name: Lint Dockerfiles with Hadolint
+        entry: docker run --rm hadolint/hadolint
+        language: system
+        files: Dockerfile.*$
+        pass_filenames: true
