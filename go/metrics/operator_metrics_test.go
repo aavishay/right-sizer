@@ -126,3 +126,243 @@ func TestTimer(t *testing.T) {
 	duration := timer.Duration()
 	assert.GreaterOrEqual(t, duration, 100*time.Millisecond, "Duration should be at least 100ms")
 }
+
+func TestRecordPodResized(t *testing.T) {
+	operatorMetricsOnce = sync.Once{}
+	operatorMetricsInstance = nil
+
+	metrics := NewOperatorMetrics()
+	require.NotNil(t, metrics)
+
+	assert.NotPanics(t, func() {
+		metrics.RecordPodResized("default", "test-pod", "app", "cpu")
+		metrics.RecordPodResized("default", "test-pod", "app", "memory")
+	})
+}
+
+func TestRecordPodSkipped(t *testing.T) {
+	operatorMetricsOnce = sync.Once{}
+	operatorMetricsInstance = nil
+
+	metrics := NewOperatorMetrics()
+	require.NotNil(t, metrics)
+
+	assert.NotPanics(t, func() {
+		metrics.RecordPodSkipped("default", "test-pod", "system_namespace")
+		metrics.RecordPodSkipped("kube-system", "kube-proxy", "disabled")
+	})
+}
+
+func TestRecordProcessingError(t *testing.T) {
+	operatorMetricsOnce = sync.Once{}
+	operatorMetricsInstance = nil
+
+	metrics := NewOperatorMetrics()
+	require.NotNil(t, metrics)
+
+	assert.NotPanics(t, func() {
+		metrics.RecordProcessingError("default", "test-pod", "metrics_unavailable")
+		metrics.RecordProcessingError("default", "test-pod", "validation_failed")
+	})
+}
+
+func TestRecordResourceAdjustment(t *testing.T) {
+	operatorMetricsOnce = sync.Once{}
+	operatorMetricsInstance = nil
+
+	metrics := NewOperatorMetrics()
+	require.NotNil(t, metrics)
+
+	assert.NotPanics(t, func() {
+		metrics.RecordResourceAdjustment("default", "test-pod", "app", "cpu", "increase", 25.5)
+		metrics.RecordResourceAdjustment("default", "test-pod", "app", "memory", "decrease", 10.2)
+		metrics.RecordResourceAdjustment("default", "test-pod", "app", "other", "increase", 5.0)
+	})
+}
+
+func TestRecordProcessingDuration(t *testing.T) {
+	operatorMetricsOnce = sync.Once{}
+	operatorMetricsInstance = nil
+
+	metrics := NewOperatorMetrics()
+	require.NotNil(t, metrics)
+
+	assert.NotPanics(t, func() {
+		metrics.RecordProcessingDuration("pod_resize", 250*time.Millisecond)
+		metrics.RecordProcessingDuration("metrics_collection", 100*time.Millisecond)
+	})
+}
+
+func TestRecordAPICall(t *testing.T) {
+	operatorMetricsOnce = sync.Once{}
+	operatorMetricsInstance = nil
+
+	metrics := NewOperatorMetrics()
+	require.NotNil(t, metrics)
+
+	assert.NotPanics(t, func() {
+		metrics.RecordAPICall("/api/v1/pods", "GET", 50*time.Millisecond)
+		metrics.RecordAPICall("/api/v1/pods/test-pod", "PATCH", 75*time.Millisecond)
+	})
+}
+
+func TestRecordMetricsCollection(t *testing.T) {
+	operatorMetricsOnce = sync.Once{}
+	operatorMetricsInstance = nil
+
+	metrics := NewOperatorMetrics()
+	require.NotNil(t, metrics)
+
+	assert.NotPanics(t, func() {
+		metrics.RecordMetricsCollection(150 * time.Millisecond)
+	})
+}
+
+func TestRecordSafetyThresholdViolation(t *testing.T) {
+	operatorMetricsOnce = sync.Once{}
+	operatorMetricsInstance = nil
+
+	metrics := NewOperatorMetrics()
+	require.NotNil(t, metrics)
+
+	assert.NotPanics(t, func() {
+		metrics.RecordSafetyThresholdViolation("default", "test-pod", "cpu")
+		metrics.RecordSafetyThresholdViolation("default", "test-pod", "memory")
+	})
+}
+
+func TestRecordResourceValidationError(t *testing.T) {
+	operatorMetricsOnce = sync.Once{}
+	operatorMetricsInstance = nil
+
+	metrics := NewOperatorMetrics()
+	require.NotNil(t, metrics)
+
+	assert.NotPanics(t, func() {
+		metrics.RecordResourceValidationError("quota", "exceeded")
+		metrics.RecordResourceValidationError("limits", "invalid")
+	})
+}
+
+func TestRecordRetryAttempt(t *testing.T) {
+	operatorMetricsOnce = sync.Once{}
+	operatorMetricsInstance = nil
+
+	metrics := NewOperatorMetrics()
+	require.NotNil(t, metrics)
+
+	assert.NotPanics(t, func() {
+		metrics.RecordRetryAttempt("resize_pod", 1)
+		metrics.RecordRetryAttempt("resize_pod", 2)
+		metrics.RecordRetryAttempt("resize_pod", 3)
+	})
+}
+
+func TestRecordRetrySuccess(t *testing.T) {
+	operatorMetricsOnce = sync.Once{}
+	operatorMetricsInstance = nil
+
+	metrics := NewOperatorMetrics()
+	require.NotNil(t, metrics)
+
+	assert.NotPanics(t, func() {
+		metrics.RecordRetrySuccess("resize_pod")
+		metrics.RecordRetrySuccess("update_status")
+	})
+}
+
+func TestUpdateClusterResourceUtilization(t *testing.T) {
+	operatorMetricsOnce = sync.Once{}
+	operatorMetricsInstance = nil
+
+	metrics := NewOperatorMetrics()
+	require.NotNil(t, metrics)
+
+	assert.NotPanics(t, func() {
+		metrics.UpdateClusterResourceUtilization("cpu", "node-1", 75.5)
+		metrics.UpdateClusterResourceUtilization("memory", "node-1", 82.3)
+		metrics.UpdateClusterResourceUtilization("cpu", "node-2", 45.2)
+	})
+}
+
+func TestUpdateNodeResourceAvailability(t *testing.T) {
+	operatorMetricsOnce = sync.Once{}
+	operatorMetricsInstance = nil
+
+	metrics := NewOperatorMetrics()
+	require.NotNil(t, metrics)
+
+	assert.NotPanics(t, func() {
+		metrics.UpdateNodeResourceAvailability("cpu", "node-1", 2000.0)
+		metrics.UpdateNodeResourceAvailability("memory", "node-1", 8192.0)
+	})
+}
+
+func TestRecordPolicyRuleApplication(t *testing.T) {
+	operatorMetricsOnce = sync.Once{}
+	operatorMetricsInstance = nil
+
+	metrics := NewOperatorMetrics()
+	require.NotNil(t, metrics)
+
+	assert.NotPanics(t, func() {
+		metrics.RecordPolicyRuleApplication("default-policy", "cpu_limit", "applied")
+		metrics.RecordPolicyRuleApplication("default-policy", "memory_limit", "skipped")
+	})
+}
+
+func TestRecordConfigurationReload(t *testing.T) {
+	operatorMetricsOnce = sync.Once{}
+	operatorMetricsInstance = nil
+
+	metrics := NewOperatorMetrics()
+	require.NotNil(t, metrics)
+
+	assert.NotPanics(t, func() {
+		metrics.RecordConfigurationReload()
+		metrics.RecordConfigurationReload()
+	})
+}
+
+func TestUpdateResourceTrendPrediction(t *testing.T) {
+	operatorMetricsOnce = sync.Once{}
+	operatorMetricsInstance = nil
+
+	metrics := NewOperatorMetrics()
+	require.NotNil(t, metrics)
+
+	assert.NotPanics(t, func() {
+		metrics.UpdateResourceTrendPrediction("default", "test-pod", "app", "cpu", "1h", 500.0)
+		metrics.UpdateResourceTrendPrediction("default", "test-pod", "app", "memory", "24h", 2048.0)
+	})
+}
+
+func TestUpdateHistoricalDataPoints(t *testing.T) {
+	operatorMetricsOnce = sync.Once{}
+	operatorMetricsInstance = nil
+
+	metrics := NewOperatorMetrics()
+	require.NotNil(t, metrics)
+
+	assert.NotPanics(t, func() {
+		metrics.UpdateHistoricalDataPoints(1000)
+		metrics.UpdateHistoricalDataPoints(2500)
+	})
+}
+
+func TestObserveDuration(t *testing.T) {
+	timer := NewTimer()
+	require.NotNil(t, timer)
+
+	time.Sleep(50 * time.Millisecond)
+
+	operatorMetricsOnce = sync.Once{}
+	operatorMetricsInstance = nil
+
+	metrics := NewOperatorMetrics()
+	require.NotNil(t, metrics)
+
+	assert.NotPanics(t, func() {
+		timer.ObserveDuration(metrics.ProcessingDuration.WithLabelValues("test_operation"))
+	})
+}
