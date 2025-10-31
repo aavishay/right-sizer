@@ -1,0 +1,35 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: right-sizer-dashboard-token
+  namespace: right-sizer
+  labels:
+    app.kubernetes.io/instance: rightsizer
+    app.kubernetes.io/name: right-sizer
+stringData:
+  api-token: "rst_cfff18ebc37730e8c9cfe5a288ba6fdf4dcc5daa41099a3e93e63a909d402c52"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: right-sizer-cluster-info
+  namespace: right-sizer
+  labels:
+    app.kubernetes.io/instance: rightsizer
+    app.kubernetes.io/name: right-sizer
+stringData:
+  cluster-id: "d643170e-f8ca-4bb9-b7d0-847c5abb8fc9"
+  cluster-name: "local-minikube"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: operator-dashboard-config
+  namespace: right-sizer
+  labels:
+    app.kubernetes.io/instance: rightsizer
+    app.kubernetes.io/name: right-sizer
+data:
+  dashboard-url: "http://rightsizer-api.right-sizer.svc.cluster.local:3000"
+  cluster-name: "local-minikube"
+  cluster-id: "d643170e-f8ca-4bb9-b7d0-847c5abb8fc9"

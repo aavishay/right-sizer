@@ -66,23 +66,26 @@ repos:
         files: go/.*\.go$
         pass_filenames: false
       - id: go-test-coverage
-        name: Run Go tests with coverage
+        name: Run Go tests with 90% coverage requirement
         entry: ./scripts/check-coverage.sh
         language: system
         files: go/.*\.go$
         pass_filenames: false
+        stages: [commit]
       - id: go-build
         name: Build Go binary
         entry: bash -c "cd go && go build ./..."
         language: system
         files: go/.*\.go$
         pass_filenames: false
+        stages: [commit]
       - id: go-security-scan
         name: Run Go security scan
         entry: bash -c "cd go && $(go env GOPATH)/bin/govulncheck ./..."
         language: system
         files: go/go\.(mod|sum)$
         pass_filenames: false
+        stages: [commit]
       - id: helm-lint
         name: Lint Helm charts
         entry: bash -c "helm lint helm"
@@ -107,6 +110,7 @@ repos:
         language: system
         files: go/.*\.go$
         pass_filenames: false
+        stages: [commit]
       - id: hadolint
         name: Lint Dockerfiles with Hadolint
         entry: bash -c "command -v docker >/dev/null 2>&1 && docker run --rm -v $(pwd):/workdir hadolint/hadolint \"$@\" || echo 'hadolint not available, skipping'"

@@ -101,3 +101,47 @@ mk-destroy: mk-clean
 	@echo "$(YELLOW)Deleting minikube profile 'rightsizer'...$(NC)"
 	minikube delete -p rightsizer
 	@echo "$(GREEN)Minikube profile deleted$(NC)"
+
+# Testing and Coverage Targets
+
+.PHONY: test
+test:
+	@echo "$(BLUE)Running unit tests...$(NC)"
+	cd go && go test -race -v ./...
+	@echo "$(GREEN)✅ All tests passed$(NC)"
+
+.PHONY: test-coverage
+test-coverage:
+	@echo "$(BLUE)Running unit tests with coverage analysis (90% required)...$(NC)"
+	./scripts/run-coverage-test.sh
+
+.PHONY: test-coverage-quick
+test-coverage-quick:
+	@echo "$(BLUE)Running coverage check (quick mode)...$(NC)"
+	cd go && go test -coverprofile=coverage.out -covermode=atomic ./...
+	@go tool cover -func=coverage.out | grep total
+	@echo "$(GREEN)Coverage summary complete$(NC)"
+
+.PHONY: coverage-html
+coverage-html: test-coverage-quick
+	@echo "$(BLUE)Generating HTML coverage report...$(NC)"
+	@mkdir -p build/coverage
+	@cd go && go tool cover -html=coverage.out -o ../build/coverage/coverage.html
+	@echo "$(GREEN)✅ Report generated: build/coverage/coverage.html$(NC)"
+	@echo "Opening report..."
+	@open build/coverage/coverage.html || xdg-open build/coverage/coverage.html || echo "Please open build/coverage/coverage.html manually"
+
+.PHONY: setup-precommit
+setup-precommit:
+	@echo "$(BLUE)Setting up pre-commit hooks...$(NC)"
+	./scripts/setup-precommit.sh
+
+.PHONY: pre-commit-run
+pre-commit-run:
+	@echo "$(BLUE)Running all pre-commit hooks...$(NC)"
+	pre-commit run --all-files
+
+.PHONY: pre-commit-skip
+pre-commit-skip:
+	@echo "$(YELLOW)Skipping pre-commit hooks...$(NC)"
+	@echo "Set environment: SKIP=go-test-coverage git commit -m 'message'"

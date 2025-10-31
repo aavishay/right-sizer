@@ -48,13 +48,20 @@ func NewClient() *Client {
 	clusterID := os.Getenv("CLUSTER_ID")
 	clusterName := os.Getenv("CLUSTER_NAME")
 
-	if baseURL == "" || apiToken == "" || clusterID == "" {
+	if baseURL == "" || apiToken == "" {
 		logger.Info("📊 Dashboard reporting disabled - missing required environment variables")
-		logger.Info("   Required: DASHBOARD_URL, DASHBOARD_API_TOKEN, CLUSTER_ID")
+		logger.Info("   Required: DASHBOARD_URL, DASHBOARD_API_TOKEN")
 		logger.Info("   DASHBOARD_URL: %s", baseURL)
 		logger.Info("   DASHBOARD_API_TOKEN: %s", maskToken(apiToken))
-		logger.Info("   CLUSTER_ID: %s", clusterID)
 		return &Client{enabled: false}
+	}
+
+	// Set defaults if not provided
+	if clusterID == "" {
+		clusterID = "default-cluster"
+	}
+	if clusterName == "" {
+		clusterName = "Right-Sizer Cluster"
 	}
 
 	logger.Info("📊 Dashboard reporting enabled")
