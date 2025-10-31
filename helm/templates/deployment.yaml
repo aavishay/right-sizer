@@ -131,27 +131,7 @@ spec:
             - name: DASHBOARD_URL
               value: {{ .Values.dashboard.url | quote }}
             {{- end }}
-            {{- if or .Values.dashboard.cluster.secretCreate .Values.dashboard.cluster.existingSecret }}
-            - name: CLUSTER_ID
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.dashboard.cluster.existingSecret | default (printf "%s-cluster" (include "right-sizer.fullname" .)) }}
-                  key: {{ .Values.dashboard.cluster.idKey | default "cluster-id" }}
-            - name: CLUSTER_NAME
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.dashboard.cluster.existingSecret | default (printf "%s-cluster" (include "right-sizer.fullname" .)) }}
-                  key: {{ .Values.dashboard.cluster.nameKey | default "cluster-name" }}
-            {{- else }}
-            {{- if .Values.dashboard.cluster.id }}
-            - name: CLUSTER_ID
-              value: {{ .Values.dashboard.cluster.id | quote }}
-            {{- end }}
-            {{- if .Values.dashboard.cluster.name }}
-            - name: CLUSTER_NAME
-              value: {{ .Values.dashboard.cluster.name | quote }}
-            {{- end }}
-            {{- end }}
+
             {{- if .Values.rightsizerConfig.metricsBuffer.reportingIntervalSeconds }}
             - name: REPORTING_INTERVAL
               value: {{ .Values.rightsizerConfig.metricsBuffer.reportingIntervalSeconds | quote }}

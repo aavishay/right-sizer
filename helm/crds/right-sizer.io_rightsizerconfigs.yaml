@@ -4,9 +4,9 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.19.0
-  name: rightsizerconfigs.rightsizer.io
+  name: rightsizerconfigs.right-sizer.io
 spec:
-  group: rightsizer.io
+  group: right-sizer.io
   names:
     kind: RightSizerConfig
     listKind: RightSizerConfigList

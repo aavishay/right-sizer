@@ -16,34 +16,34 @@ spec:
   defaultResourceStrategy:
     cpu:
       requestMultiplier: 1.2
-      requestAddition: 0
+      requestAddition: {{ .Values.rightsizerConfig.resourceDefaults.cpu.requestAddition | default 0 | int }}
       limitMultiplier: 2.0
-      limitAddition: 0
+      limitAddition: {{ .Values.rightsizerConfig.resourceDefaults.cpu.limitAddition | default 0 | int }}
       minRequest: "10m"
       maxLimit: "4000m"
       scaleUpThreshold: 0.8
       scaleDownThreshold: 0.3
     memory:
       requestMultiplier: 1.2
-      requestAddition: 0
+      requestAddition: {{ .Values.rightsizerConfig.resourceDefaults.memory.requestAddition | default 0 | int }}
       limitMultiplier: 2.0
-      limitAddition: 0
+      limitAddition: {{ .Values.rightsizerConfig.resourceDefaults.memory.limitAddition | default 0 | int }}
       minRequest: "64Mi"
       maxLimit: "8192Mi"
       scaleUpThreshold: 0.8
       scaleDownThreshold: 0.3
     historyWindow: "7d"
     algorithm: "percentile"
-    percentile: 95
+    percentile: {{ .Values.rightsizerConfig.sizingStrategy.percentile | default 95 | int }}
 
   # Global constraints for resource changes
   globalConstraints:
-    maxChangePercentage: {{ .Values.rightsizerConfig.constraints.maxChangePercentage | default 50 }}
-    minChangeThreshold: {{ .Values.rightsizerConfig.constraints.minChangeThreshold | default 5 }}
-    maxMemoryGB: {{ .Values.rightsizerConfig.constraints.maxMemoryGB | default 32 }}
-    maxCPUCores: {{ .Values.rightsizerConfig.constraints.maxCPUCores | default 16 }}
+    maxChangePercentage: {{ .Values.rightsizerConfig.constraints.maxChangePercentage | default 50 | int }}
+    minChangeThreshold: {{ .Values.rightsizerConfig.constraints.minChangeThreshold | default 5 | int }}
+    maxMemoryGB: {{ .Values.rightsizerConfig.constraints.maxMemoryGB | default 32 | int }}
+    maxCPUCores: {{ .Values.rightsizerConfig.constraints.maxCPUCores | default 16 | int }}
     cooldownPeriod: {{ .Values.rightsizerConfig.constraints.cooldownPeriod | default "5m" | quote }}
-    maxConcurrentResizes: {{ .Values.rightsizerConfig.constraints.maxConcurrentResizes | default 10 }}
+    maxConcurrentResizes: {{ .Values.rightsizerConfig.constraints.maxConcurrentResizes | default 10 | int }}
     respectPDB: {{ .Values.rightsizerConfig.constraints.respectPDB | default true }}
     respectHPA: {{ .Values.rightsizerConfig.constraints.respectHPA | default true }}
     respectVPA: {{ .Values.rightsizerConfig.constraints.respectVPA | default true }}
@@ -71,10 +71,10 @@ spec:
     enableAuditLog: {{ .Values.rightsizerConfig.logging.enableAudit | default true }}
     enableEvents: {{ .Values.rightsizerConfig.logging.enableEvents | default true }}
     enableMetricsExport: true
-    metricsPort: 9090
+    metricsPort: {{ .Values.rightsizerConfig.observability.metricsPort | default 9090 | int }}
     enableTracing: false
     enableProfiling: false
-    profilingPort: 6060
+    profilingPort: {{ .Values.rightsizerConfig.observability.profilingPort | default 6060 | int }}
     auditLogPath: "/var/log/rightsizer/audit.log"
     {{- with .Values.rightsizerConfig.observability }}
     {{- if .tracingEndpoint }}
@@ -85,13 +85,13 @@ spec:
   # Security configuration
   securityConfig:
     enableAdmissionController: false
-    admissionWebhookPort: 8443
+    admissionWebhookPort: {{ .Values.rightsizerConfig.security.admissionWebhookPort | default 8443 | int }}
     requireAnnotation: false
     annotationKey: "right-sizer.io/enable"
     enableMutatingWebhook: false
     enableValidatingWebhook: false
     tlsCertDir: "/tmp/certs"
-    webhookTimeoutSeconds: 10
+    webhookTimeoutSeconds: {{ .Values.rightsizerConfig.security.webhookTimeoutSeconds | default 10 | int }}
 
   # Operator configuration
   operatorConfig:
@@ -102,17 +102,17 @@ spec:
     leaderElectionRenewDeadline: "10s"
     leaderElectionRetryPeriod: "2s"
     syncPeriod: "30s"
-    maxConcurrentReconciles: 3
-    workerThreads: 10
-    qps: 20
-    burst: 30
-    retryAttempts: 3
+    maxConcurrentReconciles: {{ .Values.rightsizerConfig.operator.maxConcurrentReconciles | default 3 | int }}
+    workerThreads: {{ .Values.rightsizerConfig.operator.workerThreads | default 10 | int }}
+    qps: {{ .Values.rightsizerConfig.operator.qps | default 20 | int }}
+    burst: {{ .Values.rightsizerConfig.operator.burst | default 30 | int }}
+    retryAttempts: {{ .Values.rightsizerConfig.operator.retryAttempts | default 3 | int }}
     retryInterval: "5s"
-    healthProbePort: 8081
+    healthProbePort: {{ .Values.rightsizerConfig.operator.healthProbePort | default 8081 | int }}
     readinessEndpoint: "/readyz"
     livenessEndpoint: "/healthz"
     enableCircuitBreaker: true
-    circuitBreakerThreshold: 5
+    circuitBreakerThreshold: {{ .Values.rightsizerConfig.operator.circuitBreakerThreshold | default 5 | int }}
     reconcileInterval: "10m"
     maxRetries: 3
 
@@ -228,7 +228,7 @@ spec:
           {{- toYaml .headers | nindent 10 }}
         {{- end }}
         {{- if .retryCount }}
-        retryCount: {{ .retryCount }}
+        retryCount: {{ .retryCount | int }}
         {{- end }}
         {{- if .timeout }}
         timeout: {{ .timeout | quote }}

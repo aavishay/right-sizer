@@ -1,0 +1,15 @@
+dashboard:
+  url: "http://right-sizer.io:8080"
+  apiToken:
+    create: false
+    existingSecret: "right-sizer-dashboard-token"
+    key: "api-token"
+  cluster:
+    existingSecret: "right-sizer-cluster-info"
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi

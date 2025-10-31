@@ -527,10 +527,10 @@ helm install right-sizer oci://registry-1.docker.io/aavishay/right-sizer \
   --create-namespace
 
 # Development Deployment (Latest)
-docker pull aavishay/right-sizer:0.2.2
+docker pull aavishay/right-sizer:0.2.1
 helm install right-sizer right-sizer/right-sizer \
-  --set image.tag=0.2.2 \
-  --version 0.2.2
+  --set image.tag=0.2.1 \
+  --version 0.2.1
 
 # GitOps/ArgoCD Integration
 cat <<EOF | kubectl apply -f -
@@ -542,7 +542,7 @@ spec:
   source:
     repoURL: https://aavishay.github.io/right-sizer/charts
     chart: right-sizer
-    targetRevision: 0.2.2
+    targetRevision: 0.2.1
   destination:
     server: https://kubernetes.default.svc
     namespace: right-sizer
@@ -794,7 +794,7 @@ spec:
 #### 4. OCI registry installation fails
 ```bash
 # Use the correct registry URL
-helm install right-sizer oci://registry-1.docker.io/aavishay/right-sizer --version 0.2.2
+helm install right-sizer oci://registry-1.docker.io/aavishay/right-sizer --version 0.2.1
 ```
 ```bash
 # If you encounter version conflicts between Docker images and Helm charts:
