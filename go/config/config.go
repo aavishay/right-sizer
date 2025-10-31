@@ -167,6 +167,18 @@ type Config struct {
 	ClusterName string // Human-readable cluster name (env CLUSTER_NAME, default: default-cluster)
 	Environment string // Environment label (env ENVIRONMENT, e.g., prod/staging/dev, default: unknown)
 	Version     string // Operator version for gRPC/info responses (from build or env OPERATOR_VERSION)
+
+	// Dashboard integration configuration
+	DashboardEnabled           bool          // Enable integration with dashboard platform
+	DashboardURL               string        // Dashboard platform URL (env DASHBOARD_URL)
+	DashboardAPIToken          string        // API token for dashboard authentication (env DASHBOARD_API_TOKEN)
+	DashboardEnableBatching    bool          // Enable event batching to reduce API calls
+	DashboardBatchSize         int           // Number of events to batch before sending
+	DashboardBatchInterval     time.Duration // Interval for flushing event batches
+	DashboardEnableHeartbeat   bool          // Enable periodic heartbeat/status updates
+	DashboardHeartbeatInterval time.Duration // Interval for sending heartbeat
+	DashboardTimeout           time.Duration // HTTP timeout for dashboard API calls
+	DashboardRetryAttempts     int           // Number of retry attempts for failed requests
 }
 
 // Global config instance with thread-safe access
@@ -299,6 +311,18 @@ func GetDefaults() *Config {
 
 		// Mark as default configuration
 		ConfigSource: "default",
+
+		// Default dashboard integration configuration
+		DashboardEnabled:           false,
+		DashboardURL:               "",
+		DashboardAPIToken:          "",
+		DashboardEnableBatching:    true,
+		DashboardBatchSize:         50,
+		DashboardBatchInterval:     30 * time.Second,
+		DashboardEnableHeartbeat:   true,
+		DashboardHeartbeatInterval: 30 * time.Second,
+		DashboardTimeout:           10 * time.Second,
+		DashboardRetryAttempts:     3,
 	}
 
 	// Derive cluster ID from environment; fall back if unset
@@ -325,6 +349,16 @@ func GetDefaults() *Config {
 		version = "dev"
 	}
 	c.Version = version
+
+	// Load dashboard integration configuration from environment
+	if dashboardURL := os.Getenv("DASHBOARD_URL"); dashboardURL != "" {
+		c.DashboardURL = dashboardURL
+		c.DashboardEnabled = true
+	}
+
+	if dashboardToken := os.Getenv("DASHBOARD_API_TOKEN"); dashboardToken != "" {
+		c.DashboardAPIToken = dashboardToken
+	}
 
 	return c
 }
