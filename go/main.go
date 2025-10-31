@@ -33,6 +33,7 @@ import (
 	"right-sizer/config"
 	"right-sizer/controllers"
 	"right-sizer/dashboard"
+	dashboardapi "right-sizer/dashboard-api"
 	"right-sizer/health"
 	"right-sizer/logger"
 	"right-sizer/metrics"
@@ -386,20 +387,48 @@ func main() {
 	provider = metrics.NewMetricsServerProvider(mgr.GetClient())
 	healthChecker.UpdateComponentStatus("metrics-provider", true, "Metrics provider initialized")
 
-	// Initialize dashboard client for reporting cluster status and metrics
-	dashboardClient := dashboard.NewClient()
-	if dashboardClient.IsEnabled() {
-		// Start heartbeat reporting every 5 minutes
+	// Initialize new comprehensive dashboard client for real-time event streaming
+	var newDashboardClient *dashboardapi.Client
+	if cfg.DashboardEnabled && cfg.DashboardURL != "" {
+		clientConfig := dashboardapi.ClientConfig{
+			BaseURL:            cfg.DashboardURL,
+			APIToken:           cfg.DashboardAPIToken,
+			ClusterID:          cfg.ClusterID,
+			ClusterName:        cfg.ClusterName,
+			OperatorVersion:    cfg.Version,
+			EnableBatching:     cfg.DashboardEnableBatching,
+			BatchSize:          cfg.DashboardBatchSize,
+			BatchFlushInterval: cfg.DashboardBatchInterval,
+			EnableHeartbeat:    cfg.DashboardEnableHeartbeat,
+			HeartbeatInterval:  cfg.DashboardHeartbeatInterval,
+			Timeout:            cfg.DashboardTimeout,
+			RetryAttempts:      cfg.DashboardRetryAttempts,
+		}
+
+		newDashboardClient = dashboardapi.NewClient(clientConfig)
+		if err := newDashboardClient.Start(ctx); err != nil {
+			logger.Error("Failed to start dashboard client: %v", err)
+			healthChecker.UpdateComponentStatus("dashboard-client", false, fmt.Sprintf("Failed to start: %v", err))
+		} else {
+			logger.Info("✅ Dashboard integration started - url=%s cluster=%s", cfg.DashboardURL, cfg.ClusterName)
+			healthChecker.UpdateComponentStatus("dashboard-client", true, "Dashboard integration active")
+		}
+	} else {
+		logger.Info("📊 Dashboard integration disabled")
+		healthChecker.UpdateComponentStatus("dashboard-client", false, "Dashboard integration disabled")
+	}
+
+	// Keep legacy dashboard client for backwards compatibility (optional)
+	oldDashboardClient := dashboard.NewClient()
+	if oldDashboardClient.IsEnabled() {
 		reportingInterval := 5 * time.Minute
 		if envInterval := os.Getenv("REPORTING_INTERVAL"); envInterval != "" {
 			if parsed, err := time.ParseDuration(envInterval); err == nil {
 				reportingInterval = parsed
 			}
 		}
-		dashboardClient.StartHeartbeat(reportingInterval)
-		healthChecker.UpdateComponentStatus("dashboard-client", true, "Dashboard client initialized")
-	} else {
-		healthChecker.UpdateComponentStatus("dashboard-client", false, "Dashboard reporting disabled")
+		oldDashboardClient.StartHeartbeat(reportingInterval)
+		logger.Info("📊 Legacy dashboard client also started")
 	}
 
 	// Initialize retry configuration
@@ -614,6 +643,16 @@ func main() {
 	// Graceful shutdown
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
+
+	// Stop dashboard client and flush remaining events
+	if newDashboardClient != nil {
+		logger.Info("Stopping dashboard client and flushing events...")
+		if err := newDashboardClient.Stop(); err != nil {
+			logger.Error("Failed to stop dashboard client: %v", err)
+		} else {
+			logger.Info("✅ Dashboard client stopped gracefully")
+		}
+	}
 
 	// Cleanup components
 	if auditLogger != nil {
