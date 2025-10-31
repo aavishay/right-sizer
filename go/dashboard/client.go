@@ -187,14 +187,11 @@ func (c *Client) StartHeartbeat(interval time.Duration) {
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 
-		for {
-			select {
-			case <-ticker.C:
-				if err := c.UpdateClusterStatus("connected"); err != nil {
-					logger.Warn("📊 Failed to send heartbeat: %v", err)
-				} else {
-					logger.Debug("📊 Heartbeat sent successfully")
-				}
+		for range ticker.C {
+			if err := c.UpdateClusterStatus("connected"); err != nil {
+				logger.Warn("📊 Failed to send heartbeat: %v", err)
+			} else {
+				logger.Debug("📊 Heartbeat sent successfully")
 			}
 		}
 	}()

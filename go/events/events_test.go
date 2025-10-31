@@ -7,9 +7,9 @@ import (
 
 func TestEventType(t *testing.T) {
 	tests := []struct {
-		name     string
+		name      string
 		eventType string
-		valid    bool
+		valid     bool
 	}{
 		{
 			name:      "pod resize event",
@@ -122,10 +122,10 @@ func TestEventTimestamp(t *testing.T) {
 
 func TestEventFiltering(t *testing.T) {
 	tests := []struct {
-		name      string
-		eventType string
-		namespace string
-		severity  string
+		name        string
+		eventType   string
+		namespace   string
+		severity    string
 		shouldMatch bool
 	}{
 		{

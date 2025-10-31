@@ -170,11 +170,11 @@ func (c *Client) Start(ctx context.Context) error {
 		return nil
 	}
 
-	logger.Info("🔗 Starting dashboard integration", "url", c.config.BaseURL, "cluster", c.config.ClusterName)
+	logger.Info("🔗 Starting dashboard integration url=%s cluster=%s", c.config.BaseURL, c.config.ClusterName)
 
 	// Test connectivity
 	if err := c.HealthCheck(); err != nil {
-		logger.Error("Dashboard connectivity check failed", "error", err)
+		logger.Error("Dashboard connectivity check failed: %v", err)
 		// Don't fail startup, just log the error
 	} else {
 		logger.Info("✅ Dashboard connectivity verified")
@@ -202,7 +202,7 @@ func (c *Client) Stop() error {
 
 	// Flush remaining events
 	if err := c.FlushEvents(); err != nil {
-		logger.Error("Failed to flush events on shutdown", "error", err)
+		logger.Error("Failed to flush events on shutdown: %v", err)
 		return err
 	}
 
@@ -335,7 +335,7 @@ func (c *Client) doRequest(method, url string, payload interface{}, response int
 	for attempt := 0; attempt <= c.config.RetryAttempts; attempt++ {
 		if attempt > 0 {
 			time.Sleep(c.config.RetryDelay * time.Duration(attempt))
-			logger.Debug("Retrying dashboard request", "attempt", attempt, "url", url)
+			logger.Debug("Retrying dashboard request attempt=%d url=%s", attempt, url)
 		}
 
 		err := c.doRequestOnce(method, url, payload, response)
@@ -423,7 +423,7 @@ func (c *Client) batchFlushLoop(ctx context.Context) {
 			return
 		case <-ticker.C:
 			if err := c.FlushEvents(); err != nil {
-				logger.Error("Failed to flush event batch", "error", err)
+				logger.Error("Failed to flush event batch: %v", err)
 			}
 		}
 	}
@@ -447,7 +447,7 @@ func (c *Client) heartbeatLoop(ctx context.Context) {
 				Status: "healthy", // TODO: Get actual health status
 			}
 			if err := c.SendStatus(status); err != nil {
-				logger.Error("Failed to send heartbeat", "error", err)
+				logger.Error("Failed to send heartbeat: %v", err)
 			} else {
 				logger.Debug("💓 Heartbeat sent to dashboard")
 			}
