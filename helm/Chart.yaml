@@ -2,8 +2,8 @@ apiVersion: v2
 name: right-sizer
 description: A Helm chart for Kubernetes Right-Sizer operator
 type: application
-version: 0.2.1
-appVersion: "0.2.1"
+version: 0.2.2
+appVersion: "0.2.2"
 
 keywords:
   - kubernetes
