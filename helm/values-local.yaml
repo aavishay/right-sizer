@@ -4,7 +4,7 @@
 image:
   repository: right-sizer
   pullPolicy: Never  # Use Never for local images in minikube
-  tag: "0.2.2"
+  tag: "0.2.3"
 
 # Development settings
 config:
@@ -37,6 +37,6 @@ service:
 
 # Additional development annotations
 podAnnotations:
-  version: "0.2.2"
+  version: "0.2.3"
   buildDate: "2025-10-13"
   environment: "development"
