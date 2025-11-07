@@ -1234,10 +1234,10 @@ func SetupInPlaceRightSizer(mgr manager.Manager, provider metrics.Provider) erro
 
 	// Create retry manager for deferred resizes
 	retryConfig := DefaultRetryManagerConfig()
-	// TODO: Convert provider to OperatorMetrics when metric methods are available
-	// For now, pass nil to avoid type assertion issues
-	var operatorMetrics *metrics.OperatorMetrics = nil
-	retryManager := NewRetryManager(retryConfig, operatorMetrics, eventRecorder)
+	// NOTE: metrics passed as nil is intentional - RetryManager gracefully handles nil metrics
+	// See retry_manager.go lines 226-227 and 357-358 where nil checks are performed
+	// The metrics interface is not available from the provider context here
+	retryManager := NewRetryManager(retryConfig, nil, eventRecorder)
 
 	rightsizer := &InPlaceRightSizer{
 		Client:          mgr.GetClient(),

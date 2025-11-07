@@ -183,11 +183,15 @@ func (s *StreamingAPI) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 func (s *StreamingAPI) handleConnection(conn *Connection) {
 	defer func() {
 		s.removeConnection(conn.ID)
-		_ = conn.Conn.Close()
+		if err := conn.Conn.Close(); err != nil {
+			logger.Debug("Failed to close WebSocket connection: %v", err)
+		}
 	}()
 
 	conn.Conn.SetReadLimit(512)
-	_ = conn.Conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+	if err := conn.Conn.SetReadDeadline(time.Now().Add(60 * time.Second)); err != nil {
+		logger.Debug("Failed to set read deadline: %v", err)
+	}
 	conn.Conn.SetPongHandler(func(string) error {
 		conn.LastPing = time.Now()
 		return conn.Conn.SetReadDeadline(time.Now().Add(60 * time.Second))
@@ -213,15 +217,21 @@ func (s *StreamingAPI) writeConnection(conn *Connection) {
 	ticker := time.NewTicker(54 * time.Second)
 	defer func() {
 		ticker.Stop()
-		_ = conn.Conn.Close()
+		if err := conn.Conn.Close(); err != nil {
+			logger.Debug("Failed to close WebSocket connection in write handler: %v", err)
+		}
 	}()
 
 	for {
 		select {
 		case event, ok := <-conn.Send:
-			_ = conn.Conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+			if err := conn.Conn.SetWriteDeadline(time.Now().Add(10 * time.Second)); err != nil {
+				logger.Debug("Failed to set write deadline: %v", err)
+			}
 			if !ok {
-				_ = conn.Conn.WriteMessage(websocket.CloseMessage, []byte{})
+				if err := conn.Conn.WriteMessage(websocket.CloseMessage, []byte{}); err != nil {
+					logger.Debug("Failed to write close message: %v", err)
+				}
 				return
 			}
 
@@ -237,7 +247,9 @@ func (s *StreamingAPI) writeConnection(conn *Connection) {
 			}
 
 		case <-ticker.C:
-			_ = conn.Conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+			if err := conn.Conn.SetWriteDeadline(time.Now().Add(10 * time.Second)); err != nil {
+				logger.Debug("Failed to set write deadline for ping: %v", err)
+			}
 			if err := conn.Conn.WriteMessage(websocket.PingMessage, nil); err != nil {
 				return
 			}

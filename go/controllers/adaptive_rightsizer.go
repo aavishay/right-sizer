@@ -1482,7 +1482,7 @@ func (r *AdaptiveRightSizer) calculateOptimalResourcesWithPrediction(ctx context
 	baseCpuRequest := r.calculateBaseCpuRequest(usage, decision, cfg)
 	cpuRequest = baseCpuRequest
 
-	if cpuPrediction != nil && cpuPrediction.Confidence >= 0.6 { // Use hardcoded threshold for now
+	if cpuPrediction != nil && cpuPrediction.Confidence >= cfg.PredictionConfidenceThreshold {
 		// Use prediction if confidence is high enough
 		predictedCpuRequest := int64(cpuPrediction.Value * cfg.CPURequestMultiplier)
 
@@ -1502,7 +1502,7 @@ func (r *AdaptiveRightSizer) calculateOptimalResourcesWithPrediction(ctx context
 	baseMemRequest := r.calculateBaseMemoryRequest(usage, decision, cfg)
 	memRequest = baseMemRequest
 
-	if memoryPrediction != nil && memoryPrediction.Confidence >= 0.6 { // Use hardcoded threshold for now
+	if memoryPrediction != nil && memoryPrediction.Confidence >= cfg.PredictionConfidenceThreshold {
 		// Use prediction if confidence is high enough
 		predictedMemRequest := int64(memoryPrediction.Value * cfg.MemoryRequestMultiplier)
 
