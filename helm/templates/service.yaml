@@ -19,5 +19,9 @@ spec:
       targetPort: api
       protocol: TCP
       name: api
+    - port: 8081
+      targetPort: health
+      protocol: TCP
+      name: health
   selector:
     {{- include "right-sizer.selectorLabels" . | nindent 4 }}

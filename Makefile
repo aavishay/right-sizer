@@ -30,7 +30,7 @@ NC := \033[0m
 .PHONY: mk-start
 mk-start:
 	@echo "$(BLUE)Starting minikube (profile: rightsizer)...$(NC)"
-	minikube start -p rightsizer --kubernetes-version=stable --cpus=4 --memory=6144
+	minikube start -p rightsizer --kubernetes-version=stable --cpus=4
 	@echo "$(GREEN)Minikube started$(NC)"
 
 .PHONY: mk-enable-metrics
@@ -62,7 +62,7 @@ mk-deploy: mk-start mk-build-image
 	  --set image.repository=rightsizer \
 	  --set image.tag=test \
 	  --set image.pullPolicy=IfNotPresent
-	kubectl wait --for=condition=available deployment/rightsizer -n rightsizer --timeout=120s
+	kubectl wait --for=condition=available deployment/rightsizer-right-sizer -n rightsizer --timeout=120s
 	@echo "$(GREEN)Deployment available$(NC)"
 
 .PHONY: mk-policy
@@ -86,7 +86,7 @@ mk-test: mk-deploy mk-enable-metrics mk-policy
 	$(MAKE) mk-status
 	@echo ""
 	@echo "$(BLUE)Recent operator logs:$(NC)"
-	kubectl logs -n rightsizer deploy/rightsizer --tail=40
+	kubectl logs -n rightsizer deploy/rightsizer-right-sizer --tail=40
 	@echo "$(GREEN)Local e2e sequence completed$(NC)"
 
 .PHONY: mk-clean

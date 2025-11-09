@@ -99,21 +99,27 @@ type Metrics struct {
 	Metrics       map[string]interface{} `json:"metrics"`
 }
 
+// MetricsProvider provides operator metrics for heartbeat
+type MetricsProvider interface {
+	GetStatusMetrics() *StatusMetrics
+}
+
 // ClientConfig configures the dashboard API client
 type ClientConfig struct {
-	BaseURL            string        `json:"baseUrl"`
-	APIToken           string        `json:"apiToken"`
-	ClusterID          string        `json:"clusterId"`
-	ClusterName        string        `json:"clusterName"`
-	OperatorVersion    string        `json:"operatorVersion"`
-	Timeout            time.Duration `json:"timeout"`
-	RetryAttempts      int           `json:"retryAttempts"`
-	RetryDelay         time.Duration `json:"retryDelay"`
-	BatchSize          int           `json:"batchSize"`
-	BatchFlushInterval time.Duration `json:"batchFlushInterval"`
-	EnableBatching     bool          `json:"enableBatching"`
-	EnableHeartbeat    bool          `json:"enableHeartbeat"`
-	HeartbeatInterval  time.Duration `json:"heartbeatInterval"`
+	BaseURL            string          `json:"baseUrl"`
+	APIToken           string          `json:"apiToken"`
+	ClusterID          string          `json:"clusterId"`
+	ClusterName        string          `json:"clusterName"`
+	OperatorVersion    string          `json:"operatorVersion"`
+	Timeout            time.Duration   `json:"timeout"`
+	RetryAttempts      int             `json:"retryAttempts"`
+	RetryDelay         time.Duration   `json:"retryDelay"`
+	BatchSize          int             `json:"batchSize"`
+	BatchFlushInterval time.Duration   `json:"batchFlushInterval"`
+	EnableBatching     bool            `json:"enableBatching"`
+	EnableHeartbeat    bool            `json:"enableHeartbeat"`
+	HeartbeatInterval  time.Duration   `json:"heartbeatInterval"`
+	MetricsProvider    MetricsProvider `json:"-"` // Not serialized
 }
 
 // Client is the dashboard API client
@@ -446,6 +452,15 @@ func (c *Client) heartbeatLoop(ctx context.Context) {
 			status := Status{
 				Status: "healthy", // TODO: Get actual health status
 			}
+
+			// Get metrics from provider if available
+			if c.config.MetricsProvider != nil {
+				status.Metrics = c.config.MetricsProvider.GetStatusMetrics()
+			} else {
+				// Fallback to empty metrics
+				status.Metrics = &StatusMetrics{}
+			}
+
 			if err := c.SendStatus(status); err != nil {
 				logger.Error("Failed to send heartbeat: %v", err)
 			} else {
@@ -453,6 +468,11 @@ func (c *Client) heartbeatLoop(ctx context.Context) {
 			}
 		}
 	}
+}
+
+// SetMetricsProvider sets the metrics provider for heartbeat
+func (c *Client) SetMetricsProvider(provider MetricsProvider) {
+	c.config.MetricsProvider = provider
 }
 
 // httpError represents an HTTP error response
@@ -464,8 +484,6 @@ type httpError struct {
 func (e *httpError) Error() string {
 	return fmt.Sprintf("HTTP %d: %s", e.StatusCode, e.Body)
 }
-
-// Helper functions for creating events
 
 // NewResizeEvent creates a resize event
 func NewResizeEvent(eventType EventType, namespace, podName, containerName string, metadata map[string]interface{}) Event {
