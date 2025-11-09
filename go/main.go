@@ -34,6 +34,7 @@ import (
 	"right-sizer/controllers"
 	"right-sizer/dashboard"
 	dashboardapi "right-sizer/dashboard-api"
+	"right-sizer/events"
 	"right-sizer/health"
 	"right-sizer/logger"
 	"right-sizer/metrics"
@@ -527,7 +528,7 @@ func main() {
 	// Use AdaptiveRightSizer as the default implementation with rate limiting
 	// It will check for in-place resize capability based on CRD configuration
 	// The controller will respect the manager's rate limiting configuration
-	predictorEngine, err := controllers.SetupAdaptiveRightSizer(mgr, provider, auditLogger, cfg.DryRun)
+	predictorEngine, err := controllers.SetupAdaptiveRightSizer(mgr, provider, auditLogger, cfg.DryRun, newDashboardClient)
 	if err != nil {
 		logger.Error("unable to setup AdaptiveRightSizer: %v", err)
 		os.Exit(1)
@@ -568,17 +569,6 @@ func main() {
 	// In-memory store for recent optimization events (last 100 events)
 	// var optimizationEvents = make([]OptimizationEvent, 0, 100)
 	// var eventsMutex sync.RWMutex
-
-	// Start API server using the new API server module
-	go func() {
-		// Wait for configuration to be loaded from CRD
-		time.Sleep(5 * time.Second)
-
-		apiServer := api.NewServer(clientset, metricsClient, predictorEngine, operatorMetrics)
-		if err := apiServer.Start(8082); err != nil {
-			logger.Error("API server error: %v", err)
-		}
-	}()
 
 	// Start admission webhook (will be enabled/disabled based on CRD config)
 	go func() {
@@ -621,6 +611,48 @@ func main() {
 	} else {
 		logger.Info("🤖 AIOps Engine disabled: LLM_API_KEY environment variable not set.")
 	}
+
+	// Initialize event bus and recommendation manager
+	logger.Info("🔮 Initializing Event Bus and Recommendation Manager...")
+	eventBus := events.NewEventBus(1000) // Buffer size of 1000 events
+	recommendationManager := events.NewRecommendationManager(
+		clientset,
+		eventBus,
+		zapr.NewLogger(zapLog),
+		operatorMetrics,
+	)
+	if err := recommendationManager.Start(); err != nil {
+		logger.Error("Failed to start recommendation manager: %v", err)
+	} else {
+		logger.Info("✅ Recommendation manager started")
+	}
+
+	// Initialize predictive monitoring
+	logger.Info("🔮 Initializing Predictive Monitor...")
+	predictiveMonitor := events.NewPredictiveMonitor(
+		clientset,
+		metricsClient,
+		predictorEngine,
+		eventBus,
+		recommendationManager,
+		zapr.NewLogger(zapLog),
+	)
+	if err := predictiveMonitor.Start(ctx); err != nil {
+		logger.Error("Failed to start predictive monitor: %v", err)
+	} else {
+		logger.Info("✅ Predictive monitor started")
+	}
+
+	// Start API server using the new API server module
+	go func() {
+		// Wait for configuration to be loaded from CRD
+		time.Sleep(5 * time.Second)
+
+		apiServer := api.NewServer(clientset, metricsClient, predictorEngine, recommendationManager, operatorMetrics)
+		if err := apiServer.Start(8082); err != nil {
+			logger.Error("API server error: %v", err)
+		}
+	}()
 
 	// Start manager in a goroutine
 	managerDone := make(chan error, 1)
@@ -673,6 +705,16 @@ func main() {
 		if err := webhookManager.Stop(shutdownCtx); err != nil {
 			logger.Warn("Error stopping webhook manager: %v", err)
 		}
+	}
+
+	if predictiveMonitor != nil {
+		logger.Info("🔮 Stopping predictive monitor...")
+		predictiveMonitor.Stop()
+	}
+
+	if recommendationManager != nil {
+		logger.Info("📋 Stopping recommendation manager...")
+		recommendationManager.Stop()
 	}
 
 	// Log final statistics

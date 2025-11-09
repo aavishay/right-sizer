@@ -20,23 +20,28 @@ type EventType string
 
 const (
 	// Resource Events
-	EventResourceOptimized     EventType = "resource.optimized"
-	EventResourceExhaustion    EventType = "resource.exhaustion"
-	EventResourceUnderUtilized EventType = "resource.underutilized"
+	EventResourceOptimized      EventType = "resource.optimized"
+	EventResourceExhaustion     EventType = "resource.exhaustion"
+	EventResourceUnderUtilized  EventType = "resource.underutilized"
+	EventResourcePredictedOOM   EventType = "resource.predicted_oom"
+	EventResourcePredictedCrash EventType = "resource.predicted_crash"
 
 	// Pod Events
-	EventPodOOMKilled  EventType = "pod.oom_killed"
-	EventPodCrashLoop  EventType = "pod.crash_loop"
-	EventPodPending    EventType = "pod.pending"
-	EventPodEvicted    EventType = "pod.evicted"
-	EventPodStarted    EventType = "pod.started"
-	EventPodTerminated EventType = "pod.terminated"
+	EventPodOOMKilled        EventType = "pod.oom_killed"
+	EventPodCrashLoop        EventType = "pod.crash_loop"
+	EventPodPending          EventType = "pod.pending"
+	EventPodEvicted          EventType = "pod.evicted"
+	EventPodStarted          EventType = "pod.started"
+	EventPodTerminated       EventType = "pod.terminated"
+	EventPodFailed           EventType = "pod.failed"
+	EventPodPredictedFailure EventType = "pod.predicted_failure"
 
 	// Node Events
-	EventNodeReady         EventType = "node.ready"
-	EventNodeNotReady      EventType = "node.not_ready"
-	EventNodePressure      EventType = "node.pressure"
-	EventNodeResourcesFull EventType = "node.resources_full"
+	EventNodeReady            EventType = "node.ready"
+	EventNodeNotReady         EventType = "node.not_ready"
+	EventNodePressure         EventType = "node.pressure"
+	EventNodeResourcesFull    EventType = "node.resources_full"
+	EventNodePredictedFailure EventType = "node.predicted_failure"
 
 	// Controller Events
 	EventDeploymentScaled  EventType = "deployment.scaled"
@@ -48,6 +53,7 @@ const (
 	EventConfigurationChanged EventType = "system.config_changed"
 	EventRemediationApplied   EventType = "system.remediation_applied"
 	EventRemediationFailed    EventType = "system.remediation_failed"
+	EventRemediationProposed  EventType = "system.remediation_proposed"
 
 	// Dashboard Events
 	EventDashboardConnected    EventType = "dashboard.connected"
@@ -79,6 +85,16 @@ const (
 	SeverityWarning  Severity = "warning"
 	SeverityError    Severity = "error"
 	SeverityCritical Severity = "critical"
+)
+
+// Urgency represents recommendation urgency
+type Urgency string
+
+const (
+	UrgencyLow      Urgency = "low"
+	UrgencyMedium   Urgency = "medium"
+	UrgencyHigh     Urgency = "high"
+	UrgencyCritical Urgency = "critical"
 )
 
 // ResourceEvent contains resource-specific event data
@@ -130,6 +146,60 @@ type SystemEvent struct {
 	Duration  time.Duration          `json:"duration,omitempty"`
 	Metadata  map[string]interface{} `json:"metadata,omitempty"`
 }
+
+// PredictiveEvent contains predictive analysis event data
+type PredictiveEvent struct {
+	ResourceType      string                 `json:"resourceType"` // pod, node, deployment
+	ResourceName      string                 `json:"resourceName"`
+	Namespace         string                 `json:"namespace,omitempty"`
+	PredictionType    string                 `json:"predictionType"` // oom, crash, failure, pressure
+	Confidence        float64                `json:"confidence"`     // 0.0 to 1.0
+	TimeToEvent       time.Duration          `json:"timeToEvent"`    // estimated time until event
+	RecommendedAction string                 `json:"recommendedAction,omitempty"`
+	Evidence          map[string]interface{} `json:"evidence,omitempty"`
+}
+
+// Recommendation represents an actionable remediation suggestion
+type Recommendation struct {
+	ID             string                 `json:"id"`
+	EventID        string                 `json:"eventId"`
+	ResourceType   string                 `json:"resourceType"`
+	ResourceName   string                 `json:"resourceName"`
+	Namespace      string                 `json:"namespace,omitempty"`
+	Title          string                 `json:"title"`
+	Description    string                 `json:"description"`
+	Action         string                 `json:"action"`     // increase_memory, increase_cpu, drain_node, etc.
+	Parameters     map[string]interface{} `json:"parameters"` // action parameters
+	Urgency        Urgency                `json:"urgency"`
+	Severity       Severity               `json:"severity"`
+	Confidence     float64                `json:"confidence"`
+	TimeToAction   time.Duration          `json:"timeToAction"` // time until action needed
+	CreatedAt      time.Time              `json:"createdAt"`
+	ExpiresAt      time.Time              `json:"expiresAt"`
+	Status         RecommendationStatus   `json:"status"`
+	ApprovedBy     string                 `json:"approvedBy,omitempty"`
+	ApprovedAt     *time.Time             `json:"approvedAt,omitempty"`
+	RejectedBy     string                 `json:"rejectedBy,omitempty"`
+	RejectedAt     *time.Time             `json:"rejectedAt,omitempty"`
+	RejectedReason string                 `json:"rejectedReason,omitempty"`
+	ExecutedAt     *time.Time             `json:"executedAt,omitempty"`
+	Result         string                 `json:"result,omitempty"`
+	Error          string                 `json:"error,omitempty"`
+	Tags           []string               `json:"tags,omitempty"`
+}
+
+// RecommendationStatus represents the status of a recommendation
+type RecommendationStatus string
+
+const (
+	RecommendationStatusPending   RecommendationStatus = "pending"
+	RecommendationStatusApproved  RecommendationStatus = "approved"
+	RecommendationStatusRejected  RecommendationStatus = "rejected"
+	RecommendationStatusExpired   RecommendationStatus = "expired"
+	RecommendationStatusExecuting RecommendationStatus = "executing"
+	RecommendationStatusCompleted RecommendationStatus = "completed"
+	RecommendationStatusFailed    RecommendationStatus = "failed"
+)
 
 // NewEvent creates a new event with generated ID and timestamp
 func NewEvent(eventType EventType, clusterId, namespace, resource string, severity Severity, message string) *Event {

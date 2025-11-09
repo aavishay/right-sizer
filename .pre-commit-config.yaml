@@ -32,6 +32,10 @@ repos:
     hooks:
       - id: detect-secrets
         exclude: go/go\.(mod|sum)$
+        args:
+          # Exclude known non-sensitive files that trigger false positives
+          - --exclude-files
+          - '.*(SECRETS.md|migrate-to-secrets.sh|mongodb-cluster.yaml|mongodb-load-simple.yaml|monitoring-simple.yaml|monitoring-values.yaml|operator-dashboard-local.values.yaml|zz_generated.deepcopy.go|test-rate-config.yaml)$'
 
   - repo: local
     hooks:
@@ -107,7 +111,7 @@ repos:
 
       - id: hadolint
         name: Lint Dockerfiles with Hadolint
-        entry: bash -c "command -v docker >/dev/null 2>&1 && docker run --rm -v $(pwd):/workdir hadolint/hadolint \"$@\" || echo 'hadolint not available, skipping'"
+        entry: bash -c "command -v docker >/dev/null 2>&1 && docker run --rm -v $(pwd):/workdir -w /workdir hadolint/hadolint hadolint \"$@\" || echo 'hadolint not available, skipping'"
         language: system
         files: Dockerfile.*$
         pass_filenames: true

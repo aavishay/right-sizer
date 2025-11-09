@@ -26,6 +26,7 @@ import (
 
 	"right-sizer/audit"
 	"right-sizer/config"
+	dashboardapi "right-sizer/dashboard-api"
 	"right-sizer/logger"
 	"right-sizer/metrics"
 	"right-sizer/predictor"
@@ -85,7 +86,15 @@ type AdaptiveRightSizer struct {
 	runningMutex    sync.Mutex // Protects the isRunning flag
 	resizeCache     map[string]*ResizeDecisionCache
 	cacheMutex      sync.RWMutex
-	cacheExpiry     time.Duration // How long to keep cache entries
+	cacheExpiry     time.Duration        // How long to keep cache entries
+	DashboardClient *dashboardapi.Client // Dashboard API client for events and metrics
+	// Metrics for dashboard heartbeat
+	totalPods            int
+	managedPods          int
+	optimizationsApplied int
+	totalCPUUsage        float64
+	totalMemoryUsage     float64
+	metricsMutex         sync.RWMutex
 }
 
 // ResourceUpdate represents a pending resource update
@@ -267,7 +276,23 @@ func (r *AdaptiveRightSizer) performRightSizing(ctx context.Context) {
 		}
 	}()
 
+	// Reset metrics for this run
+	r.metricsMutex.Lock()
+	r.managedPods = 0
+	r.totalCPUUsage = 0.0
+	r.totalMemoryUsage = 0.0
+	r.optimizationsApplied = 0 // Reset or keep cumulative? Let's keep cumulative for now
+	r.metricsMutex.Unlock()
+
 	updates := []ResourceUpdate{}
+
+	// Get total pods count
+	var podList corev1.PodList
+	if err := r.Client.List(ctx, &podList); err == nil {
+		r.metricsMutex.Lock()
+		r.totalPods = len(podList.Items)
+		r.metricsMutex.Unlock()
+	}
 
 	// Analyze ALL pods directly (including those from deployments, statefulsets, etc)
 	// We will update pods directly using in-place resize, not their controllers
@@ -356,8 +381,32 @@ func (r *AdaptiveRightSizer) analyzeAllPods(ctx context.Context) ([]ResourceUpda
 			continue
 		}
 
+		// Update metrics counters
+		r.metricsMutex.Lock()
+		r.managedPods++
+		r.totalCPUUsage += podMetrics.CPUMilli
+		r.totalMemoryUsage += podMetrics.MemMB
+		r.metricsMutex.Unlock()
+
 		// Check each container in the pod
 		for i, container := range pod.Spec.Containers {
+			// Send metrics to dashboard for time-series data collection (once per pod)
+			if r.DashboardClient != nil && i == 0 { // Send once per pod, not per container
+				metrics := dashboardapi.Metrics{
+					Namespace:     pod.Namespace,
+					PodName:       pod.Name,
+					ContainerName: container.Name, // Note: metrics-server provides pod-level metrics
+					Metrics: map[string]interface{}{
+						"cpu_milli":      podMetrics.CPUMilli,
+						"memory_mb":      podMetrics.MemMB,
+						"cpu_percent":    0.0, // Would need current limits to calculate
+						"memory_percent": 0.0, // Would need current limits to calculate
+					},
+				}
+				if err := r.DashboardClient.SendMetrics(metrics); err != nil {
+					logger.Warn("Failed to send metrics to dashboard: %v", err)
+				}
+			}
 			// Check scaling thresholds first
 			scalingDecision := r.checkScalingThresholds(podMetrics, container.Resources)
 
@@ -414,7 +463,7 @@ func (r *AdaptiveRightSizer) analyzeAllPods(ctx context.Context) ([]ResourceUpda
 						oldCPUReq.String(), newCPUReq.String(),
 						oldMemReq.String(), newMemReq.String())
 				}
-				updates = append(updates, ResourceUpdate{
+				update := ResourceUpdate{
 					Namespace:      pod.Namespace,
 					Name:           pod.Name,
 					ResourceType:   "Pod",
@@ -423,7 +472,28 @@ func (r *AdaptiveRightSizer) analyzeAllPods(ctx context.Context) ([]ResourceUpda
 					OldResources:   container.Resources,
 					NewResources:   newResources,
 					Reason:         r.getAdjustmentReasonWithDecision(container.Resources, newResources, scalingDecision),
-				})
+				}
+				updates = append(updates, update)
+
+				// Send recommendation event to dashboard (only for new recommendations)
+				if r.shouldLogResizeDecision(pod.Namespace, pod.Name, container.Name,
+					oldCPUReq.String(), newCPUReq.String(), oldMemReq.String(), newMemReq.String()) {
+					if r.DashboardClient != nil {
+						event := dashboardapi.NewRecommendationEvent(
+							pod.Namespace, pod.Name, container.Name,
+							map[string]interface{}{
+								"oldResources": update.OldResources,
+								"newResources": update.NewResources,
+								"reason":       update.Reason,
+								"cpuUsage":     cpuUsagePercent,
+								"memoryUsage":  memUsagePercent,
+							},
+						)
+						if sendErr := r.DashboardClient.SendEvent(event); sendErr != nil {
+							logger.Warn("Failed to send recommendation event to dashboard: %v", sendErr)
+						}
+					}
+				}
 			}
 		}
 
@@ -537,8 +607,28 @@ func (r *AdaptiveRightSizer) applyUpdates(ctx context.Context, updates []Resourc
 			actualChanges, err := r.updatePodInPlace(ctx, update)
 			if err != nil {
 				log.Printf("❌ Error updating pod %s/%s: %v", update.Namespace, update.Name, err)
+				// Send error event to dashboard
+				if r.DashboardClient != nil {
+					event := dashboardapi.NewErrorEvent(
+						fmt.Sprintf("Failed to resize pod %s/%s: %v", update.Namespace, update.Name, err),
+						map[string]interface{}{
+							"namespace":     update.Namespace,
+							"podName":       update.Name,
+							"containerName": update.ContainerName,
+							"error":         err.Error(),
+							"reason":        update.Reason,
+						},
+					)
+					if sendErr := r.DashboardClient.SendEvent(event); sendErr != nil {
+						logger.Warn("Failed to send error event to dashboard: %v", sendErr)
+					}
+				}
 			} else if actualChanges != "" && !strings.Contains(actualChanges, "Skipped") && !strings.Contains(actualChanges, "already at target") {
 				log.Printf("✅ %s", actualChanges)
+				// Increment optimizations applied counter
+				r.metricsMutex.Lock()
+				r.optimizationsApplied++
+				r.metricsMutex.Unlock()
 			}
 
 			// Add small delay between pods within a batch to avoid rapid-fire API calls
@@ -954,6 +1044,26 @@ func (r *AdaptiveRightSizer) updatePodInPlace(ctx context.Context, update Resour
 	}
 
 	log.Printf("🎯 %s in pod %s/%s", successMsg, update.Namespace, update.Name)
+
+	// Send resize event to dashboard
+	if r.DashboardClient != nil {
+		event := dashboardapi.NewResizeEvent(
+			dashboardapi.EventResizeCompleted,
+			update.Namespace,
+			update.Name,
+			update.ContainerName,
+			map[string]interface{}{
+				"oldResources": update.OldResources,
+				"newResources": update.NewResources,
+				"reason":       update.Reason,
+				"successMsg":   successMsg,
+			},
+		)
+		if err := r.DashboardClient.SendEvent(event); err != nil {
+			logger.Warn("Failed to send resize event to dashboard: %v", err)
+		}
+	}
+
 	return successMsg, nil
 }
 
@@ -1166,7 +1276,25 @@ func hasCorrectResizePolicy(container *corev1.Container) bool {
 	return hasCPU && hasMemory
 }
 
-// Helper functions
+// GetStatusMetrics returns aggregated metrics for dashboard heartbeat
+func (r *AdaptiveRightSizer) GetStatusMetrics() *dashboardapi.StatusMetrics {
+	r.metricsMutex.RLock()
+	defer r.metricsMutex.RUnlock()
+
+	var avgCPU, avgMemory float64
+	if r.managedPods > 0 {
+		avgCPU = r.totalCPUUsage / float64(r.managedPods)
+		avgMemory = r.totalMemoryUsage / float64(r.managedPods)
+	}
+
+	return &dashboardapi.StatusMetrics{
+		TotalPods:            r.totalPods,
+		ManagedPods:          r.managedPods,
+		OptimizationsApplied: r.optimizationsApplied,
+		AvgCPUUsage:          avgCPU,
+		AvgMemoryUsage:       avgMemory,
+	}
+}
 
 func (r *AdaptiveRightSizer) getPodsForWorkload(ctx context.Context, namespace string, labels map[string]string) ([]corev1.Pod, error) {
 	var podList corev1.PodList
@@ -1886,7 +2014,7 @@ func getQoSClass(pod *corev1.Pod) corev1.PodQOSClass {
 }
 
 // SetupAdaptiveRightSizer creates and starts the adaptive rightsizer
-func SetupAdaptiveRightSizer(mgr manager.Manager, provider metrics.Provider, auditLogger *audit.AuditLogger, dryRun bool) (*predictor.Engine, error) {
+func SetupAdaptiveRightSizer(mgr manager.Manager, provider metrics.Provider, auditLogger *audit.AuditLogger, dryRun bool, dashboardClient *dashboardapi.Client) (*predictor.Engine, error) {
 	cfg := config.Get()
 
 	// Get the rest config from the manager
@@ -1926,6 +2054,12 @@ func SetupAdaptiveRightSizer(mgr manager.Manager, provider metrics.Provider, aud
 		DryRun:          dryRun,
 		resizeCache:     make(map[string]*ResizeDecisionCache),
 		cacheExpiry:     5 * time.Minute, // Cache entries for 5 minutes
+		DashboardClient: dashboardClient,
+	}
+
+	// Set metrics provider on dashboard client for heartbeat
+	if dashboardClient != nil {
+		dashboardClient.SetMetricsProvider(rightsizer)
 	}
 
 	// Start the rightsizer

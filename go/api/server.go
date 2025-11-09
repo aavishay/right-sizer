@@ -31,6 +31,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"right-sizer/events"
 	"right-sizer/logger"
 	"right-sizer/metrics"
 	"right-sizer/predictor"
@@ -71,11 +72,12 @@ const (
 
 // Server represents the API server
 type Server struct {
-	clientset       kubernetes.Interface
-	metricsClient   metricsclient.Interface
-	operatorMetrics *metrics.OperatorMetrics
-	predictor       *predictor.Engine // Resource prediction engine
-	optimizationOps atomic.Uint64     // counts optimization actions applied
+	clientset             kubernetes.Interface
+	metricsClient         metricsclient.Interface
+	operatorMetrics       *metrics.OperatorMetrics
+	predictor             *predictor.Engine // Resource prediction engine
+	recommendationManager *events.RecommendationManager
+	optimizationOps       atomic.Uint64 // counts optimization actions applied
 }
 
 // MetricSample stores a historical aggregate sample for time range filtering
@@ -147,16 +149,17 @@ func filterMetricsHistory(rangeParam string) []MetricSample {
 }
 
 // NewServer creates a new API server instance
-func NewServer(clientset kubernetes.Interface, metricsClient metricsclient.Interface, predictor *predictor.Engine, optMetrics ...*metrics.OperatorMetrics) *Server {
+func NewServer(clientset kubernetes.Interface, metricsClient metricsclient.Interface, predictor *predictor.Engine, recommendationManager *events.RecommendationManager, optMetrics ...*metrics.OperatorMetrics) *Server {
 	var m *metrics.OperatorMetrics
 	if len(optMetrics) > 0 {
 		m = optMetrics[0]
 	}
 	return &Server{
-		clientset:       clientset,
-		metricsClient:   metricsClient,
-		operatorMetrics: m,
-		predictor:       predictor,
+		clientset:             clientset,
+		metricsClient:         metricsClient,
+		operatorMetrics:       m,
+		predictor:             predictor,
+		recommendationManager: recommendationManager,
 	}
 }
 
@@ -197,6 +200,12 @@ func (s *Server) registerEndpoints() {
 
 	// Optimization events
 	http.HandleFunc("/api/optimization-events", s.handleOptimizationEvents)
+	http.HandleFunc("/api/recommendations", s.handleGetRecommendations)
+	http.HandleFunc("/api/recommendations/stats/summary", s.handleGetRecommendationStats)
+	http.HandleFunc("/api/recommendations/approve", s.handleApproveRecommendation)
+	http.HandleFunc("/api/recommendations/reject", s.handleRejectRecommendation)
+	http.HandleFunc("/api/recommendations/execute", s.handleExecuteRecommendation)
+	http.HandleFunc("/api/recommendations/", s.handleRecommendationByID)
 
 	// Proxy endpoints for metrics API
 	http.HandleFunc("/apis/metrics.k8s.io/v1beta1/nodes", s.handleNodesProxy)
@@ -1355,6 +1364,372 @@ func (s *Server) handlePredictionStats(w http.ResponseWriter, r *http.Request) {
 	// Get prediction engine statistics
 	stats := s.predictor.GetStats()
 	s.writeJSONResponse(w, stats)
+}
+
+// handleGetRecommendations handles /api/recommendations endpoint
+func (s *Server) handleGetRecommendations(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if s.recommendationManager == nil {
+		http.Error(w, "Recommendation manager not available", http.StatusServiceUnavailable)
+		return
+	}
+
+	// Parse query parameters for filtering
+	status := r.URL.Query().Get("status")   // pending, approved, rejected, etc.
+	urgency := r.URL.Query().Get("urgency") // low, medium, high, critical
+
+	var recommendations []*events.Recommendation
+
+	if status != "" {
+		var recStatus events.RecommendationStatus
+		switch status {
+		case "pending":
+			recStatus = events.RecommendationStatusPending
+		case "approved":
+			recStatus = events.RecommendationStatusApproved
+		case "rejected":
+			recStatus = events.RecommendationStatusRejected
+		case "expired":
+			recStatus = events.RecommendationStatusExpired
+		case "executing":
+			recStatus = events.RecommendationStatusExecuting
+		case "completed":
+			recStatus = events.RecommendationStatusCompleted
+		case "failed":
+			recStatus = events.RecommendationStatusFailed
+		default:
+			http.Error(w, "Invalid status parameter", http.StatusBadRequest)
+			return
+		}
+		recommendations = s.recommendationManager.GetRecommendationsByStatus(recStatus)
+	} else {
+		recommendations = s.recommendationManager.GetRecommendations()
+	}
+
+	// Filter by urgency if specified
+	if urgency != "" {
+		var filtered []*events.Recommendation
+		for _, rec := range recommendations {
+			if string(rec.Urgency) == urgency {
+				filtered = append(filtered, rec)
+			}
+		}
+		recommendations = filtered
+	}
+
+	// Map recommendations to frontend format
+	var mappedRecommendations []map[string]interface{}
+	for _, rec := range recommendations {
+		mapped := map[string]interface{}{
+			"id":                        rec.ID,
+			"type":                      rec.Action,
+			"title":                     rec.Title,
+			"description":               rec.Description,
+			"impact":                    rec.Description,
+			"savings":                   0,
+			"severity":                  strings.ToLower(string(rec.Urgency)),
+			"status":                    string(rec.Status),
+			"cluster_name":              "default-cluster",
+			"workload_name":             rec.ResourceName,
+			"namespace":                 rec.Namespace,
+			"created_at":                rec.CreatedAt.Format(time.RFC3339),
+			"estimated_monthly_savings": 0,
+		}
+		mappedRecommendations = append(mappedRecommendations, mapped)
+	}
+
+	response := map[string]interface{}{
+		"recommendations": mappedRecommendations,
+		"total":           len(mappedRecommendations),
+		"timestamp":       time.Now(),
+	}
+
+	s.writeJSONResponse(w, response)
+}
+
+// handleGetRecommendationStats handles /api/recommendations/stats/summary endpoint
+func (s *Server) handleGetRecommendationStats(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if s.recommendationManager == nil {
+		http.Error(w, "Recommendation manager not available", http.StatusServiceUnavailable)
+		return
+	}
+
+	recommendations := s.recommendationManager.GetRecommendations()
+
+	// Calculate stats
+	stats := map[string]interface{}{
+		"total_recommendations":   len(recommendations),
+		"pending":                 0,
+		"applied":                 0,
+		"dismissed":               0,
+		"critical":                0,
+		"high":                    0,
+		"medium":                  0,
+		"low":                     0,
+		"total_potential_savings": 0,
+		"realized_savings":        0,
+	}
+
+	for _, rec := range recommendations {
+		switch rec.Status {
+		case events.RecommendationStatusPending:
+			stats["pending"] = stats["pending"].(int) + 1
+		case events.RecommendationStatusApproved, events.RecommendationStatusExecuting, events.RecommendationStatusCompleted:
+			stats["applied"] = stats["applied"].(int) + 1
+		case events.RecommendationStatusRejected:
+			stats["dismissed"] = stats["dismissed"].(int) + 1
+		}
+
+		switch rec.Urgency {
+		case events.UrgencyCritical:
+			stats["critical"] = stats["critical"].(int) + 1
+		case events.UrgencyHigh:
+			stats["high"] = stats["high"].(int) + 1
+		case events.UrgencyMedium:
+			stats["medium"] = stats["medium"].(int) + 1
+		case events.UrgencyLow:
+			stats["low"] = stats["low"].(int) + 1
+		}
+	}
+
+	s.writeJSONResponse(w, stats)
+}
+
+// handleRecommendationByID handles /api/recommendations/{id}/{action} endpoints
+func (s *Server) handleRecommendationByID(w http.ResponseWriter, r *http.Request) {
+	path := strings.TrimPrefix(r.URL.Path, "/api/recommendations/")
+	parts := strings.Split(path, "/")
+	if len(parts) != 2 {
+		http.Error(w, "Invalid path", http.StatusBadRequest)
+		return
+	}
+
+	id := parts[0]
+	action := parts[1]
+
+	switch action {
+	case "apply":
+		s.handleApplyRecommendationByID(w, r, id)
+	case "dismiss":
+		s.handleDismissRecommendationByID(w, r, id)
+	default:
+		http.Error(w, "Unknown action", http.StatusBadRequest)
+	}
+}
+
+// handleApplyRecommendationByID handles apply action for specific recommendation
+func (s *Server) handleApplyRecommendationByID(w http.ResponseWriter, r *http.Request, id string) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if s.recommendationManager == nil {
+		http.Error(w, "Recommendation manager not available", http.StatusServiceUnavailable)
+		return
+	}
+
+	// Parse request body
+	var req struct {
+		AutoApply bool `json:"autoApply"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	// Approve the recommendation
+	if err := s.recommendationManager.ApproveRecommendation(id, "user"); err != nil {
+		logger.Error("Failed to approve recommendation: %v (id=%s)", err, id)
+		http.Error(w, "Failed to approve recommendation", http.StatusInternalServerError)
+		return
+	}
+
+	response := map[string]interface{}{
+		"message":          "Recommendation applied successfully",
+		"recommendationId": id,
+		"appliedAt":        time.Now(),
+	}
+
+	s.writeJSONResponse(w, response)
+}
+
+// handleDismissRecommendationByID handles dismiss action for specific recommendation
+func (s *Server) handleDismissRecommendationByID(w http.ResponseWriter, r *http.Request, id string) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if s.recommendationManager == nil {
+		http.Error(w, "Recommendation manager not available", http.StatusServiceUnavailable)
+		return
+	}
+
+	// Parse request body
+	var req struct {
+		Reason    string `json:"reason"`
+		Permanent bool   `json:"permanent"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	// Reject the recommendation
+	if err := s.recommendationManager.RejectRecommendation(id, "user", req.Reason); err != nil {
+		logger.Error("Failed to reject recommendation: %v (id=%s)", err, id)
+		http.Error(w, "Failed to dismiss recommendation", http.StatusInternalServerError)
+		return
+	}
+
+	response := map[string]interface{}{
+		"message":          "Recommendation dismissed successfully",
+		"recommendationId": id,
+		"dismissedAt":      time.Now(),
+	}
+
+	s.writeJSONResponse(w, response)
+}
+
+// handleApproveRecommendation handles /api/recommendations/approve endpoint
+func (s *Server) handleApproveRecommendation(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if s.recommendationManager == nil {
+		http.Error(w, "Recommendation manager not available", http.StatusServiceUnavailable)
+		return
+	}
+
+	// Parse request body
+	var req struct {
+		ID         string `json:"id"`
+		ApprovedBy string `json:"approvedBy"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	if req.ID == "" || req.ApprovedBy == "" {
+		http.Error(w, "Missing id or approvedBy", http.StatusBadRequest)
+		return
+	}
+
+	if err := s.recommendationManager.ApproveRecommendation(req.ID, req.ApprovedBy); err != nil {
+		logger.Error("Failed to approve recommendation: %v", err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	response := map[string]interface{}{
+		"status":    "approved",
+		"id":        req.ID,
+		"timestamp": time.Now(),
+	}
+
+	s.writeJSONResponse(w, response)
+}
+
+// handleRejectRecommendation handles /api/recommendations/reject endpoint
+func (s *Server) handleRejectRecommendation(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if s.recommendationManager == nil {
+		http.Error(w, "Recommendation manager not available", http.StatusServiceUnavailable)
+		return
+	}
+
+	// Parse request body
+	var req struct {
+		ID         string `json:"id"`
+		RejectedBy string `json:"rejectedBy"`
+		Reason     string `json:"reason"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	if req.ID == "" || req.RejectedBy == "" {
+		http.Error(w, "Missing id or rejectedBy", http.StatusBadRequest)
+		return
+	}
+
+	if err := s.recommendationManager.RejectRecommendation(req.ID, req.RejectedBy, req.Reason); err != nil {
+		logger.Error("Failed to reject recommendation: %v", err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	response := map[string]interface{}{
+		"status":    "rejected",
+		"id":        req.ID,
+		"timestamp": time.Now(),
+	}
+
+	s.writeJSONResponse(w, response)
+}
+
+// handleExecuteRecommendation handles /api/recommendations/execute endpoint
+func (s *Server) handleExecuteRecommendation(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if s.recommendationManager == nil {
+		http.Error(w, "Recommendation manager not available", http.StatusServiceUnavailable)
+		return
+	}
+
+	// Parse request body
+	var req struct {
+		ID string `json:"id"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	if req.ID == "" {
+		http.Error(w, "Missing id", http.StatusBadRequest)
+		return
+	}
+
+	if err := s.recommendationManager.ExecuteRecommendation(req.ID); err != nil {
+		logger.Error("Failed to execute recommendation: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	response := map[string]interface{}{
+		"status":    "executing",
+		"id":        req.ID,
+		"timestamp": time.Now(),
+	}
+
+	s.writeJSONResponse(w, response)
 }
 
 // writeJSONResponse writes JSON response
