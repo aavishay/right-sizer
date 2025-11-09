@@ -1,6 +1,6 @@
 # This is a comprehensive example of RightSizerConfig with all available fields
 # Most users won't need all these settings - this serves as a reference
-apiVersion: rightsizer.io/v1alpha1
+apiVersion: right-sizer.io/v1alpha1
 kind: RightSizerConfig
 metadata:
   name: right-sizer-config-full-example
@@ -138,7 +138,7 @@ spec:
 
 ---
 # Example of a minimal configuration for comparison
-apiVersion: rightsizer.io/v1alpha1
+apiVersion: right-sizer.io/v1alpha1
 kind: RightSizerConfig
 metadata:
   name: right-sizer-config-minimal
@@ -150,7 +150,7 @@ spec:
 
 ---
 # Example of a minimal configuration for comparison
-apiVersion: rightsizer.io/v1alpha1
+apiVersion: right-sizer.io/v1alpha1
 kind: RightSizerConfig
 metadata:
   name: right-sizer-config-minimal

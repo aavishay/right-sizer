@@ -63,6 +63,14 @@ type OperatorMetrics struct {
 	ResourceTrendPredictions *prometheus.GaugeVec
 	HistoricalDataPoints     prometheus.Gauge
 
+	// Recommendation metrics
+	RecommendationsTotal    *prometheus.CounterVec // rightsizer_recommendations_total
+	RecommendationsApproved prometheus.Counter     // rightsizer_recommendations_approved_total
+	RecommendationsRejected prometheus.Counter     // rightsizer_recommendations_rejected_total
+	RecommendationsExecuted prometheus.Counter     // rightsizer_recommendations_executed_total
+	RecommendationsExpired  prometheus.Counter     // rightsizer_recommendations_expired_total
+	PendingRecommendations  prometheus.Gauge       // rightsizer_recommendations_pending
+
 	// Aggregate metrics gauges
 	CPUUsagePercent         prometheus.Gauge // rightsizer_cpu_usage_percent
 	MemoryUsagePercent      prometheus.Gauge // rightsizer_memory_usage_percent
@@ -269,6 +277,39 @@ func createOperatorMetrics() *OperatorMetrics {
 			Name: "rightsizer_disk_io_mbps",
 			Help: "Estimated aggregate disk IO in MB/s (simulated or collected)",
 		}),
+		RecommendationsTotal: prometheus.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "rightsizer_recommendations_total",
+				Help: "Total number of recommendations created",
+			},
+			[]string{"urgency", "severity", "action"},
+		),
+
+		RecommendationsApproved: prometheus.NewCounter(prometheus.CounterOpts{
+			Name: "rightsizer_recommendations_approved_total",
+			Help: "Total number of recommendations approved",
+		}),
+
+		RecommendationsRejected: prometheus.NewCounter(prometheus.CounterOpts{
+			Name: "rightsizer_recommendations_rejected_total",
+			Help: "Total number of recommendations rejected",
+		}),
+
+		RecommendationsExecuted: prometheus.NewCounter(prometheus.CounterOpts{
+			Name: "rightsizer_recommendations_executed_total",
+			Help: "Total number of recommendations executed",
+		}),
+
+		RecommendationsExpired: prometheus.NewCounter(prometheus.CounterOpts{
+			Name: "rightsizer_recommendations_expired_total",
+			Help: "Total number of recommendations expired",
+		}),
+
+		PendingRecommendations: prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: "rightsizer_recommendations_pending",
+			Help: "Number of pending recommendations",
+		}),
+
 		AvgUtilizationPercent: prometheus.NewGauge(prometheus.GaugeOpts{
 			Name: "rightsizer_avg_utilization_percent",
 			Help: "Average combined resource (CPU/Memory) utilization percent",
@@ -297,6 +338,12 @@ func createOperatorMetrics() *OperatorMetrics {
 		metrics.ConfigurationReloads,
 		metrics.ResourceTrendPredictions,
 		metrics.HistoricalDataPoints,
+		metrics.RecommendationsTotal,
+		metrics.RecommendationsApproved,
+		metrics.RecommendationsRejected,
+		metrics.RecommendationsExecuted,
+		metrics.RecommendationsExpired,
+		metrics.PendingRecommendations,
 		metrics.CPUUsagePercent,
 		metrics.MemoryUsagePercent,
 		metrics.ActivePodsTotal,
@@ -457,6 +504,36 @@ func (m *OperatorMetrics) UpdateResourceTrendPrediction(namespace, podName, cont
 // UpdateHistoricalDataPoints updates the count of historical data points
 func (m *OperatorMetrics) UpdateHistoricalDataPoints(count float64) {
 	m.HistoricalDataPoints.Set(count)
+}
+
+// RecordRecommendationCreated records when a recommendation is created
+func (m *OperatorMetrics) RecordRecommendationCreated(urgency, severity, action string) {
+	m.RecommendationsTotal.WithLabelValues(urgency, severity, action).Inc()
+}
+
+// RecordRecommendationApproved records when a recommendation is approved
+func (m *OperatorMetrics) RecordRecommendationApproved() {
+	m.RecommendationsApproved.Inc()
+}
+
+// RecordRecommendationRejected records when a recommendation is rejected
+func (m *OperatorMetrics) RecordRecommendationRejected() {
+	m.RecommendationsRejected.Inc()
+}
+
+// RecordRecommendationExecuted records when a recommendation is executed
+func (m *OperatorMetrics) RecordRecommendationExecuted() {
+	m.RecommendationsExecuted.Inc()
+}
+
+// RecordRecommendationExpired records when a recommendation expires
+func (m *OperatorMetrics) RecordRecommendationExpired() {
+	m.RecommendationsExpired.Inc()
+}
+
+// UpdatePendingRecommendations updates the count of pending recommendations
+func (m *OperatorMetrics) UpdatePendingRecommendations(count float64) {
+	m.PendingRecommendations.Set(count)
 }
 
 // StartMetricsServer starts the Prometheus metrics HTTP server

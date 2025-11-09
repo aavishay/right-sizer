@@ -210,7 +210,7 @@ router.post(
       const cacheKey = clusterId
         ? `cluster:health:${clusterId}`
         : `cluster:health:name:${clusterName}`;
-      
+
       const healthUpdate = {
         clusterId: clusterId || "unknown",
         clusterName: clusterName || "unknown",
