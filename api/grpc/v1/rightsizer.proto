@@ -39,6 +39,11 @@ service RightSizerService {
   // Health and Diagnostics
   rpc GetHealth(google.protobuf.Empty) returns (HealthResponse);
   rpc GetDiagnostics(google.protobuf.Empty) returns (DiagnosticsResponse);
+
+  // Operator Data Streaming (for operator to dashboard)
+  rpc StreamOperatorMetrics(stream OperatorMetricsBatch) returns (Ack);
+  rpc StreamOperatorEvents(stream OperatorEventBatch) returns (Ack);
+  rpc SendOperatorHeartbeat(OperatorHeartbeat) returns (Ack);
 }
 
 // Cluster Information
@@ -322,4 +327,60 @@ message PerformanceStats {
   double avg_response_time = 3;
   int32 active_connections = 4;
   map<string, int32> operation_counts = 5;
+}
+
+// Operator Data Messages
+message OperatorMetricsBatch {
+  string cluster_id = 1;
+  repeated OperatorMetric metrics = 2;
+}
+
+message OperatorMetric {
+  string pod_name = 1;
+  string container_name = 2;
+  string namespace = 3;
+  google.protobuf.Timestamp timestamp = 4;
+  double cpu_usage_percent = 5;
+  double memory_usage_percent = 6;
+  string cpu_request = 7;
+  string memory_request = 8;
+  string cpu_limit = 9;
+  string memory_limit = 10;
+  google.protobuf.Struct metadata = 11;
+}
+
+message OperatorEventBatch {
+  string cluster_id = 1;
+  repeated OperatorEvent events = 2;
+}
+
+message OperatorEvent {
+  string event_type = 1;
+  string severity = 2;
+  google.protobuf.Timestamp timestamp = 3;
+  string namespace = 4;
+  string pod_name = 5;
+  string container_name = 6;
+  string message = 7;
+  google.protobuf.Struct metadata = 8;
+}
+
+message OperatorHeartbeat {
+  string cluster_id = 1;
+  string cluster_name = 2;
+  string operator_version = 3;
+  string status = 4; // healthy, degraded, unhealthy
+  google.protobuf.Timestamp timestamp = 5;
+  int32 total_pods = 6;
+  int32 managed_pods = 7;
+  double avg_cpu_utilization = 8;
+  double avg_memory_utilization = 9;
+  repeated string active_policies = 10;
+  google.protobuf.Struct conditions = 11;
+}
+
+message Ack {
+  bool success = 1;
+  string message = 2;
+  string request_id = 3;
 }

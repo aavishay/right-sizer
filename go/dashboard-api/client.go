@@ -17,6 +17,9 @@ import (
 	"sync"
 	"time"
 
+	"google.golang.org/grpc"
+
+	pb "right-sizer/api/grpc/v1"
 	"right-sizer/logger"
 )
 
@@ -126,6 +129,8 @@ type ClientConfig struct {
 type Client struct {
 	config     ClientConfig
 	httpClient *http.Client
+	grpcClient pb.RightSizerServiceClient
+	grpcConn   *grpc.ClientConn
 	mu         sync.RWMutex
 	eventQueue []Event
 	stopCh     chan struct{}
