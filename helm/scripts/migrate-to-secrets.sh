@@ -97,7 +97,8 @@ extract_credentials() {
   print_header "Extracting Current Credentials"
 
   # Get current values
-  local values=$(helm get values "$RELEASE_NAME" -n "$NAMESPACE" -o json)
+  local values
+  values=$(helm get values "$RELEASE_NAME" -n "$NAMESPACE" -o json)
 
   # Extract API token
   API_TOKEN=$(echo "$values" | jq -r '.config.apiToken // .rightsizerConfig.metricsBuffer.dashboard.apiToken // empty' || echo "")
@@ -113,7 +114,8 @@ extract_credentials() {
     # Try to get from running deployment
     print_message "$YELLOW" "Checking running deployment for credentials..."
 
-    local pod=$(kubectl get pods -n "$NAMESPACE" -l "app.kubernetes.io/name=right-sizer" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+    local pod
+    pod=$(kubectl get pods -n "$NAMESPACE" -l "app.kubernetes.io/name=right-sizer" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
 
     if [[ -n "$pod" ]]; then
       API_TOKEN=$(kubectl exec -n "$NAMESPACE" "$pod" -- printenv DASHBOARD_API_TOKEN 2>/dev/null || echo "")
@@ -255,7 +257,8 @@ perform_upgrade() {
     print_message "$YELLOW" "Upgrading Helm release..."
 
     # Get the chart reference (could be a repo chart or local path)
-    local chart_ref=$(helm get metadata "$RELEASE_NAME" -n "$NAMESPACE" -o json | jq -r '.chart // "right-sizer/right-sizer"')
+    local chart_ref
+    chart_ref=$(helm get metadata "$RELEASE_NAME" -n "$NAMESPACE" -o json | jq -r '.chart // "right-sizer/right-sizer"')
 
     helm upgrade "$RELEASE_NAME" "$chart_ref" \
       -n "$NAMESPACE" \
@@ -287,7 +290,8 @@ verify_migration() {
 
   # Check environment variables in pod
   print_message "$YELLOW" "Checking pod environment variables..."
-  local pod=$(kubectl get pods -n "$NAMESPACE" -l "app.kubernetes.io/name=right-sizer" -o jsonpath='{.items[0].metadata.name}')
+  local pod
+  pod=$(kubectl get pods -n "$NAMESPACE" -l "app.kubernetes.io/name=right-sizer" -o jsonpath='{.items[0].metadata.name}')
 
   if [[ -n "$pod" ]]; then
     kubectl describe pod -n "$NAMESPACE" "$pod" | grep -E "DASHBOARD_API_TOKEN|CLUSTER_ID|CLUSTER_NAME" | head -5
