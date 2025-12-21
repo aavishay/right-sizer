@@ -151,7 +151,7 @@ func (r *EventDrivenController) analyzePodState(ctx context.Context, pod *corev1
 // analyzeResourceUtilization analyzes pod resource utilization
 func (r *EventDrivenController) analyzeResourceUtilization(ctx context.Context, pod *corev1.Pod) error {
 	// Get current metrics
-	metrics, err := r.MetricsProvider.FetchPodMetrics(pod.Namespace, pod.Name)
+	metrics, err := r.MetricsProvider.FetchPodMetrics(ctx, pod.Namespace, pod.Name)
 	if err != nil {
 		return err
 	}

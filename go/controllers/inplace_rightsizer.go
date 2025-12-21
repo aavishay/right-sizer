@@ -211,11 +211,11 @@ func (r *InPlaceRightSizer) rightSizeAllPods(ctx context.Context) {
 		// Skip pods that have no resource specifications at all
 		hasAnyResources := false
 		for _, container := range pod.Spec.Containers {
-			if container.Resources.Requests != nil && len(container.Resources.Requests) > 0 {
+			if len(container.Resources.Requests) > 0 {
 				hasAnyResources = true
 				break
 			}
-			if container.Resources.Limits != nil && len(container.Resources.Limits) > 0 {
+			if len(container.Resources.Limits) > 0 {
 				hasAnyResources = true
 				break
 			}
@@ -303,7 +303,7 @@ func (r *InPlaceRightSizer) supportsInPlaceResize(pod *corev1.Pod) bool {
 // rightSizePod adjusts resources for a single pod
 func (r *InPlaceRightSizer) rightSizePod(ctx context.Context, pod *corev1.Pod) (bool, error) {
 	// Fetch current metrics
-	usage, err := r.MetricsProvider.FetchPodMetrics(pod.Namespace, pod.Name)
+	usage, err := r.MetricsProvider.FetchPodMetrics(ctx, pod.Namespace, pod.Name)
 	if err != nil {
 		// If metrics are not available, skip this pod
 		return false, nil
@@ -1017,7 +1017,7 @@ func (r *InPlaceRightSizer) applyResizePolicy(ctx context.Context, pod *corev1.P
 	// Check if pod already has resize policies configured
 	hasResizePolicies := false
 	for _, container := range pod.Spec.Containers {
-		if container.ResizePolicy != nil && len(container.ResizePolicy) > 0 {
+		if len(container.ResizePolicy) > 0 {
 			hasResizePolicies = true
 			break
 		}
@@ -1237,7 +1237,7 @@ func SetupInPlaceRightSizer(mgr manager.Manager, provider metrics.Provider) erro
 	// NOTE: metrics passed as nil is intentional - RetryManager gracefully handles nil metrics
 	// See retry_manager.go lines 226-227 and 357-358 where nil checks are performed
 	// The metrics interface is not available from the provider context here
-	retryManager := NewRetryManager(retryConfig, nil, eventRecorder)
+	retryManager := NewRetryManager(retryConfig, metrics.NewOperatorMetrics(), eventRecorder)
 
 	rightsizer := &InPlaceRightSizer{
 		Client:          mgr.GetClient(),

@@ -19,12 +19,13 @@ import (
 	"log"
 	"time"
 
-	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 	"right-sizer/config"
 	"right-sizer/logger"
 	"right-sizer/metrics"
+
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
@@ -123,7 +124,7 @@ func (r *DeploymentRightSizer) rightSizeDeployment(ctx context.Context, deploy *
 			continue
 		}
 
-		usage, err := r.MetricsProvider.FetchPodMetrics(pod.Namespace, pod.Name)
+		usage, err := r.MetricsProvider.FetchPodMetrics(ctx, pod.Namespace, pod.Name)
 		if err != nil {
 			continue
 		}
@@ -196,7 +197,7 @@ func (r *DeploymentRightSizer) rightSizeStatefulSet(ctx context.Context, sts *ap
 			continue
 		}
 
-		usage, err := r.MetricsProvider.FetchPodMetrics(pod.Namespace, pod.Name)
+		usage, err := r.MetricsProvider.FetchPodMetrics(ctx, pod.Namespace, pod.Name)
 		if err != nil {
 			continue
 		}

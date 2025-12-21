@@ -141,6 +141,7 @@ func TestUpdateFromCRD(t *testing.T) {
 		"30s",                                  // syncPeriod
 		"/tmp/certs",                           // tlsCertDir
 		10,                                     // webhookTimeoutSeconds
+		"",                                     // jwtSecret
 	)
 
 	// Verify updates
@@ -633,6 +634,7 @@ func TestThreadSafety(t *testing.T) {
 				"30s",              // syncPeriod
 				"/tmp/certs",       // tlsCertDir
 				10,                 // webhookTimeoutSeconds
+				"",                 // jwtSecret
 			)
 		}(i)
 	}

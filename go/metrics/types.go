@@ -15,6 +15,8 @@
 package metrics
 
 import (
+	"context"
+
 	metricsclient "k8s.io/metrics/pkg/client/clientset/versioned"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -27,7 +29,7 @@ type Metrics struct {
 
 // Provider interface for metrics sources
 type Provider interface {
-	FetchPodMetrics(namespace, podName string) (Metrics, error)
+	FetchPodMetrics(ctx context.Context, namespace, podName string) (Metrics, error)
 }
 
 // MetricsServerProvider fetches metrics from metrics-server

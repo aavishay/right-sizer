@@ -12,7 +12,7 @@ import (
 // mockMetricsProvider provides deterministic pod metrics
 type mockMetricsProvider struct{}
 
-func (m *mockMetricsProvider) FetchPodMetrics(namespace, podName string) (metrics.Metrics, error) {
+func (m *mockMetricsProvider) FetchPodMetrics(ctx context.Context, namespace, podName string) (metrics.Metrics, error) {
 	return metrics.Metrics{CPUMilli: 150, MemMB: 300}, nil
 }
 

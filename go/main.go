@@ -101,8 +101,7 @@ func main() {
 		var fallbackErr error
 		zapLog, fallbackErr = zap.NewDevelopment()
 		if fallbackErr != nil {
-			fmt.Fprintf(os.Stderr, "Failed to initialize logger (both production and development): %v\n", err)
-			os.Exit(1)
+			panic(fmt.Sprintf("Failed to initialize logger (both production and development): %v", fallbackErr))
 		}
 		logger.Warn("Failed to initialize production logger, using development logger: %v", err)
 	}

@@ -15,6 +15,7 @@
 package metrics
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -29,17 +30,17 @@ func NewPrometheusProvider(promURL string) Provider {
 }
 
 // FetchPodMetrics queries Prometheus for CPU and memory usage for a pod
-func (p *PrometheusProvider) FetchPodMetrics(namespace, podName string) (Metrics, error) {
+func (p *PrometheusProvider) FetchPodMetrics(ctx context.Context, namespace, podName string) (Metrics, error) {
 	// Query CPU usage (millicores)
 	cpuQuery := fmt.Sprintf(`sum(rate(container_cpu_usage_seconds_total{namespace="%s", pod="%s"}[5m])) * 1000`, namespace, podName)
-	cpuMilli, err := p.queryPrometheus(cpuQuery)
+	cpuMilli, err := p.queryPrometheus(ctx, cpuQuery)
 	if err != nil {
 		return Metrics{}, fmt.Errorf("failed to query CPU metrics: %w", err)
 	}
 
 	// Query memory usage (bytes)
 	memQuery := fmt.Sprintf(`sum(container_memory_usage_bytes{namespace="%s", pod="%s"})`, namespace, podName)
-	memBytes, err := p.queryPrometheus(memQuery)
+	memBytes, err := p.queryPrometheus(ctx, memQuery)
 	if err != nil {
 		return Metrics{}, fmt.Errorf("failed to query memory metrics: %w", err)
 	}
@@ -54,9 +55,13 @@ func (p *PrometheusProvider) FetchPodMetrics(namespace, podName string) (Metrics
 }
 
 // queryPrometheus runs a Prometheus instant query and returns the value
-func (p *PrometheusProvider) queryPrometheus(query string) (float64, error) {
+func (p *PrometheusProvider) queryPrometheus(ctx context.Context, query string) (float64, error) {
 	endpoint := fmt.Sprintf("%s/api/v1/query?query=%s", p.URL, url.QueryEscape(query))
-	resp, err := http.Get(endpoint)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return 0, err
+	}
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return 0, err
 	}

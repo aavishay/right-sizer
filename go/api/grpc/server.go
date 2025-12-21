@@ -14,6 +14,7 @@ import (
 	"net"
 	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
@@ -286,40 +287,24 @@ func (s *Server) authenticate(ctx context.Context) error {
 	return nil
 }
 
+// isValidToken checks if a token is valid
 func (s *Server) isValidToken(token string) bool {
-	// Validate token format and content
-	if len(token) == 0 {
-		logger.Warn("Token validation failed: empty token")
+	// Validate JWT tokens with proper signature and expiration checks
+	parsedToken, err := jwt.Parse(token, func(t *jwt.Token) (interface{}, error) {
+		// Ensure the signing method is HMAC
+		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
+		}
+		return []byte(s.config.JWTSecret), nil
+	})
+
+	if err != nil {
+		logger.Warn("Token validation failed: %v", err)
 		return false
 	}
 
-	// In production, this should validate JWT tokens with proper expiration checks.
-	// For development, we perform basic validation.
-	// TODO: Implement proper JWT validation with token expiration checks
-	// using a library like github.com/golang-jwt/jwt/v5
-
-	// Minimum token length check (32 chars for reasonable tokens)
-	// This prevents trivial authentication bypasses
-	if len(token) < 32 {
-		logger.Warn("Token validation failed: token too short (< 32 chars)")
-		return false
-	}
-
-	// Check for common token patterns to ensure it's not obviously invalid
-	// Valid tokens should contain a mix of characters
-	hasAlpha := false
-	hasNum := false
-	for _, ch := range token {
-		if (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') {
-			hasAlpha = true
-		}
-		if ch >= '0' && ch <= '9' {
-			hasNum = true
-		}
-	}
-
-	if !hasAlpha || !hasNum {
-		logger.Warn("Token validation failed: token does not contain both letters and numbers")
+	if !parsedToken.Valid {
+		logger.Warn("Token validation failed: invalid token")
 		return false
 	}
 

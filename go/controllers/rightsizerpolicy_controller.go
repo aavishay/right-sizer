@@ -20,6 +20,11 @@ import (
 	"fmt"
 	"time"
 
+	"right-sizer/api/v1alpha1"
+	"right-sizer/config"
+	"right-sizer/logger"
+	"right-sizer/metrics"
+
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -29,10 +34,6 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"right-sizer/api/v1alpha1"
-	"right-sizer/config"
-	"right-sizer/logger"
-	"right-sizer/metrics"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -476,7 +477,7 @@ func (r *RightSizerPolicyReconciler) processPod(ctx context.Context, policy *v1a
 	var cpuSaved, memorySaved int64
 
 	for _, container := range pod.Spec.Containers {
-		usage, err := r.MetricsProvider.FetchPodMetrics(pod.Namespace, pod.Name)
+		usage, err := r.MetricsProvider.FetchPodMetrics(ctx, pod.Namespace, pod.Name)
 		if err != nil {
 			logger.Warn("Failed to fetch metrics for pod %s/%s: %v", pod.Namespace, pod.Name, err)
 			continue
@@ -530,7 +531,7 @@ func (r *RightSizerPolicyReconciler) calculateNewResources(ctx context.Context, 
 			continue
 		}
 
-		usage, err := r.MetricsProvider.FetchPodMetrics(pod.Namespace, pod.Name)
+		usage, err := r.MetricsProvider.FetchPodMetrics(ctx, pod.Namespace, pod.Name)
 		if err != nil {
 			continue
 		}

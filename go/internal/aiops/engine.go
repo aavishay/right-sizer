@@ -174,7 +174,7 @@ func (e *Engine) sampleAllPods(ctx context.Context) {
 		if pod.Status.Phase == "Succeeded" || pod.Status.Phase == "Failed" {
 			continue
 		}
-		metricsData, mErr := e.metricsProvider.FetchPodMetrics(pod.Namespace, pod.Name)
+		metricsData, mErr := e.metricsProvider.FetchPodMetrics(ctx, pod.Namespace, pod.Name)
 		if mErr != nil {
 			continue // quiet skip
 		}
