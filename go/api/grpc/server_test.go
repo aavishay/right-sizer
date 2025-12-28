@@ -7,6 +7,7 @@ import (
 	"right-sizer/config"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestIsValidToken(t *testing.T) {
@@ -14,57 +15,80 @@ func TestIsValidToken(t *testing.T) {
 	cfg := &config.Config{
 		JWTSecret: secret,
 	}
-	server := &Server{
+	s := &Server{
 		config: cfg,
 	}
 
-	// Helper to create token
-	createToken := func(s string, expiry time.Time) string {
-		token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-			"exp": expiry.Unix(),
-		})
-		tokenString, _ := token.SignedString([]byte(s))
-		return tokenString
-	}
-
 	tests := []struct {
-		name     string
-		token    string
-		expected bool
+		name          string
+		tokenCreate   func() (string, error)
+		tokenString   string
+		expectedValid bool
 	}{
 		{
-			name:     "Valid token",
-			token:    createToken(secret, time.Now().Add(time.Hour)),
-			expected: true,
+			name: "Valid Token",
+			tokenCreate: func() (string, error) {
+				token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+					"sub": "user123",
+					"exp": time.Now().Add(time.Hour).Unix(),
+				})
+				return token.SignedString([]byte(secret))
+			},
+			expectedValid: true,
 		},
 		{
-			name:     "Expired token",
-			token:    createToken(secret, time.Now().Add(-time.Hour)),
-			expected: false,
+			name: "Expired Token",
+			tokenCreate: func() (string, error) {
+				token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+					"sub": "user123",
+					"exp": time.Now().Add(-time.Hour).Unix(),
+				})
+				return token.SignedString([]byte(secret))
+			},
+			expectedValid: false,
 		},
 		{
-			name:     "Invalid secret",
-			token:    createToken("wrong-secret", time.Now().Add(time.Hour)),
-			expected: false,
+			name: "Wrong Secret",
+			tokenCreate: func() (string, error) {
+				token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+					"sub": "user123",
+					"exp": time.Now().Add(time.Hour).Unix(),
+				})
+				return token.SignedString([]byte("wrong-secret"))
+			},
+			expectedValid: false,
 		},
 		{
-			name:     "Malformed token",
-			token:    "not-a-token",
-			expected: false,
+			name: "Invalid Signature Algorithm (None)",
+			tokenCreate: func() (string, error) {
+				token := jwt.NewWithClaims(jwt.SigningMethodNone, jwt.MapClaims{
+					"sub": "user123",
+					"exp": time.Now().Add(time.Hour).Unix(),
+				})
+				return token.SignedString(jwt.UnsafeAllowNoneSignatureType)
+			},
+			expectedValid: false,
 		},
 		{
-			name:     "Empty token",
-			token:    "",
-			expected: false,
+			name:          "Garbage Token",
+			tokenString:   "invalid-token-string",
+			expectedValid: false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := server.isValidToken(tt.token)
-			if result != tt.expected {
-				t.Errorf("isValidToken() for %s = %v, want %v", tt.name, result, tt.expected)
+			var token string
+			var err error
+			if tt.tokenCreate != nil {
+				token, err = tt.tokenCreate()
+				assert.NoError(t, err)
+			} else {
+				token = tt.tokenString
 			}
+
+			valid := s.isValidToken(token)
+			assert.Equal(t, tt.expectedValid, valid)
 		})
 	}
 }

@@ -2,13 +2,13 @@ package aiops // TODO: eventually move to internal/aiops/engine (keep package fo
 
 import (
 	"context"
-	"log" // TODO: replace with structured logger
 	"time"
 
 	"right-sizer/internal/aiops/analyzers"
 	"right-sizer/internal/aiops/collector"
 	"right-sizer/internal/aiops/core"
 	narrative "right-sizer/internal/aiops/narratives"
+	"right-sizer/logger"
 	"right-sizer/metrics"
 
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -82,7 +82,7 @@ func (e *Engine) makeAnalyzerDispatch(an core.Analyzer) core.Handler {
 	return func(sig core.Signal) {
 		finding, evidence, err := an.Handle(sig, nil) // nil historical accessor for now
 		if err != nil {
-			log.Printf("[AIOPS] analyzer=%s error=%v", an.Name(), err)
+			logger.Error("[AIOPS] analyzer=%s error=%v", an.Name(), err)
 			return
 		}
 		if finding == nil && len(evidence) == 0 {
@@ -117,7 +117,7 @@ func (e *Engine) makeAnalyzerDispatch(an core.Analyzer) core.Handler {
 		// If only evidence (no finding), attach to a generic rolling incident (optional future enhancement).
 		if len(evidence) > 0 {
 			// For now we log evidence only.
-			log.Printf("[AIOPS] analyzer=%s evidence_only count=%d", an.Name(), len(evidence))
+			logger.Info("[AIOPS] analyzer=%s evidence_only count=%d", an.Name(), len(evidence))
 		}
 	}
 }
@@ -125,37 +125,37 @@ func (e *Engine) makeAnalyzerDispatch(an core.Analyzer) core.Handler {
 // Start runs the AIOps engine until context cancellation.
 
 func (e *Engine) Start(ctx context.Context) {
-	log.Println("[AIOPS] Engine starting (OOM listener + bus dispatch + sampler)...")
+	logger.Info("[AIOPS] Engine starting (OOM listener + bus dispatch + sampler)...")
 	if e.oomListener != nil { // allow tests to disable without nil panic
 		go e.oomListener.Start(ctx)
 	} else {
-		log.Println("[AIOPS] OOM listener disabled (nil) - skipping")
+		logger.Info("[AIOPS] OOM listener disabled (nil) - skipping")
 	}
 	go e.eventIngestLoop(ctx)
 	go e.samplingLoop(ctx)
 	<-ctx.Done()
 	close(e.stopCh)
-	log.Println("[AIOPS] Engine stopped.")
+	logger.Info("[AIOPS] Engine stopped.")
 }
 
 // samplingLoop periodically samples pod metrics and records them for leak analysis.
 func (e *Engine) samplingLoop(ctx context.Context) {
 	if e.metricsProvider == nil {
-		log.Println("[AIOPS] sampler disabled (no metrics provider)")
+		logger.Info("[AIOPS] sampler disabled (no metrics provider)")
 		return
 	}
 	ticker := time.NewTicker(e.sampleInterval)
 	defer ticker.Stop()
-	log.Printf("[AIOPS] sampler started interval=%s", e.sampleInterval)
+	logger.Info("[AIOPS] sampler started interval=%s", e.sampleInterval)
 	for {
 		select {
 		case <-ticker.C:
 			e.sampleAllPods(ctx)
 		case <-ctx.Done():
-			log.Println("[AIOPS] sampler stopping (context canceled)")
+			logger.Info("[AIOPS] sampler stopping (context canceled)")
 			return
 		case <-e.stopCh:
-			log.Println("[AIOPS] sampler stopping (engine stop)")
+			logger.Info("[AIOPS] sampler stopping (engine stop)")
 			return
 		}
 	}
@@ -165,7 +165,7 @@ func (e *Engine) samplingLoop(ctx context.Context) {
 func (e *Engine) sampleAllPods(ctx context.Context) {
 	pods, err := e.clientset.CoreV1().Pods("").List(ctx, v1.ListOptions{})
 	if err != nil {
-		log.Printf("[AIOPS] sampler list pods error: %v", err)
+		logger.Error("[AIOPS] sampler list pods error: %v", err)
 		return
 	}
 	now := time.Now().UTC()
@@ -228,23 +228,23 @@ func (e *Engine) publishOOMSignal(ev collector.OOMEvent) {
 func (e *Engine) legacyRegression(ctx context.Context, ev collector.OOMEvent) {
 	result, err := e.memoryAnalyzer.AnalyzeForOOMEvent(ev)
 	if err != nil {
-		log.Printf("[AIOPS] legacy regression error pod=%s err=%v", ev.PodName, err)
+		logger.Error("[AIOPS] legacy regression error pod=%s err=%v", ev.PodName, err)
 		return
 	}
 	if !result.IsLeak {
-		log.Printf("[AIOPS] legacy regression: no leak (pod=%s slope=%.3f r2=%.2f)", ev.PodName, result.GrowthRateMBMin, result.R2)
+		logger.Info("[AIOPS] legacy regression: no leak (pod=%s slope=%.3f r2=%.2f)", ev.PodName, result.GrowthRateMBMin, result.R2)
 		return
 	}
 	narr, err := e.narrativeGen.GenerateOOMNarrative(ctx, ev, result)
 	if err != nil {
-		log.Printf("[AIOPS] narrative generation error pod=%s err=%v", ev.PodName, err)
+		logger.Error("[AIOPS] narrative generation error pod=%s err=%v", ev.PodName, err)
 		return
 	}
-	log.Println("======================================================================")
-	log.Printf("[AIOPS] Legacy RCA Report (pod=%s)", ev.PodName)
-	log.Println("----------------------------------------------------------------------")
-	log.Println(narr)
-	log.Println("======================================================================")
+	logger.Info("======================================================================")
+	logger.Info("[AIOPS] Legacy RCA Report (pod=%s)", ev.PodName)
+	logger.Info("----------------------------------------------------------------------")
+	logger.Info("%s", narr)
+	logger.Info("======================================================================")
 }
 
 // IncidentStore exposes the engine's incident store (read-only usage).

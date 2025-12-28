@@ -109,6 +109,13 @@ repos:
         files: go/.*\.go$
         pass_filenames: false
 
+      - id: go-test-coverage
+        name: Enforce Go test coverage (90%)
+        entry: bash -c "./scripts/check-coverage.sh"
+        language: system
+        files: go/.*\.go$
+        pass_filenames: false
+
       - id: hadolint
         name: Lint Dockerfiles with Hadolint
         entry: bash -c "command -v docker >/dev/null 2>&1 && docker run --rm -v $(pwd):/workdir -w /workdir hadolint/hadolint hadolint \"$@\" || echo 'hadolint not available, skipping'"

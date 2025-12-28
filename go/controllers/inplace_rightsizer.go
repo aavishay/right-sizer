@@ -137,6 +137,10 @@ func (r *InPlaceRightSizer) cleanExpiredCacheEntries() {
 
 // Start begins the continuous monitoring and adjustment loop
 func (r *InPlaceRightSizer) Start(ctx context.Context) error {
+	if r.Client == nil {
+		return fmt.Errorf("kubernetes client is not initialized")
+	}
+
 	ticker := time.NewTicker(r.Interval)
 	defer ticker.Stop()
 

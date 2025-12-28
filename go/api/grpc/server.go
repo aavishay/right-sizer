@@ -278,8 +278,7 @@ func (s *Server) authenticate(ctx context.Context) error {
 		token = token[7:]
 	}
 
-	// In production, this would validate JWT tokens or API keys
-	// For now, just check against configured tokens
+	// Validate JWT token
 	if !s.isValidToken(token) {
 		return status.Errorf(codes.Unauthenticated, "invalid token")
 	}
