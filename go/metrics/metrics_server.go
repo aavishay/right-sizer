@@ -47,13 +47,13 @@ func NewMetricsServerProvider(client client.Client) Provider {
 }
 
 // FetchPodMetrics fetches CPU and memory usage for a pod from metrics-server
-func (m *MetricsServerProvider) FetchPodMetrics(namespace, podName string) (Metrics, error) {
+func (m *MetricsServerProvider) FetchPodMetrics(ctx context.Context, namespace, podName string) (Metrics, error) {
 	if m.MetricsClient == nil {
 		return Metrics{}, errors.New("metrics client not available")
 	}
 
 	// Get pod metrics from metrics-server
-	podMetrics, err := m.MetricsClient.MetricsV1beta1().PodMetricses(namespace).Get(context.TODO(), podName, metav1.GetOptions{})
+	podMetrics, err := m.MetricsClient.MetricsV1beta1().PodMetricses(namespace).Get(ctx, podName, metav1.GetOptions{})
 	if err != nil {
 		return Metrics{}, fmt.Errorf("failed to get pod metrics: %w", err)
 	}

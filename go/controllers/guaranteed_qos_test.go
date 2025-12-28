@@ -16,16 +16,18 @@
 package controllers_test
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"testing"
 
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"right-sizer/config"
 	"right-sizer/controllers"
 	"right-sizer/metrics"
+
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // MockMetricsProvider for testing
@@ -34,7 +36,7 @@ type MockMetricsProvider struct {
 	memMB    float64
 }
 
-func (m *MockMetricsProvider) FetchPodMetrics(namespace, name string) (metrics.Metrics, error) {
+func (m *MockMetricsProvider) FetchPodMetrics(ctx context.Context, namespace, name string) (metrics.Metrics, error) {
 	return metrics.Metrics{
 		CPUMilli: m.cpuMilli,
 		MemMB:    m.memMB,

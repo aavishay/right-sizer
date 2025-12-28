@@ -96,7 +96,7 @@ func TestCompleteResizeWorkflow(t *testing.T) {
 	eventRecorder := record.NewFakeRecorder(100)
 
 	retryConfig := DefaultRetryManagerConfig()
-	retryManager := NewRetryManager(retryConfig, nil, eventRecorder)
+	retryManager := NewRetryManager(retryConfig, metrics.NewOperatorMetrics(), eventRecorder)
 
 	// Create InPlaceRightSizer
 	rightSizer := &InPlaceRightSizer{
@@ -376,7 +376,7 @@ func TestRetryManagerIntegration(t *testing.T) {
 	config := DefaultRetryManagerConfig()
 	config.RetryInterval = 100 * time.Millisecond // Fast retry for testing
 
-	retryManager := NewRetryManager(config, nil, eventRecorder)
+	retryManager := NewRetryManager(config, metrics.NewOperatorMetrics(), eventRecorder)
 
 	err := retryManager.Start()
 	if err != nil {
@@ -436,7 +436,7 @@ func TestRetryManagerIntegration(t *testing.T) {
 // complianceMockMetricsProvider implements metrics.Provider for testing
 type complianceMockMetricsProvider struct{}
 
-func (m *complianceMockMetricsProvider) FetchPodMetrics(namespace, podName string) (metrics.Metrics, error) {
+func (m *complianceMockMetricsProvider) FetchPodMetrics(ctx context.Context, namespace, podName string) (metrics.Metrics, error) {
 	return metrics.Metrics{
 		CPUMilli: 100.0,
 		MemMB:    128.0,

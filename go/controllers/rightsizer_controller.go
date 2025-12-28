@@ -19,12 +19,13 @@ import (
 	"fmt"
 	"time"
 
+	"right-sizer/config"
+	"right-sizer/metrics"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"right-sizer/config"
-	"right-sizer/metrics"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -55,15 +56,16 @@ func (r *RightSizer) Reconcile(ctx context.Context, req reconcile.Request) (reco
 		return reconcile.Result{}, nil
 	}
 
-	usage, err := r.MetricsProvider.FetchPodMetrics(pod.Namespace, pod.Name)
+	usage, err := r.MetricsProvider.FetchPodMetrics(ctx, pod.Namespace, pod.Name)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
 
 	newResources := calculateResources(usage)
 
-	if err := patchController(r.Client, owner, pod.Namespace, newResources); err != nil {
-		return reconcile.Result{}, err
+	// Update the parent controller with new resources
+	if err := patchController(ctx, r.Client, owner, pod.Namespace, newResources); err != nil {
+		return reconcile.Result{}, fmt.Errorf("failed to patch parent controller %s/%s: %w", owner.Kind, owner.Name, err)
 	}
 
 	return reconcile.Result{RequeueAfter: 10 * time.Minute}, nil
@@ -110,26 +112,26 @@ func calculateResources(usage metrics.Metrics) corev1.ResourceRequirements {
 }
 
 // patchController updates the parent controller (Deployment/StatefulSet) with new resources
-func patchController(c client.Client, owner *metav1.OwnerReference, namespace string, resources corev1.ResourceRequirements) error {
+func patchController(ctx context.Context, c client.Client, owner *metav1.OwnerReference, namespace string, resources corev1.ResourceRequirements) error {
 	switch owner.Kind {
 	case "Deployment":
 		var deploy appsv1.Deployment
-		if err := c.Get(context.TODO(), client.ObjectKey{Namespace: namespace, Name: owner.Name}, &deploy); err != nil {
+		if err := c.Get(ctx, client.ObjectKey{Namespace: namespace, Name: owner.Name}, &deploy); err != nil {
 			return err
 		}
 		for i := range deploy.Spec.Template.Spec.Containers {
 			deploy.Spec.Template.Spec.Containers[i].Resources = resources
 		}
-		return c.Update(context.TODO(), &deploy)
+		return c.Update(ctx, &deploy)
 	case "StatefulSet":
 		var sts appsv1.StatefulSet
-		if err := c.Get(context.TODO(), client.ObjectKey{Namespace: namespace, Name: owner.Name}, &sts); err != nil {
+		if err := c.Get(ctx, client.ObjectKey{Namespace: namespace, Name: owner.Name}, &sts); err != nil {
 			return err
 		}
 		for i := range sts.Spec.Template.Spec.Containers {
 			sts.Spec.Template.Spec.Containers[i].Resources = resources
 		}
-		return c.Update(context.TODO(), &sts)
+		return c.Update(ctx, &sts)
 	default:
 		return fmt.Errorf("unsupported owner kind: %s", owner.Kind)
 	}

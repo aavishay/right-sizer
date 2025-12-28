@@ -177,8 +177,12 @@ type Config struct {
 	DashboardBatchInterval     time.Duration // Interval for flushing event batches
 	DashboardEnableHeartbeat   bool          // Enable periodic heartbeat/status updates
 	DashboardHeartbeatInterval time.Duration // Interval for sending heartbeat
+	DashboardHeartbeatTimeout  time.Duration // Timeout for flushing heartbeat event batches (deprecated)
 	DashboardTimeout           time.Duration // HTTP timeout for dashboard API calls
 	DashboardRetryAttempts     int           // Number of retry attempts for failed requests
+
+	// Security configuration
+	JWTSecret string // JWT secret for token validation (env JWT_SECRET)
 }
 
 // Global config instance with thread-safe access
@@ -323,6 +327,14 @@ func GetDefaults() *Config {
 		DashboardHeartbeatInterval: 30 * time.Second,
 		DashboardTimeout:           10 * time.Second,
 		DashboardRetryAttempts:     3,
+
+		// Default security settings
+		JWTSecret: "default-secret-change-me-in-production", // pragma: allowlist secret
+	}
+
+	// Load JWT secret from environment
+	if jwtSecret := os.Getenv("JWT_SECRET"); jwtSecret != "" {
+		c.JWTSecret = jwtSecret // pragma: allowlist secret
 	}
 
 	// Derive cluster ID from environment; fall back if unset
@@ -447,6 +459,7 @@ func (c *Config) UpdateFromCRD(
 	syncPeriod string,
 	tlsCertDir string,
 	webhookTimeoutSeconds int,
+	jwtSecret string,
 ) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -635,6 +648,9 @@ func (c *Config) UpdateFromCRD(
 	}
 	if webhookTimeoutSeconds > 0 {
 		c.WebhookTimeoutSeconds = webhookTimeoutSeconds
+	}
+	if jwtSecret != "" {
+		c.JWTSecret = jwtSecret // pragma: allowlist secret
 	}
 
 	// Mark configuration as coming from CRD
@@ -944,6 +960,7 @@ func (c *Config) Clone() *Config {
 		CPUScaleUpThreshold:         c.CPUScaleUpThreshold,
 		CPUScaleDownThreshold:       c.CPUScaleDownThreshold,
 		ConfigSource:                c.ConfigSource,
+		JWTSecret:                   c.JWTSecret,
 	}
 
 	// Deep copy slices

@@ -16,13 +16,15 @@
 package controllers
 
 import (
+	"context"
 	"testing"
+
+	"right-sizer/config"
+	"right-sizer/metrics"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"right-sizer/config"
-	"right-sizer/metrics"
 )
 
 func TestCheckScalingThresholds(t *testing.T) {
@@ -642,6 +644,6 @@ type mockMetricsProvider struct {
 	err     error
 }
 
-func (m *mockMetricsProvider) FetchPodMetrics(namespace, name string) (metrics.Metrics, error) {
+func (m *mockMetricsProvider) FetchPodMetrics(ctx context.Context, namespace, name string) (metrics.Metrics, error) {
 	return m.metrics, m.err
 }

@@ -376,7 +376,9 @@ func (s *StreamingAPI) cleanupConnections(ctx context.Context) {
 			s.mu.Lock()
 			for id, conn := range s.connections {
 				if time.Since(conn.LastPing) > s.config.ConnectionTimeout {
-					_ = conn.Conn.Close()
+					if err := conn.Conn.Close(); err != nil {
+						logger.Warn("Failed to close stale connection %s: %v", conn.DashboardID, err)
+					}
 					close(conn.Send)
 					delete(s.connections, id)
 					logger.Info("🧹 Cleaned up stale connection: %s", conn.DashboardID)
@@ -431,7 +433,9 @@ func (s *StreamingAPI) handleHealth(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(status)
+	if err := json.NewEncoder(w).Encode(status); err != nil {
+		logger.Error("Failed to encode health status: %v", err)
+	}
 }
 
 // handleConnections returns active connections info
@@ -449,10 +453,12 @@ func (s *StreamingAPI) handleConnections(w http.ResponseWriter, r *http.Request)
 	s.mu.RUnlock()
 
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+	if err := json.NewEncoder(w).Encode(map[string]interface{}{
 		"connections": connections,
 		"total":       len(connections),
-	})
+	}); err != nil {
+		logger.Error("Failed to encode connections info: %v", err)
+	}
 }
 
 // generateConnectionID generates a unique connection ID

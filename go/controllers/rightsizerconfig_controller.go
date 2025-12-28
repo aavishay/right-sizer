@@ -433,6 +433,7 @@ func (r *RightSizerConfigReconciler) applyConfiguration(ctx context.Context, rsc
 		syncPeriod,
 		tlsCertDir,
 		webhookTimeoutSeconds,
+		"",
 	)
 
 	// Update logger level if changed

@@ -361,11 +361,11 @@ func (r *AdaptiveRightSizer) analyzeAllPods(ctx context.Context) ([]ResourceUpda
 		// Skip pods that have no resource specifications at all
 		hasAnyResources := false
 		for _, container := range pod.Spec.Containers {
-			if container.Resources.Requests != nil && len(container.Resources.Requests) > 0 {
+			if len(container.Resources.Requests) > 0 {
 				hasAnyResources = true
 				break
 			}
-			if container.Resources.Limits != nil && len(container.Resources.Limits) > 0 {
+			if len(container.Resources.Limits) > 0 {
 				hasAnyResources = true
 				break
 			}
@@ -375,7 +375,7 @@ func (r *AdaptiveRightSizer) analyzeAllPods(ctx context.Context) ([]ResourceUpda
 		}
 
 		// Get metrics for this specific pod
-		podMetrics, err := r.MetricsProvider.FetchPodMetrics(pod.Namespace, pod.Name)
+		podMetrics, err := r.MetricsProvider.FetchPodMetrics(ctx, pod.Namespace, pod.Name)
 		if err != nil {
 			log.Printf("Failed to get metrics for pod %s/%s: %v", pod.Namespace, pod.Name, err)
 			continue
@@ -831,7 +831,7 @@ func (r *AdaptiveRightSizer) updatePodInPlace(ctx context.Context, update Resour
 	// Check if pod has resize policies (optimal but not required for K8s 1.33+)
 	hasResizePolicies := false
 	for _, container := range pod.Spec.Containers {
-		if container.ResizePolicy != nil && len(container.ResizePolicy) > 0 {
+		if len(container.ResizePolicy) > 0 {
 			hasResizePolicies = true
 			break
 		}
@@ -1258,7 +1258,7 @@ func (r *AdaptiveRightSizer) updateDaemonSetResizePolicy(ctx context.Context, na
 
 // hasCorrectResizePolicy checks if a container has the correct resize policy configured
 func hasCorrectResizePolicy(container *corev1.Container) bool {
-	if container.ResizePolicy == nil || len(container.ResizePolicy) == 0 {
+	if len(container.ResizePolicy) == 0 {
 		return false
 	}
 
@@ -1313,7 +1313,7 @@ func (r *AdaptiveRightSizer) getPodsForWorkload(ctx context.Context, namespace s
 	return runningPods, nil
 }
 
-func (r *AdaptiveRightSizer) calculateAverageMetrics(pods []corev1.Pod) *metrics.Metrics {
+func (r *AdaptiveRightSizer) calculateAverageMetrics(ctx context.Context, pods []corev1.Pod) *metrics.Metrics {
 	if len(pods) == 0 {
 		return nil
 	}
@@ -1323,7 +1323,7 @@ func (r *AdaptiveRightSizer) calculateAverageMetrics(pods []corev1.Pod) *metrics
 	validPods := 0
 
 	for _, pod := range pods {
-		m, err := r.MetricsProvider.FetchPodMetrics(pod.Namespace, pod.Name)
+		m, err := r.MetricsProvider.FetchPodMetrics(ctx, pod.Namespace, pod.Name)
 		if err != nil {
 			continue
 		}
