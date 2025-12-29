@@ -31,6 +31,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"right-sizer/api/v1alpha1"
 	"right-sizer/events"
 	"right-sizer/logger"
 	"right-sizer/metrics"
@@ -41,6 +42,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	metricsv1beta1 "k8s.io/metrics/pkg/apis/metrics/v1beta1"
 	metricsclient "k8s.io/metrics/pkg/client/clientset/versioned"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
@@ -74,6 +76,7 @@ const (
 type Server struct {
 	clientset             kubernetes.Interface
 	metricsClient         metricsclient.Interface
+	ctrlClient            client.Client
 	operatorMetrics       *metrics.OperatorMetrics
 	predictor             *predictor.Engine // Resource prediction engine
 	recommendationManager *events.RecommendationManager
@@ -149,7 +152,7 @@ func filterMetricsHistory(rangeParam string) []MetricSample {
 }
 
 // NewServer creates a new API server instance
-func NewServer(clientset kubernetes.Interface, metricsClient metricsclient.Interface, predictor *predictor.Engine, recommendationManager *events.RecommendationManager, optMetrics ...*metrics.OperatorMetrics) *Server {
+func NewServer(clientset kubernetes.Interface, metricsClient metricsclient.Interface, ctrlClient client.Client, predictor *predictor.Engine, recommendationManager *events.RecommendationManager, optMetrics ...*metrics.OperatorMetrics) *Server {
 	var m *metrics.OperatorMetrics
 	if len(optMetrics) > 0 {
 		m = optMetrics[0]
@@ -157,6 +160,7 @@ func NewServer(clientset kubernetes.Interface, metricsClient metricsclient.Inter
 	return &Server{
 		clientset:             clientset,
 		metricsClient:         metricsClient,
+		ctrlClient:            ctrlClient,
 		operatorMetrics:       m,
 		predictor:             predictor,
 		recommendationManager: recommendationManager,
@@ -225,6 +229,13 @@ func (s *Server) registerEndpoints() {
 
 	// Health check
 	http.HandleFunc("/health", s.handleHealthCheck)
+
+	// Log streaming
+	http.HandleFunc("/api/logs", s.handleLogs)
+
+	// Policy management
+	http.HandleFunc("/api/policies", s.handlePolicies)
+	http.HandleFunc("/api/policies/", s.handlePolicy)
 }
 
 // handleSystemSupport returns a minimal support policy payload.
@@ -778,6 +789,78 @@ func (s *Server) getEventsFromK8s(ctx context.Context) []map[string]interface{} 
 	}
 
 	return events
+}
+
+// handleLogs streams logs for a specific pod
+func (s *Server) handleLogs(w http.ResponseWriter, r *http.Request) {
+	namespace := r.URL.Query().Get("namespace")
+	podName := r.URL.Query().Get("pod")
+	containerName := r.URL.Query().Get("container")
+	tailLinesStr := r.URL.Query().Get("tailLines")
+	followStr := r.URL.Query().Get("follow")
+
+	if namespace == "" || podName == "" {
+		http.Error(w, "namespace and pod parameters are required", http.StatusBadRequest)
+		return
+	}
+
+	tailLines := int64(defaultEventLimit)
+	if tailLinesStr != "" {
+		if val, err := strconv.ParseInt(tailLinesStr, 10, 64); err == nil {
+			tailLines = val
+		}
+	}
+
+	follow := true
+	if followStr == "false" {
+		follow = false
+	}
+
+	logOptions := &v1.PodLogOptions{
+		Container:  containerName,
+		Follow:     follow,
+		TailLines:  &tailLines,
+		Timestamps: true,
+	}
+
+	req := s.clientset.CoreV1().Pods(namespace).GetLogs(podName, logOptions)
+	stream, err := req.Stream(r.Context())
+	if err != nil {
+		logger.Error("Failed to open log stream: %v", err)
+		http.Error(w, fmt.Sprintf("Failed to open log stream: %v", err), http.StatusInternalServerError)
+		return
+	}
+	defer stream.Close()
+
+	// Set headers for streaming
+	w.Header().Set("Content-Type", "text/plain")
+	w.Header().Set("Transfer-Encoding", "chunked")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.WriteHeader(http.StatusOK)
+
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		logger.Error("ResponseWriter does not support Flushing")
+		return
+	}
+
+	// Stream logs
+	reader := bufio.NewReader(stream)
+	for {
+		line, err := reader.ReadBytes('\n')
+		if err != nil {
+			if err != io.EOF {
+				logger.Error("Error reading log stream: %v", err)
+			}
+			break
+		}
+
+		_, writeErr := w.Write(line)
+		if writeErr != nil {
+			break
+		}
+		flusher.Flush()
+	}
 }
 
 // sortAndLimitEvents sorts events by timestamp and limits the count
@@ -1730,6 +1813,119 @@ func (s *Server) handleExecuteRecommendation(w http.ResponseWriter, r *http.Requ
 	}
 
 	s.writeJSONResponse(w, response)
+}
+
+// handlePolicies handles /api/policies
+func (s *Server) handlePolicies(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		s.listPolicies(w, r)
+	case http.MethodPost:
+		s.createPolicy(w, r)
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+// handlePolicy handles /api/policies/{namespace}/{name}
+func (s *Server) handlePolicy(w http.ResponseWriter, r *http.Request) {
+	path := strings.TrimPrefix(r.URL.Path, "/api/policies/")
+	parts := strings.Split(path, "/")
+	if len(parts) != 2 {
+		http.Error(w, "Invalid path: expected /api/policies/{namespace}/{name}", http.StatusBadRequest)
+		return
+	}
+	namespace := parts[0]
+	name := parts[1]
+
+	switch r.Method {
+	case http.MethodGet:
+		s.getPolicy(w, r, namespace, name)
+	case http.MethodPut:
+		s.updatePolicy(w, r, namespace, name)
+	case http.MethodDelete:
+		s.deletePolicy(w, r, namespace, name)
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func (s *Server) listPolicies(w http.ResponseWriter, r *http.Request) {
+	namespace := r.URL.Query().Get("namespace")
+	var list v1alpha1.RightSizerPolicyList
+	opts := []client.ListOption{}
+	if namespace != "" {
+		opts = append(opts, client.InNamespace(namespace))
+	}
+
+	if err := s.ctrlClient.List(r.Context(), &list, opts...); err != nil {
+		logger.Error("Failed to list policies: %v", err)
+		http.Error(w, "Failed to list policies: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	s.writeJSONResponse(w, list.Items)
+}
+
+func (s *Server) getPolicy(w http.ResponseWriter, r *http.Request, namespace, name string) {
+	var policy v1alpha1.RightSizerPolicy
+	err := s.ctrlClient.Get(r.Context(), client.ObjectKey{Namespace: namespace, Name: name}, &policy)
+	if err != nil {
+		logger.Error("Failed to get policy %s/%s: %v", namespace, name, err)
+		http.Error(w, "Failed to get policy: "+err.Error(), http.StatusNotFound)
+		return
+	}
+	s.writeJSONResponse(w, policy)
+}
+
+func (s *Server) createPolicy(w http.ResponseWriter, r *http.Request) {
+	var policy v1alpha1.RightSizerPolicy
+	if err := json.NewDecoder(r.Body).Decode(&policy); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	policy.APIVersion = "rightsizer.io/v1alpha1"
+	policy.Kind = "RightSizerPolicy"
+
+	if err := s.ctrlClient.Create(r.Context(), &policy); err != nil {
+		logger.Error("Failed to create policy %s/%s: %v", policy.Namespace, policy.Name, err)
+		http.Error(w, "Failed to create policy: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	s.writeJSONResponse(w, policy)
+}
+
+func (s *Server) updatePolicy(w http.ResponseWriter, r *http.Request, namespace, name string) {
+	var policy v1alpha1.RightSizerPolicy
+	if err := json.NewDecoder(r.Body).Decode(&policy); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	policy.Namespace = namespace
+	policy.Name = name
+	policy.APIVersion = "rightsizer.io/v1alpha1"
+	policy.Kind = "RightSizerPolicy"
+
+	if err := s.ctrlClient.Update(r.Context(), &policy); err != nil {
+		logger.Error("Failed to update policy %s/%s: %v", namespace, name, err)
+		http.Error(w, "Failed to update policy: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	s.writeJSONResponse(w, policy)
+}
+
+func (s *Server) deletePolicy(w http.ResponseWriter, r *http.Request, namespace, name string) {
+	var policy v1alpha1.RightSizerPolicy
+	policy.Namespace = namespace
+	policy.Name = name
+
+	if err := s.ctrlClient.Delete(r.Context(), &policy); err != nil {
+		logger.Error("Failed to delete policy %s/%s: %v", namespace, name, err)
+		http.Error(w, "Failed to delete policy: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // writeJSONResponse writes JSON response

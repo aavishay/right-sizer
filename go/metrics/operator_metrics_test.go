@@ -366,3 +366,16 @@ func TestObserveDuration(t *testing.T) {
 		timer.ObserveDuration(metrics.ProcessingDuration.WithLabelValues("test_operation"))
 	})
 }
+
+func TestRecordRecommendationCreated(t *testing.T) {
+	operatorMetricsOnce = sync.Once{}
+	operatorMetricsInstance = nil
+
+	metrics := NewOperatorMetrics()
+	require.NotNil(t, metrics)
+
+	assert.NotPanics(t, func() {
+		metrics.RecordRecommendationCreated("default", "test-pod", "critical", "high", "resize")
+		metrics.RecordRecommendationCreated("kube-system", "kube-dns", "low", "info", "ignore")
+	})
+}

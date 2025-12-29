@@ -647,7 +647,7 @@ func main() {
 		// Wait for configuration to be loaded from CRD
 		time.Sleep(5 * time.Second)
 
-		apiServer := api.NewServer(clientset, metricsClient, predictorEngine, recommendationManager, operatorMetrics)
+		apiServer := api.NewServer(clientset, metricsClient, mgr.GetClient(), predictorEngine, recommendationManager, operatorMetrics)
 		if err := apiServer.Start(8082); err != nil {
 			logger.Error("API server error: %v", err)
 		}
