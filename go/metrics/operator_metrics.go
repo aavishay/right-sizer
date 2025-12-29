@@ -282,7 +282,7 @@ func createOperatorMetrics() *OperatorMetrics {
 				Name: "rightsizer_recommendations_total",
 				Help: "Total number of recommendations created",
 			},
-			[]string{"urgency", "severity", "action"},
+			[]string{"namespace", "pod_name", "urgency", "severity", "action"},
 		),
 
 		RecommendationsApproved: prometheus.NewCounter(prometheus.CounterOpts{
@@ -507,8 +507,8 @@ func (m *OperatorMetrics) UpdateHistoricalDataPoints(count float64) {
 }
 
 // RecordRecommendationCreated records when a recommendation is created
-func (m *OperatorMetrics) RecordRecommendationCreated(urgency, severity, action string) {
-	m.RecommendationsTotal.WithLabelValues(urgency, severity, action).Inc()
+func (m *OperatorMetrics) RecordRecommendationCreated(namespace, podName, urgency, severity, action string) {
+	m.RecommendationsTotal.WithLabelValues(namespace, podName, urgency, severity, action).Inc()
 }
 
 // RecordRecommendationApproved records when a recommendation is approved

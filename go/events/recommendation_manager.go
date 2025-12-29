@@ -132,7 +132,7 @@ func (rm *RecommendationManager) CreateRecommendation(
 
 	// Record metrics
 	if rm.metrics != nil {
-		rm.metrics.RecordRecommendationCreated(string(urgency), string(severity), action)
+		rm.metrics.RecordRecommendationCreated(namespace, resourceName, string(urgency), string(severity), action)
 		rm.updatePendingRecommendationsMetric()
 	}
 
