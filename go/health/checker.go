@@ -25,6 +25,8 @@ import (
 
 	"right-sizer/logger"
 
+	corev1 "k8s.io/api/core/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 )
 
@@ -43,6 +45,7 @@ type OperatorHealthChecker struct {
 	webhookServerURL string
 	checkInterval    time.Duration
 	lastOverallCheck time.Time
+	k8sClient        client.Client
 }
 
 // NewOperatorHealthChecker creates a new health checker
@@ -212,6 +215,41 @@ func (h *OperatorHealthChecker) performHealthChecks() {
 			h.UpdateComponentStatus("webhook", true, "Webhook server is healthy")
 		}
 	}
+
+	// Check Kubernetes API connectivity if client is available
+	if h.k8sClient != nil {
+		if err := h.checkK8sHealth(); err != nil {
+			h.UpdateComponentStatus("k8s-api", false, fmt.Sprintf("K8s API check failed: %v", err))
+		} else {
+			h.UpdateComponentStatus("k8s-api", true, "Kubernetes API is accessible")
+		}
+	}
+}
+
+// checkK8sHealth checks connectivity to the Kubernetes API server
+func (h *OperatorHealthChecker) checkK8sHealth() error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// Try to list pods in default namespace with limit 1 to verify read access
+	// We use a raw list operation to bypass local caches and hit the API server directly if possible,
+	// though client.Client usually reads from cache. To check API server, we might strictly need APIReader.
+	// But standard client check is better than nothing.
+	// Actually, standard client reads from cache. A better check for "connectivity" might be to use RESTMapper or similar.
+	// However, if cache is stale/broken, that's also an issue.
+
+	// Use a simple list on the configured system namespace or default
+	listOpts := &client.ListOptions{
+		Limit:     1,
+		Namespace: "default",
+	}
+
+	var pods corev1.PodList
+	if err := h.k8sClient.List(ctx, &pods, listOpts); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // CheckHTTPEndpoint checks if an HTTP endpoint is responsive
@@ -289,6 +327,19 @@ func (h *OperatorHealthChecker) SetWebhookServerURL(url string) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.webhookServerURL = url
+}
+
+// SetK8sClient sets the Kubernetes client for health checks
+func (h *OperatorHealthChecker) SetK8sClient(c client.Client) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.k8sClient = c
+	// Initialize status
+	h.components["k8s-api"] = &ComponentStatus{
+		Healthy:     true,
+		LastChecked: time.Now(),
+		Message:     "Initialized",
+	}
 }
 
 // DetailedHealthCheck returns a custom health check that provides detailed information

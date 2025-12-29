@@ -26,6 +26,11 @@ import (
 	"time"
 )
 
+const (
+	// DefaultPredictionConfidenceThreshold is the default minimum confidence for using predictions
+	DefaultPredictionConfidenceThreshold = 0.6
+)
+
 // Config holds all configuration for resource sizing
 // This configuration is now loaded from CRDs instead of environment variables
 // NotificationConfig holds notification settings

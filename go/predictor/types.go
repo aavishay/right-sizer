@@ -16,6 +16,7 @@
 package predictor
 
 import (
+	"right-sizer/config"
 	"time"
 )
 
@@ -170,7 +171,7 @@ func DefaultConfig() *Config {
 			PredictionMethodExponentialSmoothing,
 			PredictionMethodSimpleMovingAverage,
 		},
-		ConfidenceThreshold:      0.6, // 60% confidence minimum
+		ConfidenceThreshold:      config.DefaultPredictionConfidenceThreshold, // 60% confidence minimum
 		MaxConcurrentPredictions: 10,
 		PredictionTimeout:        30 * time.Second,
 		StorageDriver:            "memory",
