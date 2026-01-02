@@ -25,20 +25,23 @@ type OOMEvent struct {
 	Namespace     string
 	ContainerName string
 	Timestamp     time.Time
+	RCA           *RCAData
 }
 
 // OOMListener watches for OOMKilled events in a Kubernetes cluster.
 type OOMListener struct {
-	clientset kubernetes.Interface
-	oomChan   chan<- OOMEvent
+	clientset    kubernetes.Interface
+	oomChan      chan<- OOMEvent
+	rcaCollector *RCACollector
 }
 
 // NewOOMListener creates a new listener for OOMKilled events.
 // It takes a Kubernetes clientset and a channel to send events to.
 func NewOOMListener(clientset kubernetes.Interface, oomChan chan<- OOMEvent) *OOMListener {
 	return &OOMListener{
-		clientset: clientset,
-		oomChan:   oomChan,
+		clientset:    clientset,
+		oomChan:      oomChan,
+		rcaCollector: NewRCACollector(clientset),
 	}
 }
 
@@ -96,11 +99,20 @@ func (l *OOMListener) handleOOMEvent(event *v1.Event) {
 	// This is a simplification; a more robust solution would use regex.
 	containerName := getContainerNameFromMessage(event.Message)
 
+	// Collect RCA Context
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	rcaData, err := l.rcaCollector.CollectContext(ctx, event.InvolvedObject.Namespace, event.InvolvedObject.Name, containerName)
+	if err != nil {
+		logger.Error("Failed to collect RCA context: %v", err)
+	}
+
 	oomEvent := OOMEvent{
 		PodName:       event.InvolvedObject.Name,
 		Namespace:     event.InvolvedObject.Namespace,
 		ContainerName: containerName,
 		Timestamp:     event.LastTimestamp.Time,
+		RCA:           rcaData,
 	}
 
 	// Send the structured event to the processing channel.

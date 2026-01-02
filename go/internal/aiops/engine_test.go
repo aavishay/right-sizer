@@ -18,7 +18,7 @@ func (m *mockMetricsProvider) FetchPodMetrics(ctx context.Context, namespace, po
 
 // TestEngineStartStop ensures the AIOps engine starts goroutines without panic and stops cleanly.
 func TestEngineStartStop(t *testing.T) {
-	engine := NewEngine(nil, &mockMetricsProvider{}, narrative.LLMConfig{})
+	engine := NewEngine(nil, &mockMetricsProvider{}, narrative.LLMConfig{}, nil)
 	// Disable OOM listener for unit test (no Kubernetes client available)
 	engine.oomListener = nil
 

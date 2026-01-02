@@ -1638,6 +1638,15 @@ func (s *Server) handleApplyRecommendationByID(w http.ResponseWriter, r *http.Re
 		return
 	}
 
+	// If AutoApply is true, execute immediately
+	if req.AutoApply {
+		if err := s.recommendationManager.ExecuteRecommendation(id); err != nil {
+			logger.Error("Failed to execute recommendation automatically: %v (id=%s)", err, id)
+			// Don't return error to user as approval already succeeded,
+			// but log it since it's an automated background action.
+		}
+	}
+
 	response := map[string]interface{}{
 		"message":          "Recommendation applied successfully",
 		"recommendationId": id,

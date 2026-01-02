@@ -605,7 +605,7 @@ func main() {
 		ModelName: os.Getenv("LLM_MODEL_NAME"),
 	}
 	if llmConfig.APIKey != "" {
-		aiopsEngine := aiops.NewEngine(clientset, provider, llmConfig)
+		aiopsEngine := aiops.NewEngine(clientset, provider, llmConfig, newDashboardClient)
 		go aiopsEngine.Start(ctx)
 	} else {
 		logger.Info("🤖 AIOps Engine disabled: LLM_API_KEY environment variable not set.")

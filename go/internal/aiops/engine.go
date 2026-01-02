@@ -4,6 +4,8 @@ import (
 	"context"
 	"time"
 
+	"fmt"
+	dashboardapi "right-sizer/dashboard-api"
 	"right-sizer/internal/aiops/analyzers"
 	"right-sizer/internal/aiops/collector"
 	"right-sizer/internal/aiops/core"
@@ -34,6 +36,7 @@ type Engine struct {
 	// External deps
 	clientset       kubernetes.Interface
 	metricsProvider metrics.Provider
+	dashboardClient *dashboardapi.Client
 
 	// Sampling configuration
 	sampleInterval time.Duration
@@ -43,7 +46,7 @@ type Engine struct {
 }
 
 // NewEngine creates and configures a new AIOps Engine with in‑memory bus & incident store.
-func NewEngine(clientset kubernetes.Interface, metricsProvider metrics.Provider, llmConfig narrative.LLMConfig) *Engine {
+func NewEngine(clientset kubernetes.Interface, metricsProvider metrics.Provider, llmConfig narrative.LLMConfig, dashboardClient *dashboardapi.Client) *Engine {
 	oomEventChan := make(chan collector.OOMEvent, 100)
 
 	// Core components
@@ -60,6 +63,7 @@ func NewEngine(clientset kubernetes.Interface, metricsProvider metrics.Provider,
 		oomEventChan:    oomEventChan,
 		clientset:       clientset,
 		metricsProvider: metricsProvider,
+		dashboardClient: dashboardClient,
 		bus:             bus,
 		incidentStore:   store,
 		analyzers:       []core.Analyzer{adapter},
@@ -214,6 +218,7 @@ func (e *Engine) publishOOMSignal(ev collector.OOMEvent) {
 		"PodName":       ev.PodName,
 		"ContainerName": ev.ContainerName,
 		"Timestamp":     ev.Timestamp,
+		"RCA":           ev.RCA,
 	}
 	sig := core.Signal{
 		Type:           core.SignalOOMKilled,
@@ -222,6 +227,28 @@ func (e *Engine) publishOOMSignal(ev collector.OOMEvent) {
 		Payload:        payload,
 	}
 	e.bus.Publish(sig)
+
+	// Stream to Dashboard if connected
+	if e.dashboardClient != nil {
+		dashEvent := dashboardapi.Event{
+			Type:          dashboardapi.EventError, // Mapped to Incident in Dashboard
+			Severity:      dashboardapi.SeverityCritical,
+			Timestamp:     ev.Timestamp.Format(time.RFC3339),
+			Namespace:     ev.Namespace,
+			PodName:       ev.PodName,
+			ContainerName: ev.ContainerName,
+			Message:       fmt.Sprintf("Pod %s in namespace %s (container: %s) was OOMKilled", ev.PodName, ev.Namespace, ev.ContainerName),
+			Metadata: map[string]interface{}{
+				"triageStatus": "open",
+				"RCA":          ev.RCA,
+			},
+		}
+		if err := e.dashboardClient.SendEvent(dashEvent); err != nil {
+			logger.Error("[AIOPS] Failed to send OOM event to dashboard: %v", err)
+		} else {
+			logger.Info("[AIOPS] Sent OOM event to dashboard for %s/%s", ev.Namespace, ev.PodName)
+		}
+	}
 }
 
 // legacyRegression keeps the existing regression path for transitional period.

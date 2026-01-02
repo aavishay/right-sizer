@@ -5,6 +5,7 @@ import (
 	"time"
 
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/client-go/kubernetes/fake"
 )
 
 // TestGetContainerNameFromMessage verifies container name extraction logic.
@@ -22,7 +23,11 @@ func TestGetContainerNameFromMessage(t *testing.T) {
 // TestHandleOOMEventNonBlocking simulates channel full behaviour.
 func TestHandleOOMEventNonBlocking(t *testing.T) {
 	ch := make(chan OOMEvent, 1)
-	listener := &OOMListener{oomChan: ch}
+	clientset := fake.NewSimpleClientset()
+	listener := &OOMListener{
+		oomChan:      ch,
+		rcaCollector: NewRCACollector(clientset),
+	}
 	// Fill channel
 	ch <- OOMEvent{PodName: "p1", Namespace: "ns", ContainerName: "c", Timestamp: time.Now()}
 	// Construct event object
