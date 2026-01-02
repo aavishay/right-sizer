@@ -604,8 +604,9 @@ func main() {
 		APIURL:    os.Getenv("LLM_API_URL"),
 		ModelName: os.Getenv("LLM_MODEL_NAME"),
 	}
+	var aiopsEngine *aiops.Engine
 	if llmConfig.APIKey != "" {
-		aiopsEngine := aiops.NewEngine(clientset, provider, llmConfig, newDashboardClient)
+		aiopsEngine = aiops.NewEngine(clientset, provider, llmConfig, newDashboardClient, cfg.ClusterID)
 		go aiopsEngine.Start(ctx)
 	} else {
 		logger.Info("🤖 AIOps Engine disabled: LLM_API_KEY environment variable not set.")
@@ -626,6 +627,39 @@ func main() {
 		logger.Info("✅ Recommendation manager started")
 	}
 
+	// Setup EventDrivenController for broad event detection
+	eventDrivenController := controllers.NewEventDrivenController(
+		mgr.GetClient(),
+		mgr.GetScheme(),
+		clientset,
+		cfg,
+		provider,
+		eventBus,
+		nil, // Remediation engine not needed for event detection only
+	)
+	if err := eventDrivenController.SetupWithManager(mgr); err != nil {
+		logger.Error("unable to setup EventDrivenController: %v", err)
+		os.Exit(1)
+	}
+	logger.Info("✅ EventDrivenController initialized")
+
+	// Bridge EventBus to AIOps Engine
+	if aiopsEngine != nil {
+		eventBus.Subscribe("aiops-bridge", func(event *events.Event) {
+			// Only process incident-related events
+			if event.Type == events.EventPodOOMKilled ||
+				event.Type == events.EventPodCrashLoop ||
+				event.Type == events.EventPodRestarts ||
+				event.Type == events.EventPodLivenessFailed ||
+				event.Type == events.EventPodReadinessFailed ||
+				event.Type == events.EventPodCPUThrottled ||
+				event.Type == events.EventDiskPressure ||
+				event.Type == events.EventPodImagePullIssue {
+				aiopsEngine.IngestEvent(event)
+			}
+		})
+	}
+
 	// Initialize predictive monitoring
 	logger.Info("🔮 Initializing Predictive Monitor...")
 	predictiveMonitor := events.NewPredictiveMonitor(
@@ -640,6 +674,17 @@ func main() {
 		logger.Error("Failed to start predictive monitor: %v", err)
 	} else {
 		logger.Info("✅ Predictive monitor started")
+	}
+
+	// Initialize and start Dashboard Bridge
+	var dashboardBridge *events.DashboardBridge
+	if newDashboardClient != nil {
+		dashboardBridge = events.NewDashboardBridge(eventBus, newDashboardClient)
+		if err := dashboardBridge.Start(ctx); err != nil {
+			logger.Error("Failed to start dashboard bridge: %v", err)
+		} else {
+			logger.Info("✅ Dashboard bridge started")
+		}
 	}
 
 	// Start API server using the new API server module
@@ -714,6 +759,11 @@ func main() {
 	if recommendationManager != nil {
 		logger.Info("📋 Stopping recommendation manager...")
 		recommendationManager.Stop()
+	}
+
+	if dashboardBridge != nil {
+		logger.Info("🌉 Stopping dashboard bridge...")
+		dashboardBridge.Stop()
 	}
 
 	// Log final statistics

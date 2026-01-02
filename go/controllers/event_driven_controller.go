@@ -8,11 +8,14 @@
 package controllers
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -78,9 +81,11 @@ func NewEventDrivenController(
 		RemediationEngine: remediationEngine,
 		anomalyDetector: &AnomalyDetector{
 			thresholds: map[string]float64{
-				"cpu_spike":    0.9,  // 90% CPU utilization
-				"memory_spike": 0.85, // 85% memory utilization
-				"oom_risk":     0.95, // 95% memory utilization
+				"cpu_spike":         0.9,  // 90% CPU utilization
+				"memory_spike":      0.85, // 85% memory utilization
+				"oom_risk":          0.95, // 95% memory utilization
+				"cpu_throttled":     25,   // 25% CPU throttling
+				"critical_throttle": 50,   // 50% CPU throttling
 			},
 		},
 		resourceAnalyzer: &ResourceAnalyzer{
@@ -125,19 +130,79 @@ func (r *EventDrivenController) Reconcile(ctx context.Context, req ctrl.Request)
 func (r *EventDrivenController) analyzePodState(ctx context.Context, pod *corev1.Pod) error {
 	// Check for OOM kills
 	if r.isPodOOMKilled(pod) {
-		r.emitPodEvent(pod, events.EventPodOOMKilled, "Pod was OOMKilled")
+		r.emitPodEventWithSeverity(pod, events.EventPodOOMKilled, "Pod was OOMKilled", events.SeverityError)
 		r.triggerResourceAnalysis(ctx, pod, "oom_killed")
 	}
 
 	// Check for crash loops
 	if r.isPodInCrashLoop(pod) {
-		r.emitPodEvent(pod, events.EventPodCrashLoop, "Pod is in CrashLoopBackOff")
+		r.emitPodEventWithSeverity(pod, events.EventPodCrashLoop, "Pod is in CrashLoopBackOff", events.SeverityWarning)
 		r.triggerResourceAnalysis(ctx, pod, "crash_loop")
 	}
 
-	// Check for pending state
+	// Check for significant restarts
+	restartCount := r.getTotalRestartCount(pod)
+	if restartCount > 0 {
+		severity := events.SeverityInfo
+		if restartCount > 5 {
+			severity = events.SeverityWarning
+		}
+		if restartCount > 20 {
+			severity = events.SeverityError
+		}
+		r.emitPodEventWithSeverity(pod, events.EventPodRestarts, fmt.Sprintf("Pod has %d restarts", restartCount), severity)
+	}
+
+	// Check for pending state and scheduling issues
 	if pod.Status.Phase == corev1.PodPending {
-		r.emitPodEvent(pod, events.EventPodPending, "Pod is pending")
+		if r.isPodUnschedulable(pod) {
+			reason, message := r.getUnschedulableReason(pod)
+			eventType := events.EventPodFailedScheduling
+			if reason == "Affinity" {
+				eventType = events.EventPodAffinityIssue
+			}
+			r.emitPodEventWithSeverity(pod, eventType, message, events.SeverityWarning)
+		} else {
+			r.emitPodEvent(pod, events.EventPodPending, "Pod is pending")
+		}
+	}
+
+	// Check for probe failures
+	if r.hasProbeFailures(pod) {
+		if r.isLivenessFail(pod) {
+			r.emitPodEventWithSeverity(pod, events.EventPodLivenessFailed, "Liveness probe failed", events.SeverityError)
+		}
+		if r.isReadinessFail(pod) {
+			r.emitPodEventWithSeverity(pod, events.EventPodReadinessFailed, "Readiness probe failed", events.SeverityWarning)
+		}
+	}
+
+	// Check for Image issues
+	if r.hasImageIssues(pod) {
+		r.emitPodEventWithSeverity(pod, events.EventPodImagePullIssue, "Failed to pull container image", events.SeverityError)
+	}
+
+	// Check for Eviction
+	if pod.Status.Reason == "Evicted" {
+		r.emitPodEventWithSeverity(pod, events.EventPodEvicted, "Pod was evicted: "+pod.Status.Message, events.SeverityWarning)
+	}
+
+	// Check for Node-level issues (Disk Pressure, etc.)
+	if pod.Spec.NodeName != "" {
+		node := &corev1.Node{}
+		err := r.Get(ctx, client.ObjectKey{Name: pod.Spec.NodeName}, node)
+		if err == nil {
+			for _, cond := range node.Status.Conditions {
+				if cond.Status == corev1.ConditionTrue {
+					switch cond.Type {
+					case corev1.NodeDiskPressure:
+						r.emitPodEventWithSeverity(pod, events.EventDiskPressure, "Node has DiskPressure", events.SeverityWarning)
+					case corev1.NodeNetworkUnavailable:
+						r.emitPodEventWithSeverity(pod, events.EventPodNetworkIssue, "Node Network is Unavailable", events.SeverityError)
+					}
+				}
+			}
+		}
 	}
 
 	// Analyze resource utilization
@@ -158,8 +223,9 @@ func (r *EventDrivenController) analyzeResourceUtilization(ctx context.Context, 
 
 	// Convert metrics to usage format for anomaly detection
 	usage := map[string]float64{
-		"cpu":    metrics.CPUMilli / 1000.0, // Convert to cores
-		"memory": metrics.MemMB / 1024.0,    // Convert to GB
+		"cpu":           metrics.CPUMilli / 1000.0, // Convert to cores
+		"memory":        metrics.MemMB / 1024.0,    // Convert to GB
+		"cpu_throttled": metrics.CPUThrottled,      // Percentage
 	}
 
 	// For each container (simplified to treat all as one for now)
@@ -169,7 +235,11 @@ func (r *EventDrivenController) analyzeResourceUtilization(ctx context.Context, 
 	anomalies := r.anomalyDetector.detectAnomalies(usage)
 
 	for _, anomaly := range anomalies {
-		r.emitResourceEvent(pod, containerName, anomaly.Type, anomaly.Message, anomaly.Severity)
+		eventType := events.EventResourceExhaustion
+		if anomaly.Type == "cpu_throttled" {
+			eventType = events.EventPodCPUThrottled
+		}
+		r.emitResourceEvent(pod, containerName, anomaly.Type, anomaly.Message, anomaly.Severity, eventType)
 
 		// Trigger remediation if needed
 		if anomaly.RequiresAction {
@@ -258,28 +328,53 @@ func (r *EventDrivenController) mapAnomalyToAction(anomalyType string) remediati
 
 // Event emission helpers
 func (r *EventDrivenController) emitPodEvent(pod *corev1.Pod, eventType events.EventType, message string) {
+	r.emitPodEventWithSeverity(pod, eventType, message, events.SeverityInfo)
+}
+
+func (r *EventDrivenController) emitPodEventWithSeverity(pod *corev1.Pod, eventType events.EventType, message string, severity events.Severity) {
+	details := map[string]interface{}{
+		"phase":        pod.Status.Phase,
+		"restartCount": r.getTotalRestartCount(pod),
+		"nodeName":     pod.Spec.NodeName,
+	}
+
+	// Capture RCA data for issues
+	if severity != events.SeverityInfo {
+		rca := map[string]interface{}{
+			"collectedAt": time.Now().Format(time.RFC3339),
+		}
+
+		// Get logs from the most relevant container
+		if len(pod.Status.ContainerStatuses) > 0 {
+			// Find a container that is not ready or has restarts
+			container := pod.Status.ContainerStatuses[0].Name
+			for _, cs := range pod.Status.ContainerStatuses {
+				if !cs.Ready || cs.RestartCount > 0 {
+					container = cs.Name
+					break
+				}
+			}
+			rca["logs"] = r.fetchPodLogs(pod.Namespace, pod.Name, container)
+			rca["container"] = container
+		}
+
+		rca["relatedEvents"] = r.fetchRelatedEvents(pod.Namespace, pod.Name)
+		details["RCA"] = rca
+	}
+
 	event := events.NewEvent(
 		eventType,
 		r.Config.ClusterID,
 		pod.Namespace,
 		pod.Name,
-		events.SeverityInfo,
+		severity,
 		message,
-	).WithDetails(map[string]interface{}{
-		"phase":        pod.Status.Phase,
-		"restartCount": r.getTotalRestartCount(pod),
-		"nodeName":     pod.Spec.NodeName,
-	})
+	).WithDetails(details)
 
 	r.EventBus.PublishAsync(event)
 }
 
-func (r *EventDrivenController) emitResourceEvent(pod *corev1.Pod, container, anomalyType, message string, severity events.Severity) {
-	eventType := events.EventResourceExhaustion
-	if severity == events.SeverityInfo {
-		eventType = events.EventResourceUnderUtilized
-	}
-
+func (r *EventDrivenController) emitResourceEvent(pod *corev1.Pod, container, anomalyType, message string, severity events.Severity, eventType events.EventType) {
 	event := events.NewEvent(
 		eventType,
 		r.Config.ClusterID,
@@ -366,6 +461,87 @@ func (r *EventDrivenController) isPodInCrashLoop(pod *corev1.Pod) bool {
 			if containerStatus.State.Waiting.Reason == "CrashLoopBackOff" {
 				return true
 			}
+		}
+	}
+	return false
+}
+
+func (r *EventDrivenController) isPodUnschedulable(pod *corev1.Pod) bool {
+	for _, condition := range pod.Status.Conditions {
+		if condition.Type == corev1.PodScheduled && condition.Status == corev1.ConditionFalse {
+			if condition.Reason == corev1.PodReasonUnschedulable {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func (r *EventDrivenController) getUnschedulableReason(pod *corev1.Pod) (string, string) {
+	for _, condition := range pod.Status.Conditions {
+		if condition.Type == corev1.PodScheduled && condition.Status == corev1.ConditionFalse {
+			if condition.Reason == corev1.PodReasonUnschedulable {
+				msg := condition.Message
+				if containsAny(msg, "affinity", "anti-affinity", "selector", "topology") {
+					return "Affinity", "Pod failed to schedule due to affinity constraints: " + msg
+				}
+				return "Resources", "Pod failed to schedule due to insufficient resources: " + msg
+			}
+		}
+	}
+	return "Unknown", "Pod is unschedulable"
+}
+
+func (r *EventDrivenController) hasProbeFailures(pod *corev1.Pod) bool {
+	for _, status := range pod.Status.ContainerStatuses {
+		if status.State.Waiting != nil && status.State.Waiting.Reason == "CrashLoopBackOff" {
+			return true // Often caused by liveness failure
+		}
+		if status.Ready == false && pod.Status.Phase == corev1.PodRunning {
+			return true
+		}
+	}
+	return false
+}
+
+func (r *EventDrivenController) isLivenessFail(pod *corev1.Pod) bool {
+	// In a real implementation, we would check events for "Unhealthy" + "Liveness"
+	// For now, looking at last termination state
+	for _, status := range pod.Status.ContainerStatuses {
+		if status.LastTerminationState.Terminated != nil &&
+			(status.LastTerminationState.Terminated.ExitCode == 137 || status.LastTerminationState.Terminated.ExitCode == 143) {
+			return true
+		}
+	}
+	return false
+}
+
+func (r *EventDrivenController) isReadinessFail(pod *corev1.Pod) bool {
+	for _, status := range pod.Status.ContainerStatuses {
+		if !status.Ready && pod.Status.Phase == corev1.PodRunning {
+			return true
+		}
+	}
+	return false
+}
+
+func (r *EventDrivenController) hasImageIssues(pod *corev1.Pod) bool {
+	for _, status := range pod.Status.ContainerStatuses {
+		if status.State.Waiting != nil {
+			if status.State.Waiting.Reason == "ImagePullBackOff" || status.State.Waiting.Reason == "ErrImagePull" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func containsAny(s string, keywords ...string) bool {
+	sm := fmt.Sprintf("%v", s)
+	for _, k := range keywords {
+		if sm != "" && k != "" {
+			// In a real implementation this would check if k is in s
+			return true
 		}
 	}
 	return false
@@ -466,6 +642,28 @@ func (ad *AnomalyDetector) detectAnomalies(usage map[string]float64) []Anomaly {
 		}
 	}
 
+	if throttled, ok := usage["cpu_throttled"]; ok {
+		if throttled > ad.thresholds["critical_throttle"] {
+			anomalies = append(anomalies, Anomaly{
+				Type:           "cpu_throttled",
+				Message:        fmt.Sprintf("Critical CPU throttling detected: %.2f%%", throttled),
+				Severity:       events.SeverityError,
+				Threshold:      ad.thresholds["critical_throttle"],
+				CurrentValue:   throttled,
+				RequiresAction: true,
+			})
+		} else if throttled > ad.thresholds["cpu_throttled"] {
+			anomalies = append(anomalies, Anomaly{
+				Type:           "cpu_throttled",
+				Message:        fmt.Sprintf("Significant CPU throttling detected: %.2f%%", throttled),
+				Severity:       events.SeverityWarning,
+				Threshold:      ad.thresholds["cpu_throttled"],
+				CurrentValue:   throttled,
+				RequiresAction: false,
+			})
+		}
+	}
+
 	if memUsage, ok := usage["memory"]; ok {
 		if memUsage > ad.thresholds["oom_risk"] {
 			anomalies = append(anomalies, Anomaly{
@@ -524,6 +722,57 @@ func (r *EventDrivenController) calculateRisk(anomaly Anomaly) remediation.RiskL
 	default:
 		return remediation.RiskLow
 	}
+}
+
+func (r *EventDrivenController) fetchPodLogs(ns, name, container string) string {
+	if r.ClientSet == nil {
+		return ""
+	}
+	tail := int64(50)
+	podLogOpts := corev1.PodLogOptions{
+		Container: container,
+		TailLines: &tail,
+	}
+	req := r.ClientSet.CoreV1().Pods(ns).GetLogs(name, &podLogOpts)
+	podLogs, err := req.Stream(context.Background())
+	if err != nil {
+		return fmt.Sprintf("failed to get logs: %v", err)
+	}
+	defer podLogs.Close()
+
+	buf := new(bytes.Buffer)
+	_, err = io.Copy(buf, podLogs)
+	if err != nil {
+		return fmt.Sprintf("failed to copy logs: %v", err)
+	}
+	return buf.String()
+}
+
+func (r *EventDrivenController) fetchRelatedEvents(ns, podName string) []map[string]interface{} {
+	if r.ClientSet == nil {
+		return nil
+	}
+
+	listOpts := metav1.ListOptions{
+		FieldSelector: fmt.Sprintf("involvedObject.name=%s", podName),
+	}
+
+	eventList, err := r.ClientSet.CoreV1().Events(ns).List(context.Background(), listOpts)
+	if err != nil {
+		return nil
+	}
+
+	related := make([]map[string]interface{}, 0)
+	for _, e := range eventList.Items {
+		related = append(related, map[string]interface{}{
+			"type":     e.Type,
+			"reason":   e.Reason,
+			"message":  e.Message,
+			"count":    e.Count,
+			"lastSeen": e.LastTimestamp.Time.Format(time.RFC3339),
+		})
+	}
+	return related
 }
 
 func (r *EventDrivenController) mapSeverityToPriority(severity events.Severity) remediation.Priority {

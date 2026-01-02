@@ -3,6 +3,7 @@ package narrative
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"right-sizer/internal/aiops/analyzers"
 	"right-sizer/internal/aiops/collector"
@@ -55,6 +56,30 @@ func (g *NarrativeGenerator) GenerateOOMNarrative(ctx context.Context, event col
 	return mockNarrative, nil
 }
 
+// GenerateGeneralIncidentNarrative creates a human-readable story for any cluster incident.
+func (g *NarrativeGenerator) GenerateGeneralIncidentNarrative(ctx context.Context, incidentType string, message string, namespace string, podName string, logs string, events []collector.K8sEvent) (string, error) {
+	prompt := g.buildGeneralPrompt(incidentType, message, namespace, podName, logs, events)
+
+	// Placeholder for real LLM integration.
+	mockNarrative := fmt.Sprintf(
+		"ROOT CAUSE ANALYSIS (Mock General Narrative)\n\nIncident: %s\nPod: %s/%s\n\nAI Summary:\nThe container is experiencing %s failures. Initial message: \"%s\".\n\nLog Analysis:\nAnalysis of the last 50 lines of logs shows potential issues. (Snippet: %s...)\n\nEvent Analysis:\n%d related Kubernetes events were found, indicating persistent issues.\n\nRecommended Actions:\n1. Check the logs for specific error codes.\n2. Verify resource constraints.\n3. Review recent code or config changes.\n",
+		incidentType, namespace, podName, incidentType, message, truncateLogs(logs, 100), len(events),
+	)
+
+	fmt.Println("--- LLM GENERAL PROMPT (mock) ---")
+	fmt.Println(prompt)
+	fmt.Println("-------------------------")
+
+	return mockNarrative, nil
+}
+
+func truncateLogs(logs string, n int) string {
+	if len(logs) <= n {
+		return logs
+	}
+	return logs[:n]
+}
+
 // buildOOMPrompt constructs the LLM prompt with enriched analysis context.
 func (g *NarrativeGenerator) buildOOMPrompt(event collector.OOMEvent, result *analyzers.AnalysisResult) string {
 	return fmt.Sprintf(
@@ -94,6 +119,32 @@ func (g *NarrativeGenerator) buildOOMPrompt(event collector.OOMEvent, result *an
 	)
 }
 
+// buildGeneralPrompt constructs the LLM prompt for general incidents.
+func (g *NarrativeGenerator) buildGeneralPrompt(incidentType string, message string, namespace string, podName string, logs string, events []collector.K8sEvent) string {
+	eventSummary := ""
+	for _, e := range events {
+		eventSummary += fmt.Sprintf("- [%s] %s: %s (count: %d)\n", e.Type, e.Reason, e.Message, e.Count)
+	}
+
+	return fmt.Sprintf(
+		"ROLE: Senior Kubernetes Site Reliability Engineer\n"+
+			"TASK: Analyze a Kubernetes incident and provide a root cause summary.\n\n"+
+			"INCIDENT CONTEXT:\n"+
+			"- Type: %s\n"+
+			"- Message: %s\n"+
+			"- Resource: %s/%s\n\n"+
+			"LOG SNIPPETS (Last 50 lines):\n%s\n\n"+
+			"RELATED EVENTS:\n%s\n\n"+
+			"OUTPUT REQUIREMENTS:\n"+
+			"1. Explain what happened based on the logs and events.\n"+
+			"2. Identify the likely root cause.\n"+
+			"3. provide 3 actionable remediation steps.\n"+
+			"4. Keep it concise and technical.\n\n"+
+			"Generate the analysis now.",
+		incidentType, message, namespace, podName, logs, eventSummary,
+	)
+}
+
 // conditionalCausal formats causal event if present.
 func conditionalCausal(c string) string {
 	if c == "" {
@@ -113,4 +164,28 @@ func emptyFallback(s, fb string) string {
 // callLLM is a placeholder for real LLM API integration.
 func (g *NarrativeGenerator) callLLM(ctx context.Context, prompt string) (string, error) {
 	return "LLM integration not yet implemented.", nil
+}
+
+// GenerateHealthSnapshotSummary generates a high-level summary of cluster health.
+func (g *NarrativeGenerator) GenerateHealthSnapshotSummary(ctx context.Context, activeIncidents, recentIncidents int, resourceUsage map[string]float64) (string, int, error) {
+	if g.config.APIKey == "" {
+		return "AI Analysis disabled (no API key). Cluster seems operational.", 100, nil
+	}
+
+	// Calculate a naive score first
+	score := 100
+	score -= activeIncidents * 10
+	score -= (recentIncidents - activeIncidents) * 2
+	if score < 0 {
+		score = 0
+	}
+
+	prompt := fmt.Sprintf("Analyze the following Kubernetes cluster health data and provide a concise (2-3 sentences) executive summary.\nActive Incidents: %d\nRecent Incidents (24h): %d\nResource Usage: %v\n\nCurrent Health Score: %d/100\n\nFormat the output as a plain text summary.", activeIncidents, recentIncidents, resourceUsage, score)
+
+	summary, err := g.callLLM(ctx, prompt)
+	if err != nil {
+		return "", score, err
+	}
+
+	return strings.TrimSpace(summary), score, nil
 }

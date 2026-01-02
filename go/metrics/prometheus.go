@@ -45,12 +45,27 @@ func (p *PrometheusProvider) FetchPodMetrics(ctx context.Context, namespace, pod
 		return Metrics{}, fmt.Errorf("failed to query memory metrics: %w", err)
 	}
 
+	// Query CPU throttling percentage
+	// Formula: (sum of increase in throttled time) / (sum of increase in total CPU time) * 100
+	throttledQuery := fmt.Sprintf(`
+		sum(increase(container_cpu_cfs_throttled_seconds_total{namespace="%s", pod="%s"}[5m]))
+		/
+		sum(increase(container_cpu_usage_seconds_total{namespace="%s", pod="%s"}[5m]))
+		* 100`, namespace, podName, namespace, podName)
+
+	cpuThrottled, err := p.queryPrometheus(ctx, throttledQuery)
+	if err != nil {
+		// Throttling might not be available or 0 if no usage
+		cpuThrottled = 0
+	}
+
 	// Convert bytes to MB
 	memMB := memBytes / (1024 * 1024)
 
 	return Metrics{
-		CPUMilli: cpuMilli,
-		MemMB:    memMB,
+		CPUMilli:     cpuMilli,
+		MemMB:        memMB,
+		CPUThrottled: cpuThrottled,
 	}, nil
 }
 
