@@ -23,8 +23,9 @@ import (
 
 // Metrics holds CPU and memory usage values
 type Metrics struct {
-	CPUMilli float64 // CPU usage in millicores
-	MemMB    float64 // Memory usage in MB
+	CPUMilli     float64 // CPU usage in millicores
+	MemMB        float64 // Memory usage in MB
+	CPUThrottled float64 // CPU throttling percentage (0-100)
 }
 
 // Provider interface for metrics sources

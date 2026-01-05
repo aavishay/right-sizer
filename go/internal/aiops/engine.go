@@ -2,10 +2,12 @@ package aiops // TODO: eventually move to internal/aiops/engine (keep package fo
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"fmt"
 	dashboardapi "right-sizer/dashboard-api"
+	"right-sizer/events"
 	"right-sizer/internal/aiops/analyzers"
 	"right-sizer/internal/aiops/collector"
 	"right-sizer/internal/aiops/core"
@@ -37,6 +39,7 @@ type Engine struct {
 	clientset       kubernetes.Interface
 	metricsProvider metrics.Provider
 	dashboardClient *dashboardapi.Client
+	clusterID       string
 
 	// Sampling configuration
 	sampleInterval time.Duration
@@ -46,7 +49,7 @@ type Engine struct {
 }
 
 // NewEngine creates and configures a new AIOps Engine with in‑memory bus & incident store.
-func NewEngine(clientset kubernetes.Interface, metricsProvider metrics.Provider, llmConfig narrative.LLMConfig, dashboardClient *dashboardapi.Client) *Engine {
+func NewEngine(clientset kubernetes.Interface, metricsProvider metrics.Provider, llmConfig narrative.LLMConfig, dashboardClient *dashboardapi.Client, clusterID string) *Engine {
 	oomEventChan := make(chan collector.OOMEvent, 100)
 
 	// Core components
@@ -64,6 +67,7 @@ func NewEngine(clientset kubernetes.Interface, metricsProvider metrics.Provider,
 		clientset:       clientset,
 		metricsProvider: metricsProvider,
 		dashboardClient: dashboardClient,
+		clusterID:       clusterID,
 		bus:             bus,
 		incidentStore:   store,
 		analyzers:       []core.Analyzer{adapter},
@@ -130,6 +134,10 @@ func (e *Engine) makeAnalyzerDispatch(an core.Analyzer) core.Handler {
 
 func (e *Engine) Start(ctx context.Context) {
 	logger.Info("[AIOPS] Engine starting (OOM listener + bus dispatch + sampler)...")
+
+	// Start health reporting loop
+	e.StartHealthReporting(ctx)
+
 	if e.oomListener != nil { // allow tests to disable without nil panic
 		go e.oomListener.Start(ctx)
 	} else {
@@ -211,6 +219,115 @@ func (e *Engine) eventIngestLoop(ctx context.Context) {
 	}
 }
 
+// IngestEvent processes a global cluster event into the AIOps pipeline.
+func (e *Engine) IngestEvent(event *events.Event) {
+	e.publishGenericSignal(event)
+}
+
+// publishGenericSignal converts a general cluster event into a core.Signal.
+func (e *Engine) publishGenericSignal(ev *events.Event) {
+	sig := core.Signal{
+		Type:           core.SignalGenericIncident,
+		Timestamp:      ev.Timestamp,
+		CorrelationKey: ev.Namespace + "/" + ev.Resource,
+		Payload:        ev,
+	}
+	e.bus.Publish(sig)
+
+	// We also immediately upsert it into the incident store for tracking
+	incID := GenerateIncidentID(string(ev.Type))
+	inc := NewIncident(incID, IncidentType(ev.Type), Severity(ev.Severity), sig.CorrelationKey)
+	inc.InitialMessage = ev.Message
+
+	// If there's RCA data (logs), we'll eventually want to generate a narrative for it.
+	status := StatusDetected
+	e.incidentStore.UpsertIncident(inc, nil, nil, &status)
+
+	// Trigger asynchronous AI analysis
+	go e.analyzeGenericIncident(inc, ev)
+}
+
+func (e *Engine) analyzeGenericIncident(inc *Incident, ev *events.Event) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	var logs string
+	var eventsList []collector.K8sEvent
+
+	if rca, ok := ev.Details["RCA"].(map[string]any); ok {
+		if l, ok := rca["logs"].(string); ok {
+			logs = l
+		}
+		if evs, ok := rca["relatedEvents"].([]any); ok {
+			for _, item := range evs {
+				if m, ok := item.(map[string]any); ok {
+					e_type, _ := m["type"].(string)
+					reason, _ := m["reason"].(string)
+					msg, _ := m["message"].(string)
+					count, _ := m["count"].(float64) // JSON numbers are floats
+					lastSeenStr, _ := m["lastSeen"].(string)
+					lastSeen, _ := time.Parse(time.RFC3339, lastSeenStr)
+
+					eventsList = append(eventsList, collector.K8sEvent{
+						Type:     e_type,
+						Reason:   reason,
+						Message:  msg,
+						Count:    int32(count),
+						LastSeen: lastSeen,
+					})
+				} else if m, ok := item.(map[string]interface{}); ok {
+					// Handle map[string]interface{} just in case
+					e_type, _ := m["type"].(string)
+					reason, _ := m["reason"].(string)
+					msg, _ := m["message"].(string)
+					count, _ := m["count"].(int32)
+					lastSeen, _ := m["lastSeen"].(time.Time)
+
+					eventsList = append(eventsList, collector.K8sEvent{
+						Type:     e_type,
+						Reason:   reason,
+						Message:  msg,
+						Count:    count,
+						LastSeen: lastSeen,
+					})
+				}
+			}
+		}
+	}
+
+	narrText, err := e.narrativeGen.GenerateGeneralIncidentNarrative(ctx, string(ev.Type), ev.Message, ev.Namespace, ev.Resource, logs, eventsList)
+	if err != nil {
+		logger.Error("[AIOPS] Narrative generation failed for %s: %v", inc.ID, err)
+		return
+	}
+
+	n := &Narrative{
+		Title:      fmt.Sprintf("AI Analysis: %s", ev.Type),
+		Summary:    fmt.Sprintf("Analyzed %d logs and %d events.", len(strings.Split(logs, "\n")), len(eventsList)),
+		FullText:   narrText,
+		Confidence: 0.8, // Default for generic
+	}
+
+	inc.SetNarrative(n)
+	newStatus := StatusExplained
+	e.incidentStore.UpsertIncident(inc, nil, n, &newStatus)
+	logger.Info("[AIOPS] Narrative generated and stored for incident %s", inc.ID)
+
+	// Sync AI analysis to dashboard
+	if e.dashboardClient != nil {
+		if correlationID, ok := ev.Details["correlationId"].(string); ok {
+			metadata := map[string]any{
+				"aiAnalysis": n,
+			}
+			if err := e.dashboardClient.UpdateEventMetadataByCorrelation(correlationID, metadata); err != nil {
+				logger.Error("[AIOPS] Failed to sync AI analysis to dashboard: %v", err)
+			} else {
+				logger.Info("[AIOPS] AI analysis synced to dashboard for correlationID %s", correlationID)
+			}
+		}
+	}
+}
+
 // publishOOMSignal converts an OOMEvent into a core.Signal and publishes it.
 func (e *Engine) publishOOMSignal(ev collector.OOMEvent) {
 	payload := map[string]any{
@@ -277,4 +394,10 @@ func (e *Engine) legacyRegression(ctx context.Context, ev collector.OOMEvent) {
 // IncidentStore exposes the engine's incident store (read-only usage).
 func (e *Engine) IncidentStore() *IncidentStore {
 	return e.incidentStore
+}
+
+// StartHealthReporting starts the periodic health analysis loop.
+func (e *Engine) StartHealthReporting(ctx context.Context) {
+	reporter := NewHealthReporter(e.incidentStore, e.metricsProvider, e.dashboardClient, e.narrativeGen, e.clusterID)
+	go reporter.Start(ctx)
 }

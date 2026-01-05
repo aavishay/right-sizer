@@ -82,6 +82,7 @@ type Incident struct {
 	FirstSeen       time.Time
 	LastUpdated     time.Time
 	PrimaryResource string // canonical key: namespace/pod(/container) or other identifier
+	InitialMessage  string // The original message from the source event
 
 	Evidence  []core.Evidence
 	Narrative *Narrative

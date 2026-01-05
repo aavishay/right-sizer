@@ -78,7 +78,8 @@ func (m *MetricsServerProvider) FetchPodMetrics(ctx context.Context, namespace, 
 	totalMemMB := float64(totalMemBytes) / (1024 * 1024)
 
 	return Metrics{
-		CPUMilli: totalCPUMilli,
-		MemMB:    totalMemMB,
+		CPUMilli:     totalCPUMilli,
+		MemMB:        totalMemMB,
+		CPUThrottled: 0, // metrics-server doesn't provide throttling
 	}, nil
 }

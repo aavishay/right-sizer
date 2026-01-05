@@ -35,6 +35,7 @@ const (
 	SignalNetworkErrorSpike SignalType = "NETWORK_ERROR_SPIKE"
 	SignalAnalyzerFinding   SignalType = "ANALYZER_FINDING"
 	SignalIncidentUpdated   SignalType = "INCIDENT_UPDATED"
+	SignalGenericIncident   SignalType = "GENERIC_INCIDENT"
 )
 
 // Signal is the transport envelope published on the internal bus.

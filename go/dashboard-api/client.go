@@ -36,6 +36,22 @@ const (
 	EventMetricsCollected      EventType = "metrics_collected"
 	EventHeartbeat             EventType = "heartbeat"
 	EventError                 EventType = "error"
+
+	// Kubernetes Events
+	EventOOMKilled        EventType = "oom_killed"
+	EventCrashLoopBackOff EventType = "crash_loop_backoff"
+	EventFailedScheduling EventType = "failed_scheduling"
+	EventCPUThrottling    EventType = "cpu_throttling"
+	EventDiskPressure     EventType = "disk_pressure"
+	EventLivenessFailed   EventType = "liveness_failed"
+	EventReadinessFailed  EventType = "readiness_failed"
+	EventNetworkIssue     EventType = "network_issue"
+	EventDNSIssue         EventType = "dns_issue"
+	EventAffinityIssue    EventType = "affinity_issue"
+	EventImagePullIssue   EventType = "image_pull_issue"
+	EventVolumeIssue      EventType = "volume_issue"
+	EventPodEvicted       EventType = "pod_evicted"
+	EventPodRestarts      EventType = "pod_restarts"
 )
 
 // EventSeverity represents the severity level of an event
@@ -73,6 +89,9 @@ type Status struct {
 	Timestamp       string            `json:"timestamp"`
 	Metrics         *StatusMetrics    `json:"metrics,omitempty"`
 	Conditions      []StatusCondition `json:"conditions,omitempty"`
+	HealthSnapshot  string            `json:"healthSnapshot,omitempty"`
+	HealthScore     int               `json:"healthScore,omitempty"`
+	ActiveIncidents int               `json:"activeIncidents,omitempty"`
 }
 
 // StatusMetrics contains aggregated metrics for status updates
@@ -259,6 +278,19 @@ func (c *Client) SendEvent(event Event) error {
 func (c *Client) sendEventNow(event Event) error {
 	url := fmt.Sprintf("%s/api/operator/events", c.config.BaseURL)
 	return c.doRequest("POST", url, event, nil)
+}
+
+// UpdateEventMetadataByCorrelation updates event metadata by correlation ID
+func (c *Client) UpdateEventMetadataByCorrelation(correlationID string, metadata map[string]interface{}) error {
+	if c.config.BaseURL == "" {
+		return nil // Integration disabled
+	}
+
+	url := fmt.Sprintf("%s/api/operator/events/correlation/%s", c.config.BaseURL, correlationID)
+	payload := map[string]interface{}{
+		"metadata": metadata,
+	}
+	return c.doRequest("PATCH", url, payload, nil)
 }
 
 // FlushEvents sends all queued events as a batch
