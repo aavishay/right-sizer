@@ -286,16 +286,16 @@ func (s *Server) authenticate(ctx context.Context) error {
 	return nil
 }
 
-// isValidToken checks if a token is valid
+// isValidToken checks if a token is valid with signature and expiration validation
 func (s *Server) isValidToken(token string) bool {
 	// Validate JWT tokens with proper signature and expiration checks
 	parsedToken, err := jwt.Parse(token, func(t *jwt.Token) (interface{}, error) {
-		// Ensure the signing method is HMAC
+		// Ensure the signing method is HMAC (prevent algorithm substitution attacks)
 		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
 		}
 		return []byte(s.config.JWTSecret), nil
-	})
+	}, jwt.WithValidMethods([]string{"HS256", "HS384", "HS512"}))
 
 	if err != nil {
 		logger.Warn("Token validation failed: %v", err)
@@ -305,6 +305,24 @@ func (s *Server) isValidToken(token string) bool {
 	if !parsedToken.Valid {
 		logger.Warn("Token validation failed: invalid token")
 		return false
+	}
+
+	// Verify standard claims including expiration
+	if claims, ok := parsedToken.Claims.(jwt.MapClaims); ok {
+		// Check expiration explicitly
+		if exp, ok := claims["exp"].(float64); ok {
+			if time.Now().Unix() > int64(exp) {
+				logger.Warn("Token validation failed: token has expired")
+				return false
+			}
+		}
+		// Check issued-at time to prevent future tokens
+		if iat, ok := claims["iat"].(float64); ok {
+			if time.Now().Unix() < int64(iat) {
+				logger.Warn("Token validation failed: token used before issued")
+				return false
+			}
+		}
 	}
 
 	return true
