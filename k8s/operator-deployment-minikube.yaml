@@ -1,0 +1,320 @@
+---
+# Right-Sizer Operator Deployment for Minikube Testing
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: right-sizer-operator
+  namespace: right-sizer
+  labels:
+    app: right-sizer-operator
+    version: v0.3.0
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: right-sizer-operator
+  labels:
+    app: right-sizer-operator
+    version: v0.3.0
+rules:
+# Core API resources
+- apiGroups: [""]
+  resources: ["pods", "pods/status", "pods/subresources/status"]
+  verbs: ["get", "list", "watch", "patch", "update"]
+- apiGroups: [""]
+  resources: ["pods/resize"]
+  verbs: ["get", "create", "patch", "update"]
+- apiGroups: [""]
+  resources: ["namespaces"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources: ["configmaps"]
+  verbs: ["get", "list", "watch", "create", "update", "patch"]
+# Events
+- apiGroups: [""]
+  resources: ["events"]
+  verbs: ["create", "patch", "update"]
+# Deployments and StatefulSets
+- apiGroups: ["apps"]
+  resources: ["deployments", "statefulsets", "daemonsets", "replicasets"]
+  verbs: ["get", "list", "watch"]
+# CRDs
+- apiGroups: ["rightsizer.io"]
+  resources: ["rightsizerconfigs", "rightsizerpolicies"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+- apiGroups: ["rightsizer.io"]
+  resources: ["rightsizerconfigs/status", "rightsizerpolicies/status"]
+  verbs: ["get", "update", "patch"]
+# Metrics
+- apiGroups: ["metrics.k8s.io"]
+  resources: ["pods", "nodes"]
+  verbs: ["get", "list"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: right-sizer-operator
+  labels:
+    app: right-sizer-operator
+    version: v0.3.0
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: right-sizer-operator
+subjects:
+- kind: ServiceAccount
+  name: right-sizer-operator
+  namespace: right-sizer
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: right-sizer-operator-config
+  namespace: right-sizer
+  labels:
+    app: right-sizer-operator
+    version: v0.3.0
+data:
+  operator-config.yaml: |
+    # Right-Sizer Operator Configuration for v0.3.0
+    clusterInfo:
+      clusterId: "minikube-rightsizer"
+      clusterName: "Minikube Testing"
+      environment: "development"
+      version: "v0.3.0"
+
+    metrics:
+      provider: "metrics-server"
+      scrapeInterval: 30s
+      metricsRetention: 7d
+
+    predictor:
+      enabled: true
+      method: "linear-regression"
+      confidenceThreshold: 0.85
+      memoryWindow: "1h"
+
+    remediation:
+      enabled: true
+      detectionMethod: "isolation-forest"
+      responseMode: "automated"
+      rtoTarget: "2m"
+      retryPolicy: "exponential-backoff"
+
+    persistence:
+      enabled: true
+      provider: "timescaledb"
+      backend: "postgresql"
+      retentionDays: 30
+
+    features:
+      multiRegionSupport: true
+      eventDriven: true
+      webhooks: true
+      admissionControl: true
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: right-sizer-operator
+  namespace: right-sizer
+  labels:
+    app: right-sizer-operator
+    component: core
+    version: v0.3.0
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: right-sizer-operator
+      component: core
+  template:
+    metadata:
+      labels:
+        app: right-sizer-operator
+        component: core
+        version: v0.3.0
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: right-sizer-operator
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        fsGroup: 65532
+
+      initContainers:
+      - name: check-crd-readiness
+        image: bitnami/kubectl:latest
+        command: ['sh', '-c']
+        args:
+        - |
+          echo "Checking for RightSizerConfig CRD..."
+          kubectl get crd rightsizerconfigs.rightsizer.io || \
+          echo "⚠️  RightSizerConfig CRD not found - will create during operator bootstrap"
+          echo "Checking for RightSizerPolicy CRD..."
+          kubectl get crd rightsizerpolicies.rightsizer.io || \
+          echo "⚠️  RightSizerPolicy CRD not found - will create during operator bootstrap"
+          exit 0
+
+      containers:
+      - name: operator
+        image: right-sizer-operator:v0.3.0
+        imagePullPolicy: IfNotPresent
+
+        ports:
+        - name: metrics
+          containerPort: 8080
+          protocol: TCP
+        - name: health
+          containerPort: 8081
+          protocol: TCP
+        - name: grpc
+          containerPort: 9090
+          protocol: TCP
+
+        env:
+        - name: CLUSTER_ID
+          value: "minikube-rightsizer"
+        - name: CLUSTER_NAME
+          value: "Minikube Testing"
+        - name: ENVIRONMENT
+          value: "development"
+        - name: OPERATOR_VERSION
+          value: "v0.3.0"
+        - name: LOG_LEVEL
+          value: "info"
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8081
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8081
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 2
+
+        startupProbe:
+          httpGet:
+            path: /healthz
+            port: 8081
+          initialDelaySeconds: 0
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 30
+
+        volumeMounts:
+        - name: config
+          mountPath: /etc/right-sizer
+          readOnly: true
+        - name: tmp
+          mountPath: /tmp
+
+      volumes:
+      - name: config
+        configMap:
+          name: right-sizer-operator-config
+          defaultMode: 0444
+      - name: tmp
+        emptyDir: {}
+
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            preference:
+              matchExpressions:
+              - key: kubernetes.io/hostname
+                operator: In
+                values: ["rightsizer"]
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: right-sizer-operator
+  namespace: right-sizer
+  labels:
+    app: right-sizer-operator
+    component: core
+    version: v0.3.0
+spec:
+  type: ClusterIP
+  selector:
+    app: right-sizer-operator
+    component: core
+  ports:
+  - name: metrics
+    port: 8080
+    targetPort: metrics
+    protocol: TCP
+  - name: health
+    port: 8081
+    targetPort: health
+    protocol: TCP
+  - name: grpc
+    port: 9090
+    targetPort: grpc
+    protocol: TCP
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: right-sizer-operator-headless
+  namespace: right-sizer
+  labels:
+    app: right-sizer-operator
+    component: core
+    version: v0.3.0
+spec:
+  type: ClusterIP
+  clusterIP: None
+  selector:
+    app: right-sizer-operator
+    component: core
+  ports:
+  - name: grpc
+    port: 9090
+    targetPort: grpc
+    protocol: TCP
