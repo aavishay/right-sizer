@@ -4,11 +4,11 @@ package legacyaiops
 
 import (
 	"context"
-	"log"
 
 	"right-sizer/internal/aiops/analyzers"
 	"right-sizer/internal/aiops/collector"
 	narrative "right-sizer/internal/aiops/narratives"
+	"right-sizer/logger"
 	"right-sizer/metrics"
 
 	"k8s.io/client-go/kubernetes"
@@ -41,7 +41,7 @@ func NewEngine(clientset kubernetes.Interface, metricsProvider metrics.Provider,
 // Start runs the AIOps engine. It starts the event listener and begins processing events.
 // This function will block until the context is canceled.
 func (e *Engine) Start(ctx context.Context) {
-	log.Println("Starting AIOps Engine...")
+	logger.Info("Starting AIOps Engine...")
 
 	// Start listening for OOMKilled events in the background.
 	go e.oomListener.Start(ctx)
@@ -51,21 +51,21 @@ func (e *Engine) Start(ctx context.Context) {
 	// Start the main processing loop.
 	e.processEvents(ctx)
 
-	log.Println("AIOps Engine stopped.")
+	logger.Info("AIOps Engine stopped.")
 }
 
 // processEvents is the main loop that waits for events and triggers the RCA pipeline.
 func (e *Engine) processEvents(ctx context.Context) {
-	log.Println("AIOps event processor started. Waiting for OOM events...")
+	logger.Info("AIOps event processor started. Waiting for OOM events...")
 	for {
 		select {
 		case oomEvent := <-e.oomEventChan:
-			// When an OOM event is received, process it in a separate goroutine
-			// to avoid blocking the event channel.
+			// Process the event asynchronously to avoid blocking the loop.
+			// Use a buffered channel to ensure we don't drop events under heavy load.
 			go e.handleOOMEvent(ctx, oomEvent)
 		case <-ctx.Done():
 			// If the context is canceled, stop processing.
-			log.Println("Shutting down AIOps event processor.")
+			logger.Info("Shutting down AIOps event processor.")
 			return
 		}
 	}
@@ -73,32 +73,32 @@ func (e *Engine) processEvents(ctx context.Context) {
 
 // handleOOMEvent orchestrates the analysis and narrative generation for a single OOM event.
 func (e *Engine) handleOOMEvent(ctx context.Context, event collector.OOMEvent) {
-	log.Printf("AIOps Pipeline Started: Handling OOM event for Pod: %s, Container: %s", event.PodName, event.ContainerName)
+	logger.Info("AIOps Pipeline Started: Handling OOM event for Pod: %s, Container: %s", event.PodName, event.ContainerName)
 
 	// Step 1: Analyze the event to find the root cause.
 	analysisResult, err := e.memoryAnalyzer.AnalyzeForOOMEvent(event)
 	if err != nil {
-		log.Printf("Error during memory analysis for pod %s: %v", event.PodName, err)
+		logger.Info("Error during memory analysis for pod %s: %v", event.PodName, err)
 		return
 	}
 
-	log.Printf("Analysis complete for pod %s. IsLeak: %t, Confidence: %.2f", event.PodName, analysisResult.IsLeak, analysisResult.Confidence)
+	logger.Info("Analysis complete for pod %s. IsLeak: %t, Confidence: %.2f", event.PodName, analysisResult.IsLeak, analysisResult.Confidence)
 
 	// Step 2: If the analysis found something significant, generate a narrative.
 	if analysisResult.IsLeak {
 		narrative, err := e.narrativeGen.GenerateOOMNarrative(ctx, event, analysisResult)
 		if err != nil {
-			log.Printf("Error generating narrative for pod %s: %v", event.PodName, err)
+			logger.Info("Error generating narrative for pod %s: %v", event.PodName, err)
 			return
 		}
 
 		// Step 3: Display the final story.
 		// In a real system, this would be sent to a dashboard, an alert, or a Slack channel.
 		// For now, we just log it.
-		log.Println("======================================================================")
-		log.Printf("AIOps Root Cause Analysis Report for Pod: %s", event.PodName)
-		log.Println("----------------------------------------------------------------------")
-		log.Println(narrative)
-		log.Println("======================================================================")
+		logger.Info("======================================================================")
+		logger.Info("AIOps Root Cause Analysis Report for Pod: %s", event.PodName)
+		logger.Info("----------------------------------------------------------------------")
+		logger.Info("%s", narrative)
+		logger.Info("======================================================================")
 	}
 }
