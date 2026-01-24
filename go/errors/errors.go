@@ -133,22 +133,22 @@ func IsRetryable(err error) bool {
 	if err == nil {
 		return false
 	}
-	
+
 	// Validation errors are not retryable
 	if IsCategory(err, CategoryValidation) {
 		return false
 	}
-	
+
 	// Configuration errors are not retryable
 	if IsCategory(err, CategoryConfiguration) {
 		return false
 	}
-	
+
 	// API and resource errors are typically retryable
 	if IsCategory(err, CategoryAPI) || IsCategory(err, CategoryResource) {
 		return true
 	}
-	
+
 	// Default to non-retryable for safety
 	return false
 }

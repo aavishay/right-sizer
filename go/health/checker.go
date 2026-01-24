@@ -360,7 +360,7 @@ func (h *OperatorHealthChecker) DetailedHealthCheck() healthz.Checker {
 
 		// Get detailed report
 		report := h.GetHealthReport()
-		
+
 		// Check overall health
 		overallHealthy, ok := report["overall_healthy"].(bool)
 		if !ok || !overallHealthy {
@@ -381,7 +381,7 @@ func (h *OperatorHealthChecker) DetailedHealthCheck() healthz.Checker {
 			}
 			return errors.New("overall health check failed")
 		}
-		
+
 		// Log detailed status for successful checks
 		logger.Debug("Detailed health check passed: %d components healthy", len(h.components))
 		return nil
