@@ -153,6 +153,7 @@ func (h *OperatorHealthChecker) GetHealthReport() map[string]interface{} {
 	report := make(map[string]interface{})
 	report["overall_healthy"] = h.IsHealthy()
 	report["last_check"] = h.lastOverallCheck
+	report["operator_version"] = "v0.3.0" // TODO: Get from build info
 
 	components := make(map[string]interface{})
 	for name, status := range h.components {
@@ -161,11 +162,20 @@ func (h *OperatorHealthChecker) GetHealthReport() map[string]interface{} {
 			"last_checked": status.LastChecked,
 			"message":      status.Message,
 			"age":          time.Since(status.LastChecked).String(),
+			"status":       componentStatusString(status.Healthy),
 		}
 	}
 	report["components"] = components
 
 	return report
+}
+
+// componentStatusString returns a human-readable status string
+func componentStatusString(healthy bool) string {
+	if healthy {
+		return "UP"
+	}
+	return "DOWN"
 }
 
 // StartPeriodicHealthChecks starts periodic health checks for components
@@ -348,7 +358,32 @@ func (h *OperatorHealthChecker) DetailedHealthCheck() healthz.Checker {
 		// Perform a fresh health check
 		h.performHealthChecks()
 
-		// Return readiness check result
-		return h.ReadinessCheck(req)
+		// Get detailed report
+		report := h.GetHealthReport()
+		
+		// Check overall health
+		overallHealthy, ok := report["overall_healthy"].(bool)
+		if !ok || !overallHealthy {
+			// Collect unhealthy components for error message
+			var unhealthy []string
+			if components, ok := report["components"].(map[string]interface{}); ok {
+				for name, comp := range components {
+					if compMap, ok := comp.(map[string]interface{}); ok {
+						if healthy, ok := compMap["healthy"].(bool); ok && !healthy {
+							msg := compMap["message"].(string)
+							unhealthy = append(unhealthy, fmt.Sprintf("%s: %s", name, msg))
+						}
+					}
+				}
+			}
+			if len(unhealthy) > 0 {
+				return fmt.Errorf("unhealthy components: %v", unhealthy)
+			}
+			return errors.New("overall health check failed")
+		}
+		
+		// Log detailed status for successful checks
+		logger.Debug("Detailed health check passed: %d components healthy", len(h.components))
+		return nil
 	}
 }
