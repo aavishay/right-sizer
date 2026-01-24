@@ -34,17 +34,30 @@ To provide the most intelligent, safe, and zero-downtime resource optimization p
 - **Remediation Engine**
   - [x] **Test Coverage:** Increase unit test coverage for the Remediation Engine to >50% (achieved 63.8%).
 
-### 🧠 v0.4.0: Intelligence & ML (In Progress)
+### ✅ v0.4.0: Intelligence & ML (COMPLETE)
 *Focus: Smarter decision making and predictive capabilities.*
 
 - **Advanced Analytics**
-  - [x] **Memory Store** (Package: `go/memstore/`): Enhanced internal state management for tracking long-term pod behavior. Features sliding windows, statistical analysis (mean, stddev, min, max), trend detection, and percentile calculations. Test coverage: 78.7%. Performance: 100k+ ops/sec.
-  - [x] **ML-based Anomaly Detection** (Package: `go/anomaly/`): Z-score based detection to distinguish abnormal usage patterns from legitimate load spikes. Configurable sensitivity (default 2.5σ = 98.8% confidence). Test coverage: 26.5%.
-  - [ ] **Enhanced Predictor:** Integrate memory store trends for seasonality analysis and predictive capacity planning.
-  - [ ] **Predictive Scaling:** Move beyond reactive resizing to proactive resource adjustment based on historical patterns.
+  - [x] **Memory Store** (Package: `go/memstore/`): Enhanced internal state management for tracking long-term pod behavior. Features sliding windows, statistical analysis (mean, stddev, min, max), trend detection, and percentile calculations. Test coverage: 78.7%. Performance: 100k+ ops/sec. PR #41.
+  - [x] **ML-based Anomaly Detection** (Package: `go/anomaly/`): Z-score based detection to distinguish abnormal usage patterns from legitimate load spikes. Configurable sensitivity (default 2.5σ = 98.8% confidence). Test coverage: 26.5%. PR #41.
+  - [x] **Enhanced Predictor: Seasonal Patterns** (Package: `go/predictor/seasonal.go`): Linear regression-based prediction using daily/weekly patterns. Extracts hour-of-day and day-of-week seasonality. Confidence scaling with 95% CI bounds. Burst vs anomaly discrimination. Test coverage: 78.9%. PR #43.
+  - [ ] **Predictive Scaling:** Move beyond reactive resizing to proactive resource adjustment based on historical patterns (future v0.5.0).
 
 - **Dashboard Integration**
-  - [ ] **Visual Recommendations:** Deeper integration with the Right-Sizer Dashboard for visualizing "What-If" scenarios and predictions.
+  - [ ] **Visual Recommendations:** Deeper integration with the Right-Sizer Dashboard for visualizing "What-If" scenarios and predictions (future v0.5.0).
+
+### 🔮 v0.5.0: Predictive Intelligence (Short Term)
+*Focus: Proactive resource optimization and dashboard integration.*
+
+- **Predictive Scaling & Optimization**
+  - [ ] **Predictive Scaling:** Use seasonal patterns to proactively adjust resources before demand spikes
+  - [ ] **What-If Analysis:** Model resource changes to predict impact on workload performance
+  - [ ] **Capacity Planning:** Forecast future resource requirements based on growth trends
+
+- **Dashboard Integration**
+  - [ ] **Visual Predictions:** Display seasonal patterns and confidence intervals in dashboard UI
+  - [ ] **Recommendation Engine:** Suggest optimal resource assignments based on historical patterns
+  - [ ] **Alert Integration:** Notify teams of anomalies and predicted resource shortfalls
 
 ### 🚀 v1.0.0: General Availability (Long Term)
 *Focus: Enterprise readiness, full feature support, and stability.*
