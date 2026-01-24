@@ -34,16 +34,17 @@ To provide the most intelligent, safe, and zero-downtime resource optimization p
 - **Remediation Engine**
   - [x] **Test Coverage:** Increase unit test coverage for the Remediation Engine to >50% (achieved 63.8%).
 
-### 🧠 v0.4.0: Intelligence & ML (Medium Term)
+### 🧠 v0.4.0: Intelligence & ML (In Progress)
 *Focus: Smarter decision making and predictive capabilities.*
 
 - **Advanced Analytics**
-  - [ ] **ML-based Anomaly Detection:** Introduce initial ML models to detect abnormal usage patterns versus legitimate load spikes.
-  - [ ] **Predictive Scaling:** Move beyond reactive resizing to proactive resource adjustment based on historical trends (Seasonality analysis).
-  - [ ] **Memory Store:** Enhanced internal state management for tracking long-term pod behavior.
+  - [x] **Memory Store** (Package: `go/memstore/`): Enhanced internal state management for tracking long-term pod behavior. Features sliding windows, statistical analysis (mean, stddev, min, max), trend detection, and percentile calculations. Test coverage: 78.7%. Performance: 100k+ ops/sec.
+  - [x] **ML-based Anomaly Detection** (Package: `go/anomaly/`): Z-score based detection to distinguish abnormal usage patterns from legitimate load spikes. Configurable sensitivity (default 2.5σ = 98.8% confidence). Test coverage: 26.5%.
+  - [ ] **Enhanced Predictor:** Integrate memory store trends for seasonality analysis and predictive capacity planning.
+  - [ ] **Predictive Scaling:** Move beyond reactive resizing to proactive resource adjustment based on historical patterns.
 
 - **Dashboard Integration**
-  - [ ] **Visual Recommendations:** Deeper integration with the Right-Sizer Dashboard for visualizing "What-If" scenarios.
+  - [ ] **Visual Recommendations:** Deeper integration with the Right-Sizer Dashboard for visualizing "What-If" scenarios and predictions.
 
 ### 🚀 v1.0.0: General Availability (Long Term)
 *Focus: Enterprise readiness, full feature support, and stability.*
