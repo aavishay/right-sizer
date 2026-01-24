@@ -24,11 +24,11 @@ To provide the most intelligent, safe, and zero-downtime resource optimization p
 - **Technical Debt & Code Quality**
   - [x] **Context Propagation:** Eliminate overuse of `context.TODO()` throughout the controller logic to ensure proper timeout and cancellation handling.
   - [x] **Structured Logging:** Complete migration from standard `log` to structured logging (Zap/Logr) across all modules.
-  - [ ] **Error Handling:** Standardize error wrapping and reporting.
+  - [x] **Error Handling:** Standardize error wrapping and reporting.
 
 - **Metrics & Monitoring**
   - [x] **Granular Metrics:** Implement `RecordDeferredResize` and `RecordRetryProcessing` metrics.
-  - [ ] **Health API:** Connect `/readyz/detailed` to real-time internal component status (currently a placeholder).
+  - [x] **Health API:** Connect `/readyz/detailed` to real-time internal component status (currently a placeholder).
   - [ ] **Latency Goals:** optimize query latency to <100ms.
 
 - **Remediation Engine**
