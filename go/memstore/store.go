@@ -16,9 +16,9 @@ import (
 
 // DataPoint stores a single metric observation
 type DataPoint struct {
-	Timestamp  time.Time
-	CPUMilli   float64
-	MemMB      float64
+	Timestamp   time.Time
+	CPUMilli    float64
+	MemMB       float64
 	CPUThrottle float64
 }
 

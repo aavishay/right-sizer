@@ -16,8 +16,8 @@ import (
 
 // Detector identifies abnormal pod behavior
 type Detector struct {
-	store       *memstore.MemoryStore
-	zThreshold  float64
+	store      *memstore.MemoryStore
+	zThreshold float64
 }
 
 // Result of anomaly detection
