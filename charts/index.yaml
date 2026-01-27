@@ -2,8 +2,31 @@ apiVersion: v1
 entries:
   right-sizer:
   - apiVersion: v2
+    appVersion: 0.5.0
+    created: "2026-01-27T18:49:36.768929469Z"
+    description: A Helm chart for Kubernetes Right-Sizer operator
+    digest: 9f0f2dc0ec2e548a25b2b354f9b07c5dd351200274bf1d772178f52295c7f70b
+    home: https://github.com/aavishay/right-sizer
+    icon: https://raw.githubusercontent.com/aavishay/right-sizer/main/docs/assets/icon.svg
+    keywords:
+    - kubernetes
+    - operator
+    - right-sizing
+    - resources
+    - autoscaling
+    maintainers:
+    - email: maintainers@right-sizer.io
+      name: Right-Sizer Contributors
+    name: right-sizer
+    sources:
+    - https://github.com/aavishay/right-sizer
+    type: application
+    urls:
+    - https://aavishay.github.io/right-sizer/charts/right-sizer-0.5.0.tgz
+    version: 0.5.0
+  - apiVersion: v2
     appVersion: 0.2.5
-    created: "2026-01-27T18:35:29.013255148Z"
+    created: "2026-01-27T18:49:36.767421459Z"
     description: A Helm chart for Kubernetes Right-Sizer operator
     digest: 1b74824f093e96d9bcf2e160793c77f558bcd50da9506d97a95718a5393764d1
     home: https://github.com/aavishay/right-sizer
@@ -26,7 +49,7 @@ entries:
     version: 0.2.5
   - apiVersion: v2
     appVersion: 0.2.4
-    created: "2026-01-27T18:35:29.01173906Z"
+    created: "2026-01-27T18:49:36.765891659Z"
     description: A Helm chart for Kubernetes Right-Sizer operator
     digest: 8b039cf17b2c0bb77d363543dcce6f3bb26ba0f99776500e1d6777879a07db2b
     home: https://github.com/aavishay/right-sizer
@@ -49,7 +72,7 @@ entries:
     version: 0.2.4
   - apiVersion: v2
     appVersion: 0.2.3
-    created: "2026-01-27T18:35:29.010180146Z"
+    created: "2026-01-27T18:49:36.764370004Z"
     description: A Helm chart for Kubernetes Right-Sizer operator
     digest: 2573c6daef2171defc30ad06c49757ecafd5105caa6fba6a47d1a56904fe4b8d
     home: https://github.com/aavishay/right-sizer
@@ -72,7 +95,7 @@ entries:
     version: 0.2.3
   - apiVersion: v2
     appVersion: 0.2.2
-    created: "2026-01-27T18:35:29.007597777Z"
+    created: "2026-01-27T18:49:36.762790174Z"
     description: A Helm chart for Kubernetes Right-Sizer operator
     digest: c702a6ee63c7a607e5d56119f38861f46eebb5316ed058342e4053a3ae0c890f
     home: https://github.com/aavishay/right-sizer
@@ -95,7 +118,7 @@ entries:
     version: 0.2.2
   - apiVersion: v2
     appVersion: 0.2.1
-    created: "2026-01-27T18:35:29.006043177Z"
+    created: "2026-01-27T18:49:36.760342582Z"
     description: A Helm chart for Kubernetes Right-Sizer operator
     digest: bafbb8ec50da152521424276098d3066c0b7beec96d907968939efd12ecb483c
     home: https://github.com/aavishay/right-sizer
@@ -118,7 +141,7 @@ entries:
     version: 0.2.1
   - apiVersion: v2
     appVersion: 0.2.0
-    created: "2026-01-27T18:35:29.004513718Z"
+    created: "2026-01-27T18:49:36.758806581Z"
     description: A Helm chart for Kubernetes Right-Sizer operator
     digest: 75a9e44a69d13b7f8278171969c689801dd74431c3e982f9c7670fc524660407
     home: https://github.com/aavishay/right-sizer
@@ -141,7 +164,7 @@ entries:
     version: 0.2.0
   - apiVersion: v2
     appVersion: 0.1.19
-    created: "2026-01-27T18:35:28.997439835Z"
+    created: "2026-01-27T18:49:36.751856099Z"
     description: A Helm chart for Kubernetes Right-Sizer operator
     digest: d2358ea2c9f3dad1821a51f4d2d720db42c12e399a58056511a3f325ea3d3a93
     home: https://github.com/aavishay/right-sizer
@@ -164,7 +187,7 @@ entries:
     version: 0.1.19
   - apiVersion: v2
     appVersion: 0.1.18
-    created: "2026-01-27T18:35:28.996402322Z"
+    created: "2026-01-27T18:49:36.750862039Z"
     description: A Helm chart for Kubernetes Right-Sizer operator
     digest: 7324b1cc00ec3baf93b0eaae159439d322a7297547e39b2ae547692a8e6256b0
     home: https://github.com/aavishay/right-sizer
@@ -187,7 +210,7 @@ entries:
     version: 0.1.18
   - apiVersion: v2
     appVersion: 0.1.17
-    created: "2026-01-27T18:35:28.995232023Z"
+    created: "2026-01-27T18:49:36.749786251Z"
     description: A Helm chart for Kubernetes Right-Sizer operator
     digest: 0cd264900b44d3c30d3748bc40377714a4bbede0e597d07537c899da7cc59533
     home: https://github.com/aavishay/right-sizer
@@ -210,7 +233,7 @@ entries:
     version: 0.1.17
   - apiVersion: v2
     appVersion: 0.1.16
-    created: "2026-01-27T18:35:28.994078453Z"
+    created: "2026-01-27T18:49:36.748692251Z"
     description: A Helm chart for Kubernetes Right-Sizer operator
     digest: 0b65e0d659a354ba1047d57e70bd41e0e384854109f7c0524e2004c955a88151
     home: https://github.com/aavishay/right-sizer
@@ -233,7 +256,7 @@ entries:
     version: 0.1.16
   - apiVersion: v2
     appVersion: 0.1.15
-    created: "2026-01-27T18:35:28.992340999Z"
+    created: "2026-01-27T18:49:36.747607097Z"
     description: A Helm chart for Kubernetes Right-Sizer operator
     digest: e4502c2a8a585aa811134d6b5d5cbbc48183e27ca8e1c75d7a3b0fc74a6795f9
     home: https://github.com/aavishay/right-sizer
@@ -256,7 +279,7 @@ entries:
     version: 0.1.15
   - apiVersion: v2
     appVersion: 0.1.14
-    created: "2026-01-27T18:35:28.991213773Z"
+    created: "2026-01-27T18:49:36.745637668Z"
     description: A Helm chart for Kubernetes Right-Sizer operator
     digest: 7cfae865fb87f16dc639d8782cf4ca2cb72ccd4acc5758b8009676e7453e306e
     home: https://github.com/aavishay/right-sizer
@@ -279,7 +302,7 @@ entries:
     version: 0.1.14
   - apiVersion: v2
     appVersion: 0.1.13
-    created: "2026-01-27T18:35:28.990080247Z"
+    created: "2026-01-27T18:49:36.744277054Z"
     description: A Helm chart for Kubernetes Right-Sizer operator
     digest: 61f86c38ba7f195845d0552a8db37990940af40f01ef0f706701205dfebcdd05
     home: https://github.com/aavishay/right-sizer
@@ -302,7 +325,7 @@ entries:
     version: 0.1.13
   - apiVersion: v2
     appVersion: 0.1.12
-    created: "2026-01-27T18:35:28.989221464Z"
+    created: "2026-01-27T18:49:36.743386562Z"
     description: A Helm chart for Kubernetes Right-Sizer operator
     digest: a5378e4ae5cfced5d92d81bf19b9277beae60cc422bc72093d0e7930d52427a5
     home: https://github.com/aavishay/right-sizer
@@ -325,7 +348,7 @@ entries:
     version: 0.1.12
   - apiVersion: v2
     appVersion: 0.1.11
-    created: "2026-01-27T18:35:28.98834253Z"
+    created: "2026-01-27T18:49:36.74247961Z"
     description: A Helm chart for Kubernetes Right-Sizer operator
     digest: 14ef10b363d01deda9672a5836dd4b066ffb2c20ba8e9ec4d03086c823bc49a2
     home: https://github.com/aavishay/right-sizer
@@ -348,7 +371,7 @@ entries:
     version: 0.1.11
   - apiVersion: v2
     appVersion: 0.1.10
-    created: "2026-01-27T18:35:28.987447129Z"
+    created: "2026-01-27T18:49:36.741569613Z"
     description: A Helm chart for Kubernetes Right-Sizer operator
     digest: 0f97192a851721212ae25017b5504e75d85fdf5a3967292bfe2ddbb8d99dca82
     home: https://github.com/aavishay/right-sizer
@@ -371,7 +394,7 @@ entries:
     version: 0.1.10
   - apiVersion: v2
     appVersion: 0.1.9
-    created: "2026-01-27T18:35:29.003016487Z"
+    created: "2026-01-27T18:49:36.757332713Z"
     description: A Helm chart for Kubernetes Right-Sizer operator
     digest: e9c9042a07a61dfc1f965657f5766a0d1a3da170f054dd5620384121958be6b1
     home: https://github.com/aavishay/right-sizer
@@ -394,7 +417,7 @@ entries:
     version: 0.1.9
   - apiVersion: v2
     appVersion: 0.1.8
-    created: "2026-01-27T18:35:29.002161179Z"
+    created: "2026-01-27T18:49:36.756452129Z"
     description: A Helm chart for Kubernetes Right-Sizer operator
     digest: 6a5c87c80e816ebacf58a0ba095e8e4fa8556044a9010b426c67e8b9bea2740f
     home: https://github.com/aavishay/right-sizer
@@ -417,7 +440,7 @@ entries:
     version: 0.1.8
   - apiVersion: v2
     appVersion: 0.1.7
-    created: "2026-01-27T18:35:29.001233035Z"
+    created: "2026-01-27T18:49:36.755571835Z"
     description: A Helm chart for Kubernetes Right-Sizer operator
     digest: 3d1d6f25dd6e76e75c71c471a7e9314329ffd96a47b89ce63c61bfab9807f4a3
     home: https://github.com/aavishay/right-sizer
@@ -440,7 +463,7 @@ entries:
     version: 0.1.7
   - apiVersion: v2
     appVersion: 0.1.6
-    created: "2026-01-27T18:35:28.999331365Z"
+    created: "2026-01-27T18:49:36.754660375Z"
     description: A Helm chart for Kubernetes Right-Sizer operator
     digest: 3295d7bf412d45e135e446f9f1e5438339a90a16f2a0ff9730e2609acf6d25e0
     home: https://github.com/aavishay/right-sizer
@@ -463,7 +486,7 @@ entries:
     version: 0.1.6
   - apiVersion: v2
     appVersion: 0.1.5
-    created: "2026-01-27T18:35:28.998279998Z"
+    created: "2026-01-27T18:49:36.752721125Z"
     description: A Helm chart for Kubernetes Right-Sizer operator
     digest: b8fb8e5ee6e118a1592f91b660fdcd610e435040facc59b087acf435a4182a1c
     home: https://github.com/aavishay/right-sizer
@@ -484,4 +507,4 @@ entries:
     urls:
     - https://aavishay.github.io/right-sizer/charts/right-sizer-0.1.5.tgz
     version: 0.1.5
-generated: "2026-01-27T18:35:28.986345522Z"
+generated: "2026-01-27T18:49:36.740470073Z"
