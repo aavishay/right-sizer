@@ -140,7 +140,7 @@ func TestSeasonalPredictor_ExtractSeasonalPatterns(t *testing.T) {
 	predictor := NewSeasonalPredictor(store)
 
 	// Generate 7 days of data with clear weekly pattern
-	baseTime := time.Now().Add(-7 * 24 * time.Hour)
+	baseTime := time.Now().Add(-7 * 24 * time.Hour).Truncate(24 * time.Hour)
 	data := HistoricalData{
 		ResourceType: "memory",
 		DataPoints:   make([]DataPoint, 0),
