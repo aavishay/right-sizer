@@ -12,11 +12,12 @@ To provide the most intelligent, safe, and zero-downtime resource optimization p
 
 ## 📅 Release Plan
 
-### ✅ Current Status: v0.2.x (Beta)
+### ✅ Current Status: v0.5.0 (Production Ready)
 - **Core Functionality:** In-place pod resizing for CPU and Memory.
 - **Modes:** Adaptive, Conservative, Aggressive, Balanced strategies.
 - **Safety:** Respects LimitRanges, Quotas, and PodDisruptionBudgets.
 - **Observability:** Basic Prometheus metrics and Health endpoints.
+- **Integrations:** Jira User Search, Slack Identity Mapping.
 
 ### ✅ v0.3.0: Reliability & Observability (COMPLETE)
 *Focus: Technical debt reduction, stability, and enhanced insights.*
@@ -46,7 +47,19 @@ To provide the most intelligent, safe, and zero-downtime resource optimization p
 - **Dashboard Integration**
   - [ ] **Visual Recommendations:** Deeper integration with the Right-Sizer Dashboard for visualizing "What-If" scenarios and predictions (future v0.5.0).
 
-### 🔮 v0.5.0: Predictive Intelligence (Short Term)
+### ✅ v0.5.0: Polish & Integrations (COMPLETE)
+*Focus: Enterprise integrations, code hardening, and developer experience.*
+
+- **Integrations**
+  - [x] **Jira Integration:** Added user search filtering by project and Slack name display.
+  - [x] **Slack Mapping:** Identity mapping between Jira users and Slack identities.
+
+- **Code Quality & Hardening**
+  - [x] **HTTP Constants:** Replaced numeric status codes with `net/http` constants.
+  - [x] **Type Safety:** Resolved TypeScript Prisma validation issues.
+  - [x] **Documentation:** Added `AGENTS.md` for AI-driven development workflows.
+
+### 🔮 v0.6.0: Predictive Intelligence (Short Term)
 *Focus: Proactive resource optimization and dashboard integration.*
 
 - **Predictive Scaling & Optimization**
@@ -55,7 +68,7 @@ To provide the most intelligent, safe, and zero-downtime resource optimization p
   - [ ] **Capacity Planning:** Forecast future resource requirements based on growth trends
 
 - **Dashboard Integration**
-  - [ ] **Visual Predictions:** Display seasonal patterns and confidence intervals in dashboard UI
+  - [x] **Visual Predictions:** Display seasonal patterns and confidence intervals in dashboard UI
   - [ ] **Recommendation Engine:** Suggest optimal resource assignments based on historical patterns
   - [ ] **Alert Integration:** Notify teams of anomalies and predicted resource shortfalls
 
