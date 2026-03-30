@@ -18,7 +18,6 @@ package predictor
 import (
 	"fmt"
 	"math"
-	"right-sizer/memstore"
 	"sort"
 	"time"
 )
@@ -26,15 +25,13 @@ import (
 // SeasonalPredictor uses historical patterns (daily/weekly) combined with trend analysis
 // to make predictions that account for recurring patterns in workload behavior
 type SeasonalPredictor struct {
-	memstore *memstore.MemoryStore
-	minDays  int // Minimum days of data required for seasonal analysis
+	minDays int // Minimum days of data required for seasonal analysis
 }
 
 // NewSeasonalPredictor creates a new seasonal prediction algorithm
-func NewSeasonalPredictor(store *memstore.MemoryStore) *SeasonalPredictor {
+func NewSeasonalPredictor() *SeasonalPredictor {
 	return &SeasonalPredictor{
-		memstore: store,
-		minDays:  3, // Need at least 3 days for basic weekly pattern
+		minDays: 3, // Need at least 3 days for basic weekly pattern
 	}
 }
 

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"right-sizer/memstore"
+	"right-sizer/predictor"
 	"time"
 )
 
@@ -40,25 +41,30 @@ func (d *ScalingDecision) ScalePercent() float64 {
 // Engine computes scaling decisions from historical utilization.
 type Engine struct {
 	store               *memstore.MemoryStore
-	lookback            time.Duration
-	percentile          float64
-	bufferFactor        float64
+	lookback           time.Duration
+	percentile         float64
+	bufferFactor       float64
 	confidenceThreshold float64
 }
+
+const (
+	defaultLookback     = 24 * time.Hour
+	defaultPercentile   = 0.95
+	defaultBufferFactor = 1.1
+)
 
 // NewScalingEngine constructs a scaling engine using memstore stats.
 func NewScalingEngine(store *memstore.MemoryStore) *Engine {
 	return &Engine{
 		store:               store,
-		lookback:            24 * time.Hour,
-		percentile:          0.95,
-		bufferFactor:        1.1,
+		lookback:            defaultLookback,
+		percentile:          defaultPercentile,
+		bufferFactor:        defaultBufferFactor,
 		confidenceThreshold: 0.70,
 	}
 }
 
 // ComputeScalingDecision calculates a recommendation for a resource.
-// resourceType: "cpu" (millicores) or "memory" (Mi).
 func (e *Engine) ComputeScalingDecision(namespace, pod, container, resourceType string, current float64) (*ScalingDecision, error) {
 	if e == nil || e.store == nil {
 		return nil, fmt.Errorf("engine not initialized")
@@ -74,23 +80,26 @@ func (e *Engine) ComputeScalingDecision(namespace, pod, container, resourceType 
 
 	cpuP, memP := e.store.Percentile(namespace, pod, e.lookback, e.percentile)
 
-	var peak float64
+	var peak, avgValue, stdDev float64
 	switch resourceType {
-	case "cpu":
+	case predictor.ResourceTypeCPU:
 		peak = math.Max(cpuP, stats.CPUMax)
-	case "memory", "mem", "memoryMi":
+		avgValue = stats.CPUMean
+		stdDev = stats.CPUStdDev
+	case predictor.ResourceTypeMemory, "mem", "memoryMi":
 		peak = math.Max(memP, stats.MemMax)
+		avgValue = stats.MemMean
+		stdDev = stats.MemStdDev
 	default:
 		return nil, fmt.Errorf("unsupported resource type: %s", resourceType)
 	}
 
 	recommended := peak * e.bufferFactor
-	// Avoid recommending below minimal observed usage (guard against zero)
 	if recommended <= 0 {
 		recommended = current
 	}
 
-	confidence := e.computeConfidence(stats)
+	confidence := predictor.CalculateConfidence(stats.Count, avgValue, stdDev, 0.6, 1440)
 	decision := &ScalingDecision{
 		CurrentValue:     current,
 		RecommendedValue: recommended,
@@ -102,20 +111,4 @@ func (e *Engine) ComputeScalingDecision(namespace, pod, container, resourceType 
 		return nil, fmt.Errorf("confidence %.2f below threshold %.2f", confidence, e.confidenceThreshold)
 	}
 	return decision, nil
-}
-
-func (e *Engine) computeConfidence(stats *memstore.Stats) float64 {
-	if stats == nil || stats.Count == 0 {
-		return 0
-	}
-	// Data sufficiency component: 1 point per minute over a 24h window (1440 max)
-	dataComponent := math.Min(1.0, float64(stats.Count)/1440.0)
-
-	// Stability component: lower stddev relative to mean increases confidence
-	stability := 1.0
-	if stats.CPUMean > 0 {
-		stability = 1.0 / (1.0 + (stats.CPUStdDev / stats.CPUMean))
-	}
-
-	return math.Min(1.0, dataComponent*0.6+stability*0.4)
 }

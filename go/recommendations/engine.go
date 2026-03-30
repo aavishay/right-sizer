@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"right-sizer/memstore"
+	"right-sizer/predictor"
 	"sort"
 	"time"
 )
@@ -37,16 +38,25 @@ type Engine struct {
 	savingsThreshold    float64
 }
 
+const (
+	defaultMinCPUUtilization  = 0.20
+	defaultMaxCPUUtilization  = 0.80
+	defaultMinMemUtilization  = 0.30
+	defaultMaxMemUtilization  = 0.85
+	defaultConfidenceThreshold = 0.70
+	defaultSavingsThreshold  = 1.0
+)
+
 // NewEngine creates a recommendation engine
 func NewEngine(store *memstore.MemoryStore) *Engine {
 	return &Engine{
 		store:               store,
-		minCPUUtilization:   0.20,
-		maxCPUUtilization:   0.80,
-		minMemUtilization:   0.30,
-		maxMemUtilization:   0.85,
-		confidenceThreshold: 0.70,
-		savingsThreshold:    1.0,
+		minCPUUtilization:   defaultMinCPUUtilization,
+		maxCPUUtilization:   defaultMaxCPUUtilization,
+		minMemUtilization:   defaultMinMemUtilization,
+		maxMemUtilization:   defaultMaxMemUtilization,
+		confidenceThreshold: defaultConfidenceThreshold,
+		savingsThreshold:    defaultSavingsThreshold,
 	}
 }
 
@@ -62,13 +72,13 @@ func (e *Engine) GenerateRecommendation(namespace, podName, container, resourceT
 
 	minUtil := e.minMemUtilization
 	maxUtil := e.maxMemUtilization
-	if resourceType == "cpu" {
+	if resourceType == predictor.ResourceTypeCPU {
 		minUtil = e.minCPUUtilization
 		maxUtil = e.maxCPUUtilization
 	}
 
 	utilization := computed.MaxValue / currentValue
-	confidence := e.calculateConfidence(computed, stats.Count)
+	confidence := predictor.CalculateConfidence(stats.Count, computed.AvgValue, computed.Stddev, 0.6, 10080)
 
 	if confidence < e.confidenceThreshold {
 		return nil, fmt.Errorf("confidence %.2f below threshold", confidence)
@@ -202,15 +212,6 @@ func (e *Engine) generateUpscaleRec(namespace, podName, container, resourceType 
 		Timestamp:        time.Now(),
 		ExpiresAt:        time.Now().Add(30 * 24 * time.Hour),
 	}
-}
-
-func (e *Engine) calculateConfidence(s stats, dataPoints int) float64 {
-	dataConfidence := math.Min(1.0, float64(dataPoints)/float64(7*24*60))
-	if s.AvgValue == 0 {
-		return dataConfidence * 0.6
-	}
-	varianceConfidence := 1.0 / (1.0 + (s.Stddev / s.AvgValue))
-	return (dataConfidence * 0.6) + (varianceConfidence * 0.4)
 }
 
 // IsExpired checks if recommendation is expired

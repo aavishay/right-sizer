@@ -17,14 +17,12 @@ package predictor
 
 import (
 	"math"
-	"right-sizer/memstore"
 	"testing"
 	"time"
 )
 
 func TestSeasonalPredictor_Predict_IncreasingTrend(t *testing.T) {
-	store := memstore.NewMemoryStore(7, 10080)
-	predictor := NewSeasonalPredictor(store)
+	predictor := NewSeasonalPredictor()
 
 	// Generate 5 days of data with clear daily pattern and increasing trend
 	// Using minute-granularity (every 10 minutes = 144 points per day)
@@ -117,8 +115,7 @@ func TestSeasonalPredictor_Predict_IncreasingTrend(t *testing.T) {
 }
 
 func TestSeasonalPredictor_ValidateData_InsufficientData(t *testing.T) {
-	store := memstore.NewMemoryStore(7, 10080)
-	predictor := NewSeasonalPredictor(store)
+	predictor := NewSeasonalPredictor()
 
 	// Create data with too few points (less than 3 days)
 	data := HistoricalData{
@@ -136,8 +133,7 @@ func TestSeasonalPredictor_ValidateData_InsufficientData(t *testing.T) {
 }
 
 func TestSeasonalPredictor_ExtractSeasonalPatterns(t *testing.T) {
-	store := memstore.NewMemoryStore(7, 10080)
-	predictor := NewSeasonalPredictor(store)
+	predictor := NewSeasonalPredictor()
 
 	// Generate 7 days of data with clear weekly pattern
 	baseTime := time.Now().Add(-7 * 24 * time.Hour).Truncate(24 * time.Hour)
@@ -202,8 +198,7 @@ func TestSeasonalPredictor_ExtractSeasonalPatterns(t *testing.T) {
 }
 
 func TestSeasonalPredictor_ConfidenceScaling(t *testing.T) {
-	store := memstore.NewMemoryStore(7, 10080)
-	predictor := NewSeasonalPredictor(store)
+	predictor := NewSeasonalPredictor()
 
 	// Generate 4 days of clean data with minute-granularity
 	baseTime := time.Now().Add(-4 * 24 * time.Hour)
@@ -260,8 +255,7 @@ func TestSeasonalPredictor_ConfidenceScaling(t *testing.T) {
 }
 
 func TestSeasonalPredictor_GetMethod(t *testing.T) {
-	store := memstore.NewMemoryStore(7, 10080)
-	predictor := NewSeasonalPredictor(store)
+	predictor := NewSeasonalPredictor()
 
 	if predictor.GetMethod() != PredictionMethodSeasonal {
 		t.Errorf("Expected %s, got %s", PredictionMethodSeasonal, predictor.GetMethod())
@@ -269,8 +263,7 @@ func TestSeasonalPredictor_GetMethod(t *testing.T) {
 }
 
 func TestSeasonalPredictor_GetMinDataPoints(t *testing.T) {
-	store := memstore.NewMemoryStore(7, 10080)
-	predictor := NewSeasonalPredictor(store)
+	predictor := NewSeasonalPredictor()
 
 	minPoints := predictor.GetMinDataPoints()
 	expectedMin := 72 // 3 days of hourly data
@@ -280,8 +273,7 @@ func TestSeasonalPredictor_GetMinDataPoints(t *testing.T) {
 }
 
 func BenchmarkSeasonalPredictor_Predict(b *testing.B) {
-	store := memstore.NewMemoryStore(7, 10080)
-	predictor := NewSeasonalPredictor(store)
+	predictor := NewSeasonalPredictor()
 
 	// Generate 7 days of data
 	baseTime := time.Now().Add(-7 * 24 * time.Hour)
@@ -321,8 +313,7 @@ func BenchmarkSeasonalPredictor_Predict(b *testing.B) {
 }
 
 func BenchmarkSeasonalPredictor_ExtractPatterns(b *testing.B) {
-	store := memstore.NewMemoryStore(7, 10080)
-	predictor := NewSeasonalPredictor(store)
+	predictor := NewSeasonalPredictor()
 
 	// Generate 7 days of data
 	baseTime := time.Now().Add(-7 * 24 * time.Hour)
