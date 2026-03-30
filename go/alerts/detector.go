@@ -11,6 +11,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"sync"
 	"time"
 
 	"go.uber.org/zap"
@@ -22,8 +23,8 @@ type Detector struct {
 	store    *memstore.MemoryStore
 	manager  *Manager
 	logger   *zap.Logger
-	zScores  map[string]float64 // Pod → Z-Score threshold
 	stopChan chan struct{}
+	wg       sync.WaitGroup
 }
 
 // NewDetector creates an anomaly-based alert detector
@@ -32,14 +33,15 @@ func NewDetector(store *memstore.MemoryStore, manager *Manager, logger *zap.Logg
 		store:    store,
 		manager:  manager,
 		logger:   logger,
-		zScores:  make(map[string]float64),
 		stopChan: make(chan struct{}),
 	}
 }
 
 // Start begins continuous anomaly detection
 func (d *Detector) Start(ctx context.Context, interval time.Duration) {
+	d.wg.Add(1)
 	go func() {
+		defer d.wg.Done()
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 
@@ -59,6 +61,7 @@ func (d *Detector) Start(ctx context.Context, interval time.Duration) {
 // Stop halts the detector
 func (d *Detector) Stop() {
 	close(d.stopChan)
+	d.wg.Wait()
 }
 
 // checkAnomalies scans all pods for anomalies

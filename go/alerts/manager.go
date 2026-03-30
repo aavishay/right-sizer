@@ -93,10 +93,10 @@ func (m *Manager) Create(ctx context.Context, namespace, podName, resourceType, 
 	)
 
 	// Notify subscribers asynchronously
-	go m.notifySubscribers(ctx, alert)
+	go m.notifySubscribers(alert)
 
 	// Dispatch webhooks asynchronously
-	go m.dispatchWebhook(ctx, alert)
+	go m.dispatchWebhook(alert)
 
 	return alert, nil
 }
@@ -174,14 +174,14 @@ func (m *Manager) SetWebhook(severity, webhookURL string) {
 }
 
 // notifySubscribers calls all registered subscribers
-func (m *Manager) notifySubscribers(ctx context.Context, alert *Alert) {
+func (m *Manager) notifySubscribers(alert *Alert) {
 	m.subMutex.RLock()
 	subs := make([]AlertSubscriber, len(m.subscribers))
 	copy(subs, m.subscribers)
 	m.subMutex.RUnlock()
 
 	for _, sub := range subs {
-		if err := sub.OnAlert(ctx, alert); err != nil {
+		if err := sub.OnAlert(context.Background(), alert); err != nil {
 			m.logger.Error("Subscriber notification failed",
 				zap.Error(err),
 				zap.String("alert_id", alert.ID),
@@ -191,7 +191,7 @@ func (m *Manager) notifySubscribers(ctx context.Context, alert *Alert) {
 }
 
 // dispatchWebhook sends alert to configured webhook
-func (m *Manager) dispatchWebhook(ctx context.Context, alert *Alert) {
+func (m *Manager) dispatchWebhook(alert *Alert) {
 	m.webhookMu.RLock()
 	webhookURL, exists := m.webhooks[alert.Severity]
 	m.webhookMu.RUnlock()

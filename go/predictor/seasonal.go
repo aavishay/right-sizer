@@ -85,10 +85,10 @@ func (sp *SeasonalPredictor) Predict(data HistoricalData, horizons []time.Durati
 				Percentage: 95,
 			},
 			Metadata: map[string]interface{}{
-				"baseline":           baseline,
-				"trend_slope":        trend.Slope,
-				"trend_direction":    trend.Direction,
-				"seasonal_component": sp.getSeasonalComponentWithMaps(predictionTime, dailyPattern, weeklyPattern),
+				"baseline":            baseline,
+				"trend_slope":         trend.Slope,
+				"trend_direction":     trend.Direction,
+				"seasonal_component":   baseline,
 			},
 		}
 
@@ -193,17 +193,6 @@ func (sp *SeasonalPredictor) getBaselineForTimeWithMaps(t time.Time, daily map[i
 	weeklyComponent := weekly[dayOfWeek]
 
 	// Combine daily and weekly patterns (70% daily, 30% weekly influence)
-	return dailyComponent*0.7 + weeklyComponent*0.3
-}
-
-// getSeasonalComponentWithMaps returns the seasonal contribution to prediction
-func (sp *SeasonalPredictor) getSeasonalComponentWithMaps(t time.Time, daily map[int]float64, weekly map[string]float64) float64 {
-	hour := t.Hour()
-	dayOfWeek := t.Weekday().String()
-
-	dailyComponent := daily[hour]
-	weeklyComponent := weekly[dayOfWeek]
-
 	return dailyComponent*0.7 + weeklyComponent*0.3
 }
 
