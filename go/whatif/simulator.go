@@ -63,10 +63,6 @@ func (s *Simulator) SimulateScaleUp(namespace, podName, resourceType string, cur
 	result.RiskLevel = s.calculateRiskLevel(result.RiskScore)
 	result.EstimatedCostChange = (proposed - current) * 0.01 * result.HoursPerMonth / 1000
 
-	if result.Confidence > 1.0 {
-		result.Confidence = 1.0
-	}
-
 	return result, nil
 }
 
@@ -93,10 +89,6 @@ func (s *Simulator) SimulateScaleDown(namespace, podName, resourceType string, c
 	result.RiskScore = (peak / proposed)
 	result.RiskLevel = s.calculateRiskLevel(result.RiskScore)
 	result.EstimatedCostChange = (proposed - current) * 0.01 * result.HoursPerMonth / 1000
-
-	if result.Confidence > 1.0 {
-		result.Confidence = 1.0
-	}
 
 	return result, nil
 }

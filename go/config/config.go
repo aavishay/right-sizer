@@ -129,7 +129,7 @@ type Config struct {
 	PredictionEnabled             bool     // Enable resource prediction using historical data
 	PredictionConfidenceThreshold float64  // Minimum confidence threshold for using predictions (0-1)
 	PredictionHistoryDays         int      // Days of historical data to retain for predictions
-	PredictionMethods             []string // Enabled prediction methods (linear_regression, exponential_smoothing, simple_moving_average)
+	PredictionMethods             []string // Enabled prediction methods (linear_regression, exponential_smoothing, simple_moving_average, seasonal)
 
 	// QoS preservation settings
 	PreserveGuaranteedQoS      bool // Preserve Guaranteed QoS class during resizing
@@ -280,7 +280,7 @@ func GetDefaults() *Config {
 		PredictionEnabled:             true,
 		PredictionConfidenceThreshold: 0.6,
 		PredictionHistoryDays:         7,
-		PredictionMethods:             []string{"linear_regression", "exponential_smoothing", "simple_moving_average"},
+		PredictionMethods:             []string{"linear_regression", "exponential_smoothing", "simple_moving_average", "seasonal"},
 
 		// Default observability configuration
 		EnableAuditLogging: true,

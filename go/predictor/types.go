@@ -170,6 +170,7 @@ func DefaultConfig() *Config {
 			PredictionMethodLinearRegression,
 			PredictionMethodExponentialSmoothing,
 			PredictionMethodSimpleMovingAverage,
+			PredictionMethodSeasonal,
 		},
 		ConfidenceThreshold:      config.DefaultPredictionConfidenceThreshold, // 60% confidence minimum
 		MaxConcurrentPredictions: 10,

@@ -77,6 +77,8 @@ func (e *Engine) addPredictor(method PredictionMethod) error {
 		predictor = NewExponentialSmoothingPredictor()
 	case PredictionMethodSimpleMovingAverage:
 		predictor = NewSimpleMovingAveragePredictor(5) // Default window size
+	case PredictionMethodSeasonal:
+		predictor = NewSeasonalPredictor()
 	default:
 		return fmt.Errorf("unsupported prediction method: %s", method)
 	}
