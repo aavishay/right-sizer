@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2025-03-31
+
+### 🎉 Major Release - Capacity Planning, Predictive Scaling & What-If Analysis
+
+This release introduces three major new capabilities for intelligent Kubernetes resource management.
+
+### Added
+
+#### 🧠 Capacity Planner (`go/capacity/`)
+- **Bin-packing algorithm** for optimal workload placement across nodes
+- **Cost-aware instance selection** across cloud providers (AWS, GCP, Azure)
+- **Utilization scoring** with fragmentation analysis
+- **Multi-dimensional optimization** balancing cost, utilization, and availability
+
+#### 📈 Predictive Scaler (`go/predictive/`)
+- **Seasonal pattern detection** for workload forecasting
+- **Multi-weekday profiles** with weekend handling
+- **Confidence-based scaling recommendations** with uncertainty quantification
+- **7-day hourly forecasting** for proactive resource planning
+
+#### 🔮 What-If Analyzer (`go/whatif/`)
+- **Resource change impact simulation** before applying changes
+- **Cost projection and risk assessment** for proposed configurations
+- **Scenario comparison** with automated recommendations
+- **API endpoint** for integration with CI/CD pipelines
+
+#### 🛠️ Improvements
+- Updated ROADMAP with completed features
+- Code quality fixes in alerts and memstore packages
+- New unit tests for all major components
+
 ### Security
 - **BREAKING**: API tokens and secrets are now stored in Kubernetes Secrets instead of plain text in values.yaml
   - Added secure secret management for dashboard API tokens
