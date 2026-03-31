@@ -251,7 +251,9 @@ func GetPodObservedGeneration(pod *corev1.Pod) int64 {
 	if observedGen, exists := pod.Annotations["right-sizer.io/observed-generation"]; exists {
 		// Convert the stored generation back to int64
 		if len(observedGen) > 0 {
-			return int64(rune(observedGen[0]))
+			if gen, err := strconv.ParseInt(observedGen, 10, 64); err == nil {
+				return gen
+			}
 		}
 	}
 

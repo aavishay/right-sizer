@@ -389,8 +389,8 @@ func TestSetPodObservedGeneration(t *testing.T) {
 		t.Error("Expected observed-generation annotation to exist")
 	}
 
-	// The current implementation stores generation as a rune, so we check that
-	expectedGen := string(rune(42))
+	// The generation should be stored as a decimal string
+	expectedGen := "42"
 	if observedGen != expectedGen {
 		t.Errorf("Expected observed generation %s, got %s", expectedGen, observedGen)
 	}
@@ -409,7 +409,7 @@ func TestGetPodObservedGeneration(t *testing.T) {
 	if pod.Annotations == nil {
 		pod.Annotations = make(map[string]string)
 	}
-	pod.Annotations["right-sizer.io/observed-generation"] = string(rune(15))
+	pod.Annotations["right-sizer.io/observed-generation"] = "15"
 
 	observedGen = GetPodObservedGeneration(pod)
 	if observedGen != 15 {
