@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.2] - 2026-04-01
+
+### 🧹 Cleanup - Removed TypeScript Code
+
+This release removes unused TypeScript files from the project.
+
+### Removed
+
+- **TypeScript cleanup** (`go/remediation/remediation-engine.ts`)
+  - Removed orphaned TypeScript file; Go implementation exists at `go/remediation/engine.go`
+- **Dashboard API cleanup** (`right-sizer-dashboard-a4df5c80/backend/src/api/clusters.ts`)
+  - Removed leftover TypeScript file from already-removed dashboard
+
+The project is now purely Go-based with no TypeScript/JavaScript dependencies.
+
 ## [0.6.1] - 2025-03-31
 
 ### 🔒 Security Release - CVE and Gosec Fixes
