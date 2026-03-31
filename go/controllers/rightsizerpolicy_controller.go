@@ -153,7 +153,12 @@ func (r *RightSizerPolicyReconciler) processPolicyTargets(ctx context.Context, p
 		return nil, err
 	}
 
-	result.affected = int32(len(resources))
+	// Safe conversion with bounds check
+	count := len(resources)
+	if count > int(^uint32(0)>>1) {
+		count = int(^uint32(0) >> 1) // max int32
+	}
+	result.affected = int32(count)
 
 	// Process each resource
 	for _, res := range resources {

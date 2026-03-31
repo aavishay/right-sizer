@@ -459,8 +459,13 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 		activePods = int(vf)
 	}
 
-	// Optimized resources: use internal counter
-	optimized := int(s.optimizationOps.Load())
+	// Optimized resources: use internal counter (convert safely to avoid overflow)
+	optimizedCount := s.optimizationOps.Load()
+	optimized := int(optimizedCount)
+	const maxInt = int(^uint(0) >> 1)
+	if optimized < 0 || optimizedCount > uint64(maxInt) {
+		optimized = maxInt // clamp to max int on overflow
+	}
 
 	// Simulated / placeholder values for network & disk for now
 	network := 0.0

@@ -16,6 +16,7 @@
 package controllers
 
 import (
+	"strconv"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -238,7 +239,7 @@ func SetPodObservedGeneration(pod *corev1.Pod) {
 
 	// Store the observed generation as an annotation
 	// In a real implementation, this might be stored in a custom status field
-	pod.Annotations["right-sizer.io/observed-generation"] = string(rune(pod.Generation))
+	pod.Annotations["right-sizer.io/observed-generation"] = strconv.FormatInt(pod.Generation, 10)
 }
 
 // GetPodObservedGeneration retrieves the observed generation from the pod
