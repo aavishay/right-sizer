@@ -12,12 +12,14 @@ To provide the most intelligent, safe, and zero-downtime resource optimization p
 
 ## 📅 Release Plan
 
-### ✅ Current Status: v0.5.0 (Production Ready)
+### ✅ Current Status: v0.6.0 (Production Ready)
 - **Core Functionality:** In-place pod resizing for CPU and Memory.
 - **Modes:** Adaptive, Conservative, Aggressive, Balanced strategies.
 - **Safety:** Respects LimitRanges, Quotas, and PodDisruptionBudgets.
 - **Observability:** Basic Prometheus metrics and Health endpoints.
 - **Integrations:** Jira User Search, Slack Identity Mapping.
+- **Predictive Intelligence:** Seasonal pattern-based predictive scaling, what-if analysis, and capacity planning with multi-horizon forecasting.
+- **Alerts:** Webhook-based alert notifications with anomaly detection and resource shortfall prediction.
 
 ### ✅ v0.3.0: Reliability & Observability (COMPLETE)
 *Focus: Technical debt reduction, stability, and enhanced insights.*
@@ -59,18 +61,18 @@ To provide the most intelligent, safe, and zero-downtime resource optimization p
   - [x] **Type Safety:** Resolved TypeScript Prisma validation issues.
   - [x] **Documentation:** Added `AGENTS.md` for AI-driven development workflows.
 
-### 🔮 v0.6.0: Predictive Intelligence (Short Term)
+### ✅ v0.6.0: Predictive Intelligence (COMPLETE)
 *Focus: Proactive resource optimization and dashboard integration.*
 
 - **Predictive Scaling & Optimization**
-  - [ ] **Predictive Scaling:** Use seasonal patterns to proactively adjust resources before demand spikes
-  - [ ] **What-If Analysis:** Model resource changes to predict impact on workload performance
-  - [ ] **Capacity Planning:** Forecast future resource requirements based on growth trends
+  - [x] **Predictive Scaling:** Use seasonal patterns to proactively adjust resources before demand spikes (`go/predictive/`). Features configurable auto-apply, confidence thresholds, and namespace filtering.
+  - [x] **What-If Analysis:** Model resource changes to predict impact on workload performance (`go/whatif/`). Includes risk assessment, impact scoring, and multi-scenario comparison.
+  - [x] **Capacity Planning:** Forecast future resource requirements based on growth trends (`go/capacity/`). Provides 7-day, 30-day, and 90-day forecasts with trend analysis.
 
 - **Dashboard Integration**
   - [x] **Visual Predictions:** Display seasonal patterns and confidence intervals in dashboard UI
-  - [ ] **Recommendation Engine:** Suggest optimal resource assignments based on historical patterns
-  - [ ] **Alert Integration:** Notify teams of anomalies and predicted resource shortfalls
+  - [x] **Recommendation Engine:** Suggest optimal resource assignments based on historical patterns
+  - [x] **Alert Integration:** Notify teams of anomalies and predicted resource shortfalls (completed with webhook support)
 
 ### 🚀 v1.0.0: General Availability (Long Term)
 *Focus: Enterprise readiness, full feature support, and stability.*

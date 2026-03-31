@@ -182,9 +182,90 @@ func (d *Detector) DetectMemoryAnomaly(ctx context.Context, namespace, podName s
 
 // predictResourceShortfall checks if pod will exceed allocation in near future
 func (d *Detector) predictResourceShortfall(ctx context.Context, namespace, podName, resourceType string, currentUsage float64) bool {
-	// TODO: Use predictor to forecast next 1 hour
-	// For now, return false
+	// Get historical data from memstore
+	data := d.store.GetHistoricalData(namespace, podName, 24*time.Hour)
+	if len(data) < 10 {
+		return false // Insufficient data for prediction
+	}
+
+	// Get pod resource limits
+	limits := d.store.GetLimits(namespace, podName)
+	if limits == nil {
+		return false
+	}
+
+	var limit float64
+	if resourceType == "cpu" {
+		limit = limits.CPULimit
+	} else if resourceType == "memory" {
+		limit = limits.MemoryLimit
+	}
+
+	if limit <= 0 {
+		return false
+	}
+
+	// Calculate current utilization percentage
+	utilization := currentUsage / limit
+
+	// Calculate trend from historical data
+	firstHalf := data[:len(data)/2]
+	secondHalf := data[len(data)/2:]
+
+	var avgFirst, avgSecond float64
+	if resourceType == "cpu" {
+		avgFirst = calculateAverageCPU(firstHalf)
+		avgSecond = calculateAverageCPU(secondHalf)
+	} else {
+		avgFirst = calculateAverageMemory(firstHalf)
+		avgSecond = calculateAverageMemory(secondHalf)
+	}
+
+	// Calculate growth rate
+	var growthRate float64
+	if avgFirst > 0 {
+		growthRate = (avgSecond - avgFirst) / avgFirst
+	}
+
+	// Predict usage in 1 hour based on trend
+	// Use simple linear extrapolation
+	predictedUsage := currentUsage * (1 + growthRate)
+
+	// If predicted usage exceeds limit, shortfall detected
+	if predictedUsage >= limit*0.95 { // 95% threshold
+		return true
+	}
+
+	// Also check if current utilization is already high
+	if utilization >= 0.9 { // 90% threshold for immediate concern
+		return true
+	}
+
 	return false
+}
+
+// calculateAverageCPU calculates the average CPU from data points
+func calculateAverageCPU(data []memstore.DataPoint) float64 {
+	if len(data) == 0 {
+		return 0
+	}
+	sum := 0.0
+	for _, dp := range data {
+		sum += dp.CPUMilli
+	}
+	return sum / float64(len(data))
+}
+
+// calculateAverageMemory calculates the average memory from data points
+func calculateAverageMemory(data []memstore.DataPoint) float64 {
+	if len(data) == 0 {
+		return 0
+	}
+	sum := 0.0
+	for _, dp := range data {
+		sum += dp.MemMB
+	}
+	return sum / float64(len(data))
 }
 
 // calculateZScore calculates standard score: (x - mean) / std_dev

@@ -51,12 +51,19 @@ type MemoryStore struct {
 	maxPPod int
 }
 
+// ResourceLimits stores the configured resource limits for a pod
+type ResourceLimits struct {
+	CPULimit    float64 // in millicores
+	MemoryLimit float64 // in MB
+}
+
 type podHistory struct {
 	mu         sync.RWMutex
 	namespace  string
 	podName    string
 	dataPoints []DataPoint
 	maxPoints  int
+	limits     *ResourceLimits
 }
 
 // NewMemoryStore creates a memory store for historical pod metrics
@@ -241,6 +248,76 @@ func (ms *MemoryStore) cleanup() {
 	for range ticker.C {
 		ms.Prune()
 	}
+}
+
+// SetLimits stores resource limits for a pod
+func (ms *MemoryStore) SetLimits(namespace, podName string, limits *ResourceLimits) {
+	key := namespace + "/" + podName
+
+	ms.mu.RLock()
+	ph, exists := ms.pods[key]
+	ms.mu.RUnlock()
+
+	if !exists {
+		// Create pod history if it doesn't exist
+		ph = &podHistory{
+			namespace:  namespace,
+			podName:    podName,
+			dataPoints: make([]DataPoint, 0, ms.maxPPod),
+			maxPoints:  ms.maxPPod,
+		}
+		ms.mu.Lock()
+		ms.pods[key] = ph
+		ms.mu.Unlock()
+	}
+
+	ph.mu.Lock()
+	defer ph.mu.Unlock()
+	ph.limits = limits
+}
+
+// GetLimits retrieves stored resource limits for a pod
+func (ms *MemoryStore) GetLimits(namespace, podName string) *ResourceLimits {
+	key := namespace + "/" + podName
+
+	ms.mu.RLock()
+	ph, exists := ms.pods[key]
+	ms.mu.RUnlock()
+
+	if !exists {
+		return nil
+	}
+
+	ph.mu.RLock()
+	defer ph.mu.RUnlock()
+	return ph.limits
+}
+
+// GetHistoricalData retrieves all data points within a time window
+func (ms *MemoryStore) GetHistoricalData(namespace, podName string, duration time.Duration) []DataPoint {
+	key := namespace + "/" + podName
+
+	ms.mu.RLock()
+	ph, exists := ms.pods[key]
+	ms.mu.RUnlock()
+
+	if !exists {
+		return nil
+	}
+
+	cutoff := time.Now().Add(-duration)
+
+	ph.mu.RLock()
+	defer ph.mu.RUnlock()
+
+	var filtered []DataPoint
+	for _, dp := range ph.dataPoints {
+		if dp.Timestamp.After(cutoff) {
+			filtered = append(filtered, dp)
+		}
+	}
+
+	return filtered
 }
 
 // Helper functions

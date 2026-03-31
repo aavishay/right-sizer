@@ -8,8 +8,11 @@
 package alerts
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"net/http"
 	"sync"
 	"time"
 
@@ -200,11 +203,65 @@ func (m *Manager) dispatchWebhook(alert *Alert) {
 		return
 	}
 
-	// TODO: Implement actual webhook dispatch
-	m.logger.Debug("Webhook dispatch",
-		zap.String("url", webhookURL),
-		zap.String("alert_id", alert.ID),
-	)
+	// Prepare webhook payload
+	payload := map[string]interface{}{
+		"alert":     alert,
+		"timestamp": time.Now().UTC(),
+		"source":    "right-sizer",
+	}
+
+	jsonData, err := json.Marshal(payload)
+	if err != nil {
+		m.logger.Error("Failed to marshal webhook payload",
+			zap.Error(err),
+			zap.String("alert_id", alert.ID),
+		)
+		return
+	}
+
+	// Send webhook request with timeout
+	client := &http.Client{Timeout: 10 * time.Second}
+	req, err := http.NewRequest(http.MethodPost, webhookURL, bytes.NewBuffer(jsonData))
+	if err != nil {
+		m.logger.Error("Failed to create webhook request",
+			zap.Error(err),
+			zap.String("alert_id", alert.ID),
+		)
+		return
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", "right-sizer-alert/1.0")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		m.logger.Error("Webhook dispatch failed",
+			zap.Error(err),
+			zap.String("alert_id", alert.ID),
+			zap.String("webhook_url", webhookURL),
+		)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		m.logger.Info("Webhook dispatch successful",
+			zap.String("alert_id", alert.ID),
+			zap.Int("status_code", resp.StatusCode),
+		)
+	} else {
+		m.logger.Warn("Webhook returned non-success status",
+			zap.String("alert_id", alert.ID),
+			zap.Int("status_code", resp.StatusCode),
+		)
+	}
+}
+
+// GetWebhook returns the configured webhook URL for a severity level
+func (m *Manager) GetWebhook(severity string) string {
+	m.webhookMu.RLock()
+	defer m.webhookMu.RUnlock()
+	return m.webhooks[severity]
 }
 
 // CleanupResolved removes old resolved alerts
