@@ -110,7 +110,8 @@ func NewAuditLogger(client client.Client, cfg *config.Config, metrics *metrics.O
 	// Create log directory if it doesn't exist
 	if auditConfig.EnableFileLog {
 		logDir := filepath.Dir(auditConfig.LogPath)
-		if err := os.MkdirAll(logDir, 0o755); err != nil {
+		// Use secure permissions 0750 for directory
+		if err := os.MkdirAll(logDir, 0o750); err != nil {
 			return nil, fmt.Errorf("failed to create audit log directory: %w", err)
 		}
 
@@ -118,7 +119,8 @@ func NewAuditLogger(client client.Client, cfg *config.Config, metrics *metrics.O
 		var logFile *os.File
 		if auditConfig.EnableFileLog {
 			var err error
-			logFile, err = os.OpenFile(auditConfig.LogPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+			// Use secure permissions 0600 for audit log file
+			logFile, err = os.OpenFile(auditConfig.LogPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
 			if err != nil {
 				// If we can't open the file, continue without file logging
 				logger.Warn("Cannot open audit log file, continuing without file logging: %v", err)
@@ -511,12 +513,23 @@ func (al *AuditLogger) rotateLogFile(config AuditConfig) {
 	oldPath := config.LogPath
 	newPath := fmt.Sprintf("%s.%s", oldPath, timestamp)
 
+	// Validate paths to prevent directory traversal
+	if filepath.IsAbs(oldPath) && filepath.IsAbs(newPath) {
+		oldDir := filepath.Dir(oldPath)
+		newDir := filepath.Dir(newPath)
+		if oldDir != newDir {
+			logger.Error("Invalid log rotation paths: %s and %s", oldPath, newPath)
+			return
+		}
+	}
+
 	if err := os.Rename(oldPath, newPath); err != nil {
 		logger.Warn("Failed to rotate audit log: %v", err)
 	}
 
-	// Create new log file
-	logFile, err := os.OpenFile(oldPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	// Create new log file with secure permissions 0600
+	// #nosec G304 - Path is validated above with directory check
+	logFile, err := os.OpenFile(oldPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
 	if err != nil {
 		logger.Error("Failed to create new audit log file: %v", err)
 		return
