@@ -95,11 +95,11 @@ func (m *Manager) Create(ctx context.Context, namespace, podName, resourceType, 
 		zap.String("title", title),
 	)
 
-	// Notify subscribers asynchronously
-	go m.notifySubscribers(alert)
+	// Notify subscribers asynchronously with context
+	go m.notifySubscribers(ctx, alert)
 
-	// Dispatch webhooks asynchronously
-	go m.dispatchWebhook(alert)
+	// Dispatch webhooks asynchronously with context
+	go m.dispatchWebhook(ctx, alert)
 
 	return alert, nil
 }
@@ -177,14 +177,14 @@ func (m *Manager) SetWebhook(severity, webhookURL string) {
 }
 
 // notifySubscribers calls all registered subscribers
-func (m *Manager) notifySubscribers(alert *Alert) {
+func (m *Manager) notifySubscribers(ctx context.Context, alert *Alert) {
 	m.subMutex.RLock()
 	subs := make([]AlertSubscriber, len(m.subscribers))
 	copy(subs, m.subscribers)
 	m.subMutex.RUnlock()
 
 	for _, sub := range subs {
-		if err := sub.OnAlert(context.Background(), alert); err != nil {
+		if err := sub.OnAlert(ctx, alert); err != nil {
 			m.logger.Error("Subscriber notification failed",
 				zap.Error(err),
 				zap.String("alert_id", alert.ID),
@@ -194,7 +194,7 @@ func (m *Manager) notifySubscribers(alert *Alert) {
 }
 
 // dispatchWebhook sends alert to configured webhook
-func (m *Manager) dispatchWebhook(alert *Alert) {
+func (m *Manager) dispatchWebhook(ctx context.Context, alert *Alert) {
 	m.webhookMu.RLock()
 	webhookURL, exists := m.webhooks[alert.Severity]
 	m.webhookMu.RUnlock()
@@ -219,9 +219,9 @@ func (m *Manager) dispatchWebhook(alert *Alert) {
 		return
 	}
 
-	// Send webhook request with timeout
+	// Send webhook request with context and timeout
 	client := &http.Client{Timeout: 10 * time.Second}
-	req, err := http.NewRequest(http.MethodPost, webhookURL, bytes.NewBuffer(jsonData))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, webhookURL, bytes.NewBuffer(jsonData))
 	if err != nil {
 		m.logger.Error("Failed to create webhook request",
 			zap.Error(err),

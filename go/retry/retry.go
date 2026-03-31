@@ -17,9 +17,10 @@ package retry
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/binary"
 	"fmt"
 	"math"
-	"math/rand"
 	"strings"
 	"sync"
 	"time"
@@ -27,6 +28,18 @@ import (
 	"right-sizer/logger"
 	"right-sizer/metrics"
 )
+
+// cryptoRandFloat64 returns a random float64 in [0.0, 1.0) using crypto/rand
+func cryptoRandFloat64() float64 {
+	var buf [8]byte
+	if _, err := rand.Read(buf[:]); err != nil {
+		// Fallback to current time if crypto/rand fails
+		return float64(time.Now().UnixNano()) / float64(math.MaxInt64)
+	}
+	// Convert 8 bytes to uint64 and normalize to [0, 1)
+	val := binary.BigEndian.Uint64(buf[:])
+	return float64(val) / (1 << 64)
+}
 
 // RetryableError represents an error that can be retried
 type RetryableError struct {
@@ -176,9 +189,9 @@ func (r *Retryer) calculateDelay(baseDelay time.Duration, attempt int) time.Dura
 		delay = r.config.MaxDelay
 	}
 
-	// Add randomization (jitter)
+	// Add randomization (jitter) using crypto/rand
 	if r.config.RandomizationFactor > 0 {
-		jitter := float64(delay) * r.config.RandomizationFactor * (rand.Float64()*2 - 1)
+		jitter := float64(delay) * r.config.RandomizationFactor * (cryptoRandFloat64()*2 - 1)
 		delay = time.Duration(float64(delay) + jitter)
 	}
 
