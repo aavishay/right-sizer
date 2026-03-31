@@ -538,15 +538,25 @@ func (m *OperatorMetrics) UpdatePendingRecommendations(count float64) {
 
 // StartMetricsServer starts the Prometheus metrics HTTP server
 func StartMetricsServer(port int) error {
-	http.Handle("/metrics", promhttp.Handler())
+	mux := http.NewServeMux()
+	mux.Handle("/metrics", promhttp.Handler())
 
 	// Add custom health check for metrics
-	http.HandleFunc("/metrics/health", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/metrics/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("metrics server healthy"))
 	})
 
-	return http.ListenAndServe(":"+strconv.Itoa(port), nil)
+	// Create server with timeouts to prevent Slowloris attacks
+	server := &http.Server{
+		Addr:         ":" + strconv.Itoa(port),
+		Handler:      mux,
+		ReadTimeout:  10 * time.Second,
+		WriteTimeout: 10 * time.Second,
+		IdleTimeout:  60 * time.Second,
+	}
+
+	return server.ListenAndServe()
 }
 
 // Timer is a helper for measuring operation durations
