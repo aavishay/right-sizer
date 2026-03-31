@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.1] - 2025-03-31
+
+### 🔒 Security Release - CVE and Gosec Fixes
+
+This release addresses security vulnerabilities and fixes HIGH/MEDIUM severity issues from security scanning.
+
+### Security
+
+#### CVE Fixes
+- **GO-2026-4762**: Authorization bypass in gRPC-Go
+  - Updated `google.golang.org/grpc` v1.76.0 → v1.79.3
+  - Updated `golang.org/x/net` v0.38.0 → v0.48.0
+
+#### Gosec HIGH Severity Fixes
+- **G115 (CWE-190)**: Integer overflow conversions in api/server.go, controllers/status_conditions.go, controllers/rightsizerpolicy_controller.go
+- **G404 (CWE-338)**: Weak random number generator in retry/retry.go (switched to crypto/rand)
+- **G118**: Goroutines without context in alerts/manager.go
+
+#### Gosec MEDIUM Severity Fixes
+- **G114 (CWE-676)**: HTTP server timeouts in metrics/operator_metrics.go
+- **G112 (CWE-400)**: ReadHeaderTimeout in events/streaming.go (Slowloris protection)
+- **G301/G302 (CWE-276)**: Secure file permissions in audit/audit.go (0600/0750)
+- **G304 (CWE-22)**: Path validation for audit log rotation
+
+### Security Scan Results
+- govulncheck: ✅ No vulnerabilities
+- gosec: 19 issues (down from 29) - all LOW severity or false positives
+
 ## [0.6.0] - 2025-03-31
 
 ### 🎉 Major Release - Capacity Planning, Predictive Scaling & What-If Analysis
