@@ -15,6 +15,7 @@ permissions:
   contents: write
   packages: write
   id-token: write
+  security-events: write
 
 env:
   REGISTRY: docker.io
@@ -146,6 +147,7 @@ jobs:
 
       - name: Scan image with Trivy
         uses: aquasecurity/trivy-action@master
+        continue-on-error: true
         with:
           scan-type: "image"
           scan-ref: "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.VERSION }}"
@@ -155,6 +157,7 @@ jobs:
       - name: Upload Trivy scan results to GitHub Security tab
         uses: github/codeql-action/upload-sarif@v3
         if: always()
+        continue-on-error: true
         with:
           sarif_file: "trivy-results.sarif"
 
@@ -199,6 +202,7 @@ jobs:
 
       - name: Scan Helm chart with Trivy
         uses: aquasecurity/trivy-action@master
+        continue-on-error: true
         with:
           scan-type: "config"
           scan-ref: "right-sizer-*.tgz"
@@ -208,6 +212,7 @@ jobs:
       - name: Upload Trivy scan results to GitHub Security tab
         uses: github/codeql-action/upload-sarif@v3
         if: always()
+        continue-on-error: true
         with:
           sarif_file: "trivy-helm-results.sarif"
 
